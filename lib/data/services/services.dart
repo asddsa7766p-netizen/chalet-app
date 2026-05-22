@@ -183,6 +183,44 @@ class ChaletService {
 // BOOKING SERVICE
 // ============================================
 class BookingService {
+  /// Host view: Get incoming bookings for the current owner.
+  /// - Incoming = pending
+  /// UI will still allow switching tabs for other statuses (confirmed/cancelled).
+  Future<List<IncomingBookingModel>> getIncomingBookings({
+    BookingStatus status = BookingStatus.pending,
+  }) async {
+    final ownerId = AuthService.instance.currentUser?.id;
+    if (ownerId == null) return [];
+
+    // bookings.id, bookings.user_id, bookings.check_in, bookings.status, bookings.payment_method
+    // join profiles for user full_name
+    // join chalets to filter by chalets.owner_id
+    final data = await supabase
+        .from('bookings')
+        .select(
+            'id, chalet_id, user_id, check_in, status, payment_method, profiles(full_name)')
+        .eq('status', status.name)
+        .eq('chalets.owner_id', ownerId);
+
+    return (data as List)
+        .map((e) => IncomingBookingModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Owner: confirm pending booking.
+  Future<void> confirmIncomingBooking(String bookingId) async {
+    await supabase
+        .from('bookings')
+        .update({'status': 'confirmed'}).eq('id', bookingId);
+  }
+
+  /// Owner: reject pending booking.
+  Future<void> rejectIncomingBooking(String bookingId) async {
+    await supabase
+        .from('bookings')
+        .update({'status': 'cancelled'}).eq('id', bookingId);
+  }
+
   /// Edge Function: calculate booking price + availability
   /// Throws an exception for non-200 responses.
   Future<double> calculateBookingPrice({
@@ -420,9 +458,13 @@ class NotificationsService {
   }
 
   Future<void> markAsRead(String notificationId) async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null) return;
     await supabase
         .from('notifications')
-        .update({'is_read': true}).eq('id', notificationId);
+        .update({'is_read': true})
+        .eq('id', notificationId)
+        .eq('user_id', userId);
   }
 
   Future<void> markAllAsRead() async {

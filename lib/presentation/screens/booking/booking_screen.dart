@@ -128,6 +128,7 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _confirm() async {
+    if (_loading) return;
     if (_checkIn == null || _checkOut == null) {
       _showSnack('يرجى تحديد تواريخ الوصول والمغادرة');
       return;
@@ -750,24 +751,33 @@ class _BookingScreenState extends State<BookingScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Server-calculated/Estimate',
-                style: const TextStyle(
+              const Text(
+                'ملخص السعر',
+                style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                   color: AppColors.charcoal,
                 ),
               ),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+              if (_serverCalculated)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'مؤكد',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.success,
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 10),

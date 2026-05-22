@@ -6,10 +6,14 @@ enum BookingStatus { pending, confirmed, cancelled, completed }
 extension BookingStatusX on BookingStatus {
   String get arabicLabel {
     switch (this) {
-      case BookingStatus.pending: return 'قيد الانتظار';
-      case BookingStatus.confirmed: return 'مؤكد';
-      case BookingStatus.cancelled: return 'ملغي';
-      case BookingStatus.completed: return 'مكتمل';
+      case BookingStatus.pending:
+        return 'قيد الانتظار';
+      case BookingStatus.confirmed:
+        return 'مؤكد';
+      case BookingStatus.cancelled:
+        return 'ملغي';
+      case BookingStatus.completed:
+        return 'مكتمل';
     }
   }
 }
@@ -66,22 +70,81 @@ class BookingModel {
       notes: json['notes'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       chaletName: json['chalets']?['name'] as String?,
-      chaletImage: (json['chalets']?['images'] as List?)?.firstOrNull as String?,
+      chaletImage:
+          (json['chalets']?['images'] as List?)?.firstOrNull as String?,
       chaletCity: json['chalets']?['city'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'chalet_id': chaletId,
-    'user_id': userId,
-    'check_in': checkIn.toIso8601String().split('T').first,
-    'check_out': checkOut.toIso8601String().split('T').first,
-    'guests_count': guestsCount,
-    'total_price': totalPrice,
-    'status': status.name,
-    'payment_method': paymentMethod,
-    'notes': notes,
-  };
+        'chalet_id': chaletId,
+        'user_id': userId,
+        'check_in': checkIn.toIso8601String().split('T').first,
+        'check_out': checkOut.toIso8601String().split('T').first,
+        'guests_count': guestsCount,
+        'total_price': totalPrice,
+        'status': status.name,
+        'payment_method': paymentMethod,
+        'notes': notes,
+      };
+}
+
+// ============================================
+// INCOMING BOOKINGS (HOST VIEW MODEL)
+// ============================================
+class IncomingBookingModel {
+  final String bookingId;
+  final String chaletId;
+  final String userId;
+  final String userName;
+  final DateTime checkIn;
+  final BookingStatus status;
+  final String paymentMethod;
+
+  const IncomingBookingModel({
+    required this.bookingId,
+    required this.chaletId,
+    required this.userId,
+    required this.userName,
+    required this.checkIn,
+    required this.status,
+    required this.paymentMethod,
+  });
+
+  factory IncomingBookingModel.fromJson(Map<String, dynamic> json) {
+    return IncomingBookingModel(
+      bookingId: json['id'] as String,
+      chaletId: json['chalet_id'] as String,
+      userId: json['user_id'] as String,
+      userName: (json['profiles']?['full_name'] as String?) ?? '-',
+      checkIn: DateTime.parse(json['check_in'] as String),
+      status: BookingStatus.values.firstWhere(
+        (e) => e.name == (json['status'] as String? ?? 'pending'),
+        orElse: () => BookingStatus.pending,
+      ),
+      paymentMethod: json['payment_method'] as String? ?? 'cash',
+    );
+  }
+
+  String get paymentMethodLabel {
+    switch (paymentMethod) {
+      case 'online':
+        return 'دفع إلكتروني';
+      case 'cash':
+      default:
+        return 'نقداً عند الوصول';
+    }
+  }
+
+  String get paymentMethodStatusColorLabel {
+    switch (paymentMethod) {
+      case 'online':
+        return 'online';
+      case 'cash':
+      default:
+        return 'cash';
+    }
+  }
 }
 
 // ============================================
@@ -118,14 +181,17 @@ class UserProfile {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'full_name': fullName,
-    'phone': phone,
-    'avatar_url': avatarUrl,
-  };
+        'id': id,
+        'full_name': fullName,
+        'phone': phone,
+        'avatar_url': avatarUrl,
+      };
 
   UserProfile copyWith({
-    String? fullName, String? phone, String? avatarUrl, String? email,
+    String? fullName,
+    String? phone,
+    String? avatarUrl,
+    String? email,
   }) {
     return UserProfile(
       id: id,
@@ -179,12 +245,12 @@ class ReviewModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'chalet_id': chaletId,
-    'user_id': userId,
-    'booking_id': bookingId,
-    'rating': rating,
-    'comment': comment,
-  };
+        'chalet_id': chaletId,
+        'user_id': userId,
+        'booking_id': bookingId,
+        'rating': rating,
+        'comment': comment,
+      };
 }
 
 // ============================================
@@ -223,11 +289,16 @@ class NotificationModel {
 
   String get icon {
     switch (type) {
-      case 'booking_confirmed': return '✅';
-      case 'offer': return '🎁';
-      case 'reminder': return '🔔';
-      case 'review': return '⭐';
-      default: return '📢';
+      case 'booking_confirmed':
+        return '✅';
+      case 'offer':
+        return '🎁';
+      case 'reminder':
+        return '🔔';
+      case 'review':
+        return '⭐';
+      default:
+        return '📢';
     }
   }
 }

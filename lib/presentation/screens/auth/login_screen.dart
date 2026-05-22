@@ -176,7 +176,8 @@ class _LoginScreenState extends State<LoginScreen>
                           if (v == null || v.isEmpty) {
                             return AppStrings.fieldRequired;
                           }
-                          if (!v.contains('@')) return AppStrings.invalidEmail;
+                          if (!RegExp(r'^[\w.+\-]+@[\w\-]+\.[\w.]+$')
+                              .hasMatch(v)) return AppStrings.invalidEmail;
                           return null;
                         }),
                         const SizedBox(height: 14),

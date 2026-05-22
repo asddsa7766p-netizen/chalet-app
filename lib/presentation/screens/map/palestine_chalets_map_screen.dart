@@ -41,9 +41,9 @@ class _PalestineChaletsMapScreenState extends State<PalestineChaletsMapScreen> {
       // (Your ChaletModel uses latitude/longitude fields from Supabase table)
       // If your schema doesn't guarantee it, this filter prevents crashes.
       final filtered = chalets.where((c) {
-        // latitude/longitude are expected to exist on the model.
-        // If missing/null in JSON parsing, they should be represented as 0; we still allow.
-        return true;
+        final lat = c.latitude;
+        final lng = c.longitude;
+        return lat != null && lng != null && lat != 0.0 && lng != 0.0;
       }).toList();
 
       if (!mounted) return;
