@@ -1,0 +1,65 @@
+name: friends_chalets
+description: شاليهات الأصدقاء - تطبيق حجز الشاليهات في فلسطين
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Backend
+  supabase_flutter: ^2.3.0
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # Navigation
+  go_router: ^13.0.1
+
+  # UI
+  cached_network_image: ^3.4.1
+  flutter_svg: ^2.0.9
+  smooth_page_indicator: ^1.1.0
+  table_calendar: ^3.0.9
+  shimmer: ^3.0.0
+  lottie: ^3.0.0
+  flutter_rating_bar: ^4.0.1
+  photo_view: ^0.14.0
+
+  # Video
+  video_player: ^2.9.2
+  chewie: ^1.8.1
+
+  # Utils
+  intl: 0.20.2
+  shared_preferences: ^2.3.2
+
+  image_picker: ^1.0.7
+  url_launcher: ^6.2.4
+  connectivity_plus: ^6.0.2
+  google_fonts: ^8.1.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.0
+  patrol: ^4.5.0
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+
