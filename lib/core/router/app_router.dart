@@ -19,6 +19,7 @@ import '../../presentation/screens/host/host_reels_screen.dart';
 import '../../presentation/screens/host/host_statistics_screen.dart';
 import '../../presentation/screens/map/palestine_chalets_map_screen.dart';
 import '../../data/models/chalet_model.dart';
+import '../../data/services/host_service.dart';
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -26,7 +27,7 @@ class AppRouter {
   static final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
       final isAuthPath = state.matchedLocation.startsWith('/auth') ||
           state.matchedLocation == '/splash' ||
@@ -43,6 +44,21 @@ class AppRouter {
 
       // Redirect to home if already logged in and going to auth
       if (isLoggedIn && isAuthPath) return '/home';
+
+      // Route-level guards
+      // Payment route: require login (already handled by the generic guard above),
+      // but keep explicit for clarity.
+      if (state.matchedLocation == '/payment') {
+        return isLoggedIn ? null : '/auth/login';
+      }
+
+      // Host routes: require host role
+      final isHostRoute = state.matchedLocation.startsWith('/host-');
+      if (isHostRoute) {
+        // If user is not logged in, generic guard already redirected.
+        final isHost = await HostService.instance.isHost();
+        return isHost ? null : '/home';
+      }
 
       return null;
     },

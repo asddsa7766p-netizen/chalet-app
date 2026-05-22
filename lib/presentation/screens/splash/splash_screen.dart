@@ -30,14 +30,16 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
     );
     _controller.forward();
-    _navigate();
+
+    _initAndNavigate();
   }
 
-  Future<void> _navigate() async {
+  Future<void> _initAndNavigate() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Keep the splash visible for a minimum time.
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool('onboarding_seen') ?? false;
     final user = Supabase.instance.client.auth.currentUser;
 

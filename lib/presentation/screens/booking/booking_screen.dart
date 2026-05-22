@@ -24,6 +24,14 @@ class _BookingScreenState extends State<BookingScreen> {
   bool _loading = false;
   bool _showCalendar = false;
   bool _selectingCheckIn = true;
+
+  // Price from Edge Function (single source of truth)
+  bool _priceLoading = false;
+  double? _serverTotalPrice;
+  bool _isAvailable = true;
+  String? _availabilityError;
+  bool _serverCalculated = false;
+
   final _notesCtrl = TextEditingController();
 
   @override
@@ -36,7 +44,88 @@ class _BookingScreenState extends State<BookingScreen> {
       ? _checkOut!.difference(_checkIn!).inDays
       : 0;
 
-  double get _total => _nights * widget.chalet.pricePerNight;
+  double? get _total => _serverTotalPrice;
+
+  bool get _canConfirm =>
+      _isAvailable &&
+      !_priceLoading &&
+      _serverTotalPrice != null &&
+      _serverCalculated &&
+      _checkIn != null &&
+      _checkOut != null &&
+      _nights > 0;
+
+  Future<void> _fetchServerPrice() async {
+    if (_checkIn == null || _checkOut == null) return;
+    if (_nights < 1) return;
+
+    setState(() {
+      _priceLoading = true;
+      _availabilityError = null;
+      _serverTotalPrice = null;
+      _isAvailable = true;
+      _serverCalculated = false;
+    });
+
+    try {
+      final price = await BookingService.instance.calculateBookingPrice(
+        chaletId: widget.chalet.id,
+        checkIn: _checkIn!,
+        checkOut: _checkOut!,
+        guestsCount: _guests,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _serverTotalPrice = price;
+        _isAvailable = true;
+        _availabilityError = null;
+        _serverCalculated = true;
+      });
+    } on Exception catch (_) {
+      // Supabase invoke throws on non-200; map 409 specifically.
+      if (!mounted) return;
+      setState(() {
+        _serverTotalPrice = null;
+        _isAvailable = false;
+        _serverCalculated = false;
+        _availabilityError = 'هذا الشاليه محجوز بالفعل للتواريخ المحددة';
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      final msg = e.toString();
+      final is409 = msg.contains('409');
+
+      setState(() {
+        _serverTotalPrice = null;
+        _isAvailable = !is409 ? false : false;
+        _serverCalculated = false;
+        _availabilityError = is409
+            ? 'هذا الشاليه محجوز بالفعل للتواريخ المحددة'
+            : 'تعذر حساب السعر حالياً، يرجى المحاولة لاحقاً';
+      });
+    } finally {
+      if (mounted) setState(() => _priceLoading = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // initial load when dates are already set (usually not).
+    _fetchServerPrice();
+  }
+
+  @override
+  void didUpdateWidget(covariant BookingScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Chalet can change via navigation; recalculate for safety.
+    if (widget.chalet.id != oldWidget.chalet.id) {
+      _serverCalculated = false;
+      _fetchServerPrice();
+    }
+  }
 
   Future<void> _confirm() async {
     if (_checkIn == null || _checkOut == null) {
@@ -48,25 +137,23 @@ class _BookingScreenState extends State<BookingScreen> {
       return;
     }
 
+    // Disable confirm if server price/availability not ready
+    if (!_canConfirm) {
+      if (_availabilityError != null) {
+        _showSnack(_availabilityError!);
+      } else {
+        _showSnack('يرجى التأكد من التواريخ المتاحة قبل الحجز');
+      }
+      return;
+    }
+
     setState(() => _loading = true);
     try {
-      // Check availability
-      final available = await ChaletService.instance.isAvailable(
-        chaletId: widget.chalet.id,
-        checkIn: _checkIn!,
-        checkOut: _checkOut!,
-      );
-      if (!available) {
-        _showSnack('الشاليه غير متاح في التواريخ المحددة');
-        return;
-      }
-
       await BookingService.instance.createBooking(
         chaletId: widget.chalet.id,
         checkIn: _checkIn!,
         checkOut: _checkOut!,
         guestsCount: _guests,
-        totalPrice: _total,
         paymentMethod: _paymentMethod,
         notes: _notesCtrl.text.isEmpty ? null : _notesCtrl.text,
       );
@@ -197,7 +284,7 @@ class _BookingScreenState extends State<BookingScreen> {
             // Confirm Button
             AppButton(
               label: AppStrings.confirmBooking,
-              onPressed: _confirm,
+              onPressed: _canConfirm ? _confirm : null,
               loading: _loading,
               icon: Icons.check_circle_outline_rounded,
             ),
@@ -347,15 +434,26 @@ class _BookingScreenState extends State<BookingScreen> {
                     _checkIn = selected;
                     _checkOut = null;
                     _selectingCheckIn = false;
+                    // Dates changed: wait for checkOut to be selected.
+                    _serverCalculated = false;
                   } else {
                     if (selected.isAfter(_checkIn ?? DateTime.now())) {
                       _checkOut = selected;
                       _showCalendar = false;
                     } else {
+                      // User picked an earlier date: treat it as a new checkIn.
                       _checkIn = selected;
+                      _checkOut = null;
+                      _selectingCheckIn = false;
                     }
+                    _serverCalculated = false;
                   }
                 });
+
+                // Trigger fetch when both dates are valid.
+                if (_checkIn != null && _checkOut != null) {
+                  _fetchServerPrice();
+                }
               },
               calendarStyle: const CalendarStyle(
                 selectedDecoration: BoxDecoration(
@@ -470,8 +568,13 @@ class _BookingScreenState extends State<BookingScreen> {
           ]),
           Row(
             children: [
-              _circleBtn(Icons.remove_rounded, () {
-                if (_guests > 1) setState(() => _guests--);
+              _circleBtn(Icons.remove_rounded, () async {
+                if (_guests > 1) {
+                  setState(() => _guests--);
+                  if (_checkIn != null && _checkOut != null && _nights > 0) {
+                    await _fetchServerPrice();
+                  }
+                }
               }),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -482,9 +585,12 @@ class _BookingScreenState extends State<BookingScreen> {
                         fontWeight: FontWeight.w900,
                         color: AppColors.charcoal)),
               ),
-              _circleBtn(Icons.add_rounded, () {
+              _circleBtn(Icons.add_rounded, () async {
                 if (_guests < widget.chalet.maxGuests) {
                   setState(() => _guests++);
+                  if (_checkIn != null && _checkOut != null && _nights > 0) {
+                    await _fetchServerPrice();
+                  }
                 }
               }),
             ],
@@ -496,7 +602,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _circleBtn(IconData icon, VoidCallback onTap) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => onTap(),
       child: Container(
         width: 36,
         height: 36,
@@ -628,6 +734,10 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildPriceSummary() {
+    final subtitle = _serverCalculated ? 'Server-calculated' : 'Estimate';
+
+    final totalText = _total == null ? '-' : '₪${_total!.toStringAsFixed(0)}';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -637,14 +747,57 @@ class _BookingScreenState extends State<BookingScreen> {
       ),
       child: Column(
         children: [
-          _priceRow(
-              '₪${widget.chalet.pricePerNight.toStringAsFixed(0)} × $_nights ليلة',
-              '₪${_total.toStringAsFixed(0)}'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Server-calculated/Estimate',
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.charcoal,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _priceLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _priceRow(
+                  '₪${widget.chalet.pricePerNight.toStringAsFixed(0)} × $_nights ليلة',
+                  totalText,
+                ),
           const SizedBox(height: 8),
           const Divider(),
           const SizedBox(height: 8),
-          _priceRow('المجموع الكلي', '₪${_total.toStringAsFixed(0)}',
-              total: true),
+          _priceRow(
+            'المجموع الكلي',
+            totalText,
+            total: true,
+          ),
+          if (_availabilityError != null && !_priceLoading) ...[
+            const SizedBox(height: 10),
+            Text(
+              _availabilityError!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.error,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -183,6 +183,32 @@ class ChaletService {
 // BOOKING SERVICE
 // ============================================
 class BookingService {
+  /// Edge Function: calculate booking price + availability
+  /// Throws an exception for non-200 responses.
+  Future<double> calculateBookingPrice({
+    required String chaletId,
+    required DateTime checkIn,
+    required DateTime checkOut,
+    required int guestsCount,
+  }) async {
+    final response = await supabase.functions.invoke(
+      'calculate-booking-price',
+      body: {
+        'chaletId': chaletId,
+        'checkIn': checkIn.toIso8601String(),
+        'checkOut': checkOut.toIso8601String(),
+        'guestsCount': guestsCount,
+      },
+    );
+
+    final data = response.data as Map<String, dynamic>;
+    final totalPrice = data['totalPrice'];
+    if (totalPrice == null) {
+      throw Exception('Invalid price response');
+    }
+    return (totalPrice as num).toDouble();
+  }
+
   static BookingService? _instance;
   static BookingService get instance => _instance ??= BookingService._();
   BookingService._();
@@ -195,10 +221,11 @@ class BookingService {
     required DateTime checkIn,
     required DateTime checkOut,
     required int guestsCount,
-    required double totalPrice,
     String paymentMethod = 'cash',
     String? notes,
   }) async {
+    // Security: never accept price from the client.
+    // Store only the booking core data here; compute total_price server-side (Edge Function / trigger).
     final userId = _auth.currentUser!.id;
     final data = await supabase
         .from('bookings')
@@ -208,7 +235,6 @@ class BookingService {
           'check_in': checkIn.toIso8601String().split('T').first,
           'check_out': checkOut.toIso8601String().split('T').first,
           'guests_count': guestsCount,
-          'total_price': totalPrice,
           'status': 'pending',
           'payment_method': paymentMethod,
           'notes': notes,
@@ -236,9 +262,15 @@ class BookingService {
 
   /// Cancel booking
   Future<void> cancelBooking(String bookingId) async {
+    final userId = _auth.currentUser?.id;
+    if (userId == null) return;
+
+    // IDOR fix: only cancel if the booking belongs to the current user.
     await supabase
         .from('bookings')
-        .update({'status': 'cancelled'}).eq('id', bookingId);
+        .update({'status': 'cancelled'})
+        .eq('id', bookingId)
+        .eq('user_id', userId);
   }
 }
 
@@ -332,6 +364,28 @@ class ReviewsService {
   }) async {
     final userId = AuthService.instance.currentUser?.id;
     if (userId == null) return;
+
+    // Reviews security: only allow when user has a completed booking.
+    // Prefer bookingId if provided; otherwise validate by chaletId.
+    final hasCompletedBooking = bookingId != null
+        ? await supabase
+            .from('bookings')
+            .select('id')
+            .eq('id', bookingId)
+            .eq('user_id', userId)
+            .eq('status', 'completed')
+            .maybeSingle()
+            .then((row) => row != null)
+        : await supabase
+            .from('bookings')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('chalet_id', chaletId)
+            .eq('status', 'completed')
+            .limit(1)
+            .then((data) => (data as List).isNotEmpty);
+
+    if (!hasCompletedBooking) return;
 
     await supabase.from('reviews').insert({
       'chalet_id': chaletId,

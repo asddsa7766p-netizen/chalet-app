@@ -44,7 +44,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         checkIn: widget.checkIn,
         checkOut: widget.checkOut,
         guestsCount: widget.guestsCount,
-        totalPrice: widget.totalPrice,
         paymentMethod: _paymentMethod == 'credit_card' ? 'card' : 'cash',
         notes: null,
       );

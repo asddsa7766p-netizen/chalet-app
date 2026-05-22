@@ -26,31 +26,80 @@ class ReelsService {
     required String chaletId,
     required String description,
   }) async {
-    final videoExt = videoFile.path.split('.').last;
-    final thumbExt = thumbnailFile.path.split('.').last;
+    // Security checks before any upload
+    // - size limit: 100MB for the video, 10MB for the thumbnail
+    // - extension/MIME: only allow video (mp4/mov) and thumbnail images (png/jpg/jpeg)
+    const maxVideoBytes = 100 * 1024 * 1024;
+    const maxThumbBytes = 10 * 1024 * 1024;
 
-    final videoPath =
-        'reels/${DateTime.now().millisecondsSinceEpoch}_video.$videoExt';
-    final thumbPath =
-        'thumbnails/${DateTime.now().millisecondsSinceEpoch}_thumb.$thumbExt';
+    final videoBytes = await videoFile.length();
+    if (videoBytes > maxVideoBytes) {
+      throw FormatException('File too large');
+    }
 
-    final videoUrl = await _uploadFile(
-      file: videoFile,
-      path: videoPath,
-      bucket: 'reels',
-    );
-    final thumbnailUrl = await _uploadFile(
-      file: thumbnailFile,
-      path: thumbPath,
-      bucket: 'thumbnails',
-    );
+    final thumbBytes = await thumbnailFile.length();
+    if (thumbBytes > maxThumbBytes) {
+      throw FormatException('Thumbnail too large');
+    }
 
-    await _supabase.from('reels').insert({
-      'chalet_id': chaletId,
-      'video_url': videoUrl,
-      'thumbnail_url': thumbnailUrl,
-      'description': description,
-    });
+    final videoName = videoFile.path.split('/').last;
+    final thumbName = thumbnailFile.path.split('/').last;
+    final videoExt = videoName.contains('.') ? videoName.split('.').last : '';
+    final thumbExt = thumbName.contains('.') ? thumbName.split('.').last : '';
+
+    final allowedVideoExt = {'mp4', 'mov'};
+    final allowedThumbExt = {'png', 'jpg', 'jpeg'};
+
+    final videoExtLower = videoExt.toLowerCase();
+    final thumbExtLower = thumbExt.toLowerCase();
+
+    if (!allowedVideoExt.contains(videoExtLower)) {
+      throw FormatException('Invalid video type');
+    }
+
+    if (!allowedThumbExt.contains(thumbExtLower)) {
+      throw FormatException('Invalid thumbnail type');
+    }
+
+    // Best-effort MIME validation based on file extension.
+    // (Dart/Flutter cannot reliably detect MIME without extra packages; this still blocks obvious bypasses.)
+    final inferredVideoMime = videoExtLower == 'mp4'
+        ? 'video/mp4'
+        : videoExtLower == 'mov'
+            ? 'video/quicktime'
+            : null;
+
+    if (inferredVideoMime == null) {
+      throw FormatException('Invalid video type');
+    }
+
+    try {
+      final videoPath =
+          'reels/${DateTime.now().millisecondsSinceEpoch}_video.$videoExtLower';
+      final thumbPath =
+          'thumbnails/${DateTime.now().millisecondsSinceEpoch}_thumb.$thumbExtLower';
+
+      final videoUrl = await _uploadFile(
+        file: videoFile,
+        path: videoPath,
+        bucket: 'reels',
+      );
+      final thumbnailUrl = await _uploadFile(
+        file: thumbnailFile,
+        path: thumbPath,
+        bucket: 'thumbnails',
+      );
+
+      await _supabase.from('reels').insert({
+        'chalet_id': chaletId,
+        'video_url': videoUrl,
+        'thumbnail_url': thumbnailUrl,
+        'description': description,
+      });
+    } catch (_) {
+      // Don't leak storage/Supabase error details to the UI.
+      throw Exception('Upload failed');
+    }
   }
 
   Future<void> toggleLike({
