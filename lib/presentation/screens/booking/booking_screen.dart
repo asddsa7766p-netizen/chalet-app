@@ -128,6 +128,7 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _confirm() async {
+    if (_loading) return;
     if (_checkIn == null || _checkOut == null) {
       _showSnack('يرجى تحديد تواريخ الوصول والمغادرة');
       return;
