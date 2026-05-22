@@ -146,10 +146,18 @@ class _HostChaletScreenState extends State<HostChaletScreen> {
 
   // ─── Upload images to Supabase Storage ──────────────────────────
   Future<List<String>> _uploadImages(String chaletId) async {
+    const allowedExtensions = {'jpg', 'jpeg', 'png', 'webp'};
     final uploadedUrls = <String>[];
 
     for (final file in _newImages) {
-      final ext = file.path.split('.').last;
+      final ext = file.path.split('.').last.toLowerCase();
+
+      if (!allowedExtensions.contains(ext)) {
+        _showSnack('نوع الملف غير مدعوم: .$ext — المسموح: jpg, jpeg, png, webp',
+            isError: true);
+        continue;
+      }
+
       final fileName =
           'chalets/$chaletId/${DateTime.now().millisecondsSinceEpoch}.$ext';
 
