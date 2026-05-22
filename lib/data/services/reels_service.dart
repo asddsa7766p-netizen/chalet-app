@@ -102,10 +102,10 @@ class ReelsService {
     }
   }
 
-  Future<void> toggleLike({
-    required String reelId,
-    required String userId,
-  }) async {
+  Future<void> toggleLike({required String reelId}) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
     final existing = await _supabase
         .from('reel_likes')
         .select('id')
@@ -124,10 +124,10 @@ class ReelsService {
     await _supabase.from('reel_likes').delete().eq('id', existing['id']);
   }
 
-  Future<bool> isLiked({
-    required String reelId,
-    required String userId,
-  }) async {
+  Future<bool> isLiked({required String reelId}) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return false;
+
     final data = await _supabase
         .from('reel_likes')
         .select('id')
