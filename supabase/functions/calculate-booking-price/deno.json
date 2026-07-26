@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "calculate-booking-price": {
+      "runtime": "edge",
+      "entrypoint": "index.ts"
+    }
+  }
+}
+

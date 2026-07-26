@@ -1,0 +1,544 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/constants/app_colors.dart';
+import '../../../data/services/services.dart';
+import 'owner_add_chalet_screen.dart';
+import 'chalet_pricing_screen.dart';
+
+/// شاشة "شاليهاتي".
+///
+/// ⚠️ تم إعادة كتابة هذه الشاشة بالكامل. النسخة السابقة كانت:
+/// 1) تعرض شاليهين ثابتين مكتوبين يدويًا في الكود (hardcoded) بغض النظر عن
+///    شاليهات المالك الحقيقية في قاعدة البيانات — أي أنها لم تكن تعمل
+///    فعليًا كشاشة "شاليهاتي" إطلاقًا.
+/// 2) تحتوي على خطأ layout حقيقي (`OutlinedButton` بداخل `Row` بدون
+///    `Expanded`/عرض محدد) كان يتسبب بانهيار الشاشة بالكامل عند العرض
+///    (BoxConstraints forces an infinite width).
+///
+/// زر "تعديل" حاليًا يعرض رسالة "قريبًا" بدل فتح شاشة تعديل فعلية، لأن
+/// ChaletModel لا يحتوي بعد على كل الحقول اللازمة لتعديل شاليه موجود بأمان
+/// (deposit_amount, min_nights, video_url, booking_type, قائمة الصور
+/// الكاملة). هذا قرار مؤقت ومقصود إلى أن يتم إصلاح الموديل.
+///
+/// ✅ جديد: زر "الأسعار" يفتح ChaletPricingScreen لإدارة تسعير الشاليه
+/// (سعر يوم الأسبوع + سعر تاريخ محدد)، بدون أي تغيير على منطق التعديل
+/// العام للشاليه.
+class OwnerChaletsScreen extends StatefulWidget {
+  const OwnerChaletsScreen({super.key});
+
+  @override
+  State<OwnerChaletsScreen> createState() => _OwnerChaletsScreenState();
+}
+
+class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
+  final _supabase = Supabase.instance.client;
+
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _chalets = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final ownerId = AuthService.instance.currentUser?.id;
+    if (ownerId == null) {
+      setState(() {
+        _loading = false;
+        _error = 'لا يوجد مستخدم مسجل دخول حاليًا';
+      });
+      return;
+    }
+
+    try {
+      // استعلام مباشر بدل ChaletModel، لأن الموديل الحالي لا يحتوي على كل
+      // الأعمدة الفعلية في قاعدة البيانات (انظر ملاحظة الموديل أعلى الملف).
+      // نقرأ هنا الحقول الخام مباشرة كـ Map لضمان عرض البيانات الصحيحة
+      // كاملة دون فقدان أي قيمة بسبب نقص الموديل.
+      final data = await _supabase
+          .from('chalets')
+          .select(
+            'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count',
+          )
+          .eq('owner_id', ownerId)
+          .order('created_at', ascending: false);
+
+      if (!mounted) return;
+      setState(() {
+        _chalets = (data as List).cast<Map<String, dynamic>>();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'تعذر تحميل الشاليهات، حاول مرة أخرى';
+      });
+    }
+  }
+
+  void _showComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'تعديل الشاليهات الموجودة سيتوفر قريبًا',
+          style: TextStyle(fontFamily: 'Cairo'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _goToAddChalet() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const OwnerAddChaletScreen()),
+    );
+    // إعادة تحميل القائمة بعد الرجوع من شاشة الإضافة، لأن شاليهًا جديدًا قد
+    // يكون أُضيف. كانت النسخة السابقة لا تحدّث القائمة أبدًا (وهذا كان غير
+    // ملحوظ لأن القائمة كانت ثابتة على أي حال).
+    if (mounted) _load();
+  }
+
+  /// ✅ جديد: فتح شاشة إدارة الأسعار لشاليه معيّن، مع تمرير الحقول المطلوبة.
+  Future<void> _goToPricing(Map<String, dynamic> chalet) async {
+    final id = chalet['id'] as String;
+    final name = (chalet['name'] as String?)?.trim().isNotEmpty == true
+        ? chalet['name'] as String
+        : 'بدون اسم';
+    final defaultPrice = (chalet['price_per_night'] as num?)?.toDouble() ?? 0;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChaletPricingScreen(
+          chaletId: id,
+          chaletName: name,
+          defaultPricePerNight: defaultPrice,
+        ),
+      ),
+    );
+    // إعادة تحميل القائمة بعد الرجوع، احتياطًا لو تم تعديل السعر الافتراضي
+    // من داخل شاشة إدارة الأسعار مستقبلًا.
+    if (mounted) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        title: const Text(
+          'شاليهاتي',
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.w900,
+            color: AppColors.primary,
+          ),
+        ),
+        centerTitle: true,
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        color: AppColors.primary,
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.primary))
+            : CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 92),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'شاليهاتي',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'إدارة شاليهاتك، توفرها، وأسعارها من مكان واحد.',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: ElevatedButton.icon(
+                              onPressed: _goToAddChalet,
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text(
+                                'إضافة شاليه جديد',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_error != null)
+                            _buildErrorState()
+                          else if (_chalets.isEmpty)
+                            _buildEmptyState()
+                          else
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _chalets.length,
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                                // تمت زيادة childAspectRatio بدل تثبيت ارتفاع
+                                // صغير، لإعطاء البطاقة مساحة كافية بحيث لا
+                                // تنكسر عناصرها الداخلية. تم تصغيره قليلًا
+                                // (0.78 → 0.72) لاستيعاب زرَّين بدل زر واحد
+                                // في أسفل البطاقة (تعديل + الأسعار).
+                                childAspectRatio: 0.72,
+                              ),
+                              itemBuilder: (_, i) => _ChaletCard(
+                                chalet: _chalets[i],
+                                onEditPressed: _showComingSoon,
+                                onManagePricesPressed: () =>
+                                    _goToPricing(_chalets[i]),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _goToAddChalet,
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text(
+          'إضافة',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w900),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 60),
+      child: Column(
+        children: [
+          Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
+          const SizedBox(height: 12),
+          Text(
+            _error ?? 'حدث خطأ',
+            style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _load,
+            child: const Text('إعادة المحاولة',
+                style:
+                    TextStyle(fontFamily: 'Cairo', color: AppColors.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 60),
+      child: Column(
+        children: [
+          Icon(Icons.home_work_outlined, size: 56, color: AppColors.textMuted),
+          const SizedBox(height: 14),
+          const Text(
+            'لا توجد شاليهات بعد',
+            style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'اضغط "إضافة شاليه جديد" لإضافة أول شاليه لك',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontFamily: 'Cairo', fontSize: 12, color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChaletCard extends StatelessWidget {
+  final Map<String, dynamic> chalet;
+  final VoidCallback onEditPressed;
+  final VoidCallback onManagePricesPressed;
+
+  const _ChaletCard({
+    required this.chalet,
+    required this.onEditPressed,
+    required this.onManagePricesPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (chalet['name'] as String?)?.trim().isNotEmpty == true
+        ? chalet['name'] as String
+        : 'بدون اسم';
+    final city = chalet['city'] as String? ?? '';
+    final location = chalet['location'] as String? ?? '';
+    final displayLocation =
+        [city, location].where((s) => s.isNotEmpty).join('، ');
+    final price = (chalet['price_per_night'] as num?)?.toDouble() ?? 0;
+    final isAvailable = chalet['is_available'] as bool? ?? false;
+    final isApproved = chalet['is_approved'] as bool? ?? false;
+    final images = (chalet['images'] as List?)?.cast<String>() ?? [];
+    final coverImage = images.isNotEmpty ? images.first : null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 110,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (coverImage != null)
+                  Image.network(
+                    coverImage,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: AppColors.primary.withOpacity(0.06),
+                      child: const Icon(Icons.home_work_rounded,
+                          color: AppColors.primary, size: 40),
+                    ),
+                  )
+                else
+                  Container(
+                    color: AppColors.primary.withOpacity(0.06),
+                    child: const Icon(Icons.home_work_rounded,
+                        color: AppColors.primary, size: 40),
+                  ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.92),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                          color: (isAvailable && isApproved
+                                  ? AppColors.primary
+                                  : AppColors.textMuted)
+                              .withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: isAvailable && isApproved
+                                ? AppColors.primary
+                                : AppColors.textMuted,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          !isApproved
+                              ? 'بانتظار الموافقة'
+                              : (isAvailable ? 'متاح' : 'غير متاح'),
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: isAvailable && isApproved
+                                ? AppColors.primary
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      if (displayLocation.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_rounded,
+                                size: 13, color: AppColors.textSecondary),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                displayLocation,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 6),
+                      Text(
+                        '₪${price.toStringAsFixed(0)} / ليلة',
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // ✅ جديد: زرّان بدل زر واحد — "تعديل" و"الأسعار" — كل واحد
+                  // بعرض متساوٍ (Expanded داخل Row) لتفادي مشكلة
+                  // BoxConstraints forces an infinite width القديمة.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onEditPressed,
+                          icon: const Icon(Icons.edit_rounded, size: 15),
+                          label: const Text(
+                            'تعديل',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            side: BorderSide(
+                                color: AppColors.primary.withOpacity(0.7)),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: onManagePricesPressed,
+                          icon: const Icon(Icons.sell_rounded, size: 15),
+                          label: const Text(
+                            'الأسعار',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

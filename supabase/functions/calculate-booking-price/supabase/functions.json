@@ -1,0 +1,6 @@
+{
+  "name": "calculate-booking-price",
+  "entrypoint": "index.ts",
+  "runtime": "edge"
+}
+
