@@ -271,7 +271,8 @@ class _OverviewTabState extends State<_OverviewTab> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'تعذر تحميل الإحصائيات: $e';
+        debugPrint('ADMIN OVERVIEW ERROR: $e');
+        _error = 'تعذر تحميل الإحصائيات، يرجى المحاولة مرة أخرى.';
       });
     }
   }
@@ -415,10 +416,11 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
         _loading = false;
       });
     } catch (e) {
+      debugPrint('ADMIN CHALET LOAD ERROR: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'تعذر تحميل الشاليهات: $e';
+        _error = 'تعذر تحميل الشاليهات، يرجى المحاولة مرة أخرى.';
       });
     }
   }
@@ -433,8 +435,9 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
       if (!mounted) return;
       _showSnack('تمت الموافقة على الشاليه ✅');
     } catch (e) {
+      debugPrint('ADMIN APPROVE ERROR: $e');
       if (!mounted) return;
-      _showSnack('فشلت الموافقة: $e', isError: true);
+      _showSnack('فشلت الموافقة، يرجى المحاولة مرة أخرى.', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -473,8 +476,9 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
       if (!mounted) return;
       _showSnack('تم رفض وحذف الشاليه');
     } catch (e) {
+      debugPrint('ADMIN REJECT ERROR: $e');
       if (!mounted) return;
-      _showSnack('فشل الرفض: $e', isError: true);
+      _showSnack('فشل الرفض، يرجى المحاولة مرة أخرى.', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -680,10 +684,11 @@ class _UsersTabState extends State<_UsersTab> {
         _loading = false;
       });
     } catch (e) {
+      debugPrint('ADMIN USERS LOAD ERROR: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'تعذر تحميل المستخدمين: $e';
+        _error = 'تعذر تحميل المستخدمين، يرجى المحاولة مرة أخرى.';
       });
     }
   }
@@ -700,8 +705,9 @@ class _UsersTabState extends State<_UsersTab> {
       if (!mounted) return;
       _showSnack(currentlyActive ? 'تم حظر المستخدم' : 'تم تفعيل المستخدم');
     } catch (e) {
+      debugPrint('ADMIN TOGGLE ACTIVE ERROR: $e');
       if (!mounted) return;
-      _showSnack('فشل تنفيذ العملية: $e', isError: true);
+      _showSnack('فشل تنفيذ العملية، يرجى المحاولة مرة أخرى.', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -747,8 +753,9 @@ class _UsersTabState extends State<_UsersTab> {
       _showSnack(
           currentlyAdmin ? 'تم إلغاء صلاحية الأدمن' : 'تم منح صلاحية الأدمن ✅');
     } catch (e) {
+      debugPrint('ADMIN TOGGLE ADMIN ERROR: $e');
       if (!mounted) return;
-      _showSnack('فشل: $e', isError: true);
+      _showSnack('فشل تنفيذ العملية، يرجى المحاولة مرة أخرى.', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }

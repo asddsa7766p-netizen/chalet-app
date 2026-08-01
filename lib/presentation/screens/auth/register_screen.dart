@@ -85,8 +85,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('حدث خطأ: ${e.toString()}'),
+          const SnackBar(
+            content: Text('حدث خطأ، يرجى المحاولة مرة أخرى.'),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -274,8 +274,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (mounted) setState(() => _sent = true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('حدث خطأ: ${e.toString()}'),
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('حدث خطأ، يرجى المحاولة مرة أخرى.'),
             backgroundColor: AppColors.error));
       }
     } finally {

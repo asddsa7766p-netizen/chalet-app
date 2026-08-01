@@ -317,8 +317,8 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
     List<XFile> picked;
     try {
       picked = await _picker.pickMultiImage(imageQuality: 85);
-    } catch (e) {
-      _showSnack('تعذر فتح معرض الصور: $e', isError: true);
+    } catch (_) {
+      _showSnack('تعذر فتح معرض الصور، يرجى المحاولة لاحقاً', isError: true);
       return;
     }
     if (picked.isEmpty) return;
@@ -405,10 +405,10 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
         final url =
             _supabase.storage.from('chalet-images').getPublicUrl(fileName);
         uploadedUrls.add(url);
-      } catch (e) {
+      } catch (_) {
         // فشل رفع صورة واحدة لا يجب أن يوقف رفع الباقي، لكن يجب إعلام
         // المستخدم بأن صورة لم تُرفع.
-        _showSnack('فشل رفع إحدى الصور، سيتم تجاهلها: $e', isError: true);
+        _showSnack('فشل رفع إحدى الصور، سيتم تجاهلها', isError: true);
       }
     }
 
@@ -565,8 +565,9 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
       await Future.delayed(const Duration(milliseconds: 800));
       if (!mounted) return;
       context.go('/owner-dashboard');
-    } catch (e) {
-      if (mounted) _showSnack('حدث خطأ أثناء الحفظ: $e', isError: true);
+    } catch (_) {
+      if (mounted)
+        _showSnack('حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

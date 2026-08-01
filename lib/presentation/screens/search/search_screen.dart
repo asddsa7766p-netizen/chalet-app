@@ -86,10 +86,10 @@ class _SearchScreenState extends State<SearchScreen> {
           _loading = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = 'تعذر تحميل النتائج، يرجى المحاولة لاحقاً';
           _loading = false;
         });
       }

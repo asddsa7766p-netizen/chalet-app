@@ -74,11 +74,11 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
         _bookings = bookings;
         _loading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'تعذر التحميل: $e';
+        _error = 'تعذر تحميل الحجوزات، يرجى المحاولة لاحقاً';
       });
     }
   }
@@ -130,8 +130,8 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
       await _supabase.from('bookings').delete().eq('id', bookingId);
       _showSnack('تم حذف الحجز');
       _load();
-    } catch (e) {
-      _showSnack('فشل الحذف: $e', isError: true);
+    } catch (_) {
+      _showSnack('فشل الحذف، يرجى المحاولة لاحقاً', isError: true);
     }
   }
 
@@ -393,8 +393,8 @@ class _AddExternalBookingSheetState extends State<_AddExternalBookingSheet> {
         },
       );
       widget.onSaved();
-    } catch (e) {
-      if (mounted) _showSnack('فشل الحفظ: $e', isError: true);
+    } catch (_) {
+      if (mounted) _showSnack('فشل الحفظ، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

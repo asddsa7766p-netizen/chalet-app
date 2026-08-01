@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
+import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/common_widgets.dart';
 import '../settings/about_app_screen.dart' show AboutAppScreen;
 import '../settings/privacy_security_screen.dart' show PrivacySecurityScreen;
 import '../settings/settings_screen.dart' show SettingsScreen;
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   UserProfile? _profile;
   bool _loading = true;
   bool _isHost = false;
@@ -73,7 +75,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (confirm == true) {
       await AuthService.instance.signOut();
-      if (mounted) context.go('/auth/login');
+      // Clear all cached Riverpod state so the next logged-in user
+      // never sees previous user's cached data.
+      if (mounted) {
+        ref.invalidate(favoritesProvider);
+        context.go('/auth/login');
+      }
     }
   }
 

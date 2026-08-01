@@ -132,10 +132,11 @@ class _PersonalDataScreenState extends State<PersonalDataScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حفظ التغييرات بنجاح')),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر حفظ التغييرات: $e')),
+        const SnackBar(
+            content: Text('تعذر حفظ التغييرات، يرجى المحاولة لاحقاً')),
       );
     } finally {
       if (!mounted) return;
@@ -275,10 +276,10 @@ class _PersonalDataScreenState extends State<PersonalDataScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('حذف الحساب غير مدمج بالكامل حاليًا')),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر حذف الحساب: $e')),
+        const SnackBar(content: Text('تعذر حذف الحساب، يرجى المحاولة لاحقاً')),
       );
     }
   }

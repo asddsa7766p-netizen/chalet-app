@@ -153,7 +153,7 @@ class _HostChaletScreenState extends State<HostChaletScreen> {
       final ext = file.path.split('.').last.toLowerCase();
 
       if (!allowedExtensions.contains(ext)) {
-        _showSnack('نوع الملف غير مدعوم: .$ext — المسموح: jpg, jpeg, png, webp',
+        _showSnack('نوع الملف غير مدعوم — المسموح: jpg, jpeg, png, webp',
             isError: true);
         continue;
       }
@@ -240,8 +240,9 @@ class _HostChaletScreenState extends State<HostChaletScreen> {
         await Future.delayed(const Duration(milliseconds: 800));
         if (mounted) context.pop();
       }
-    } catch (e) {
-      if (mounted) _showSnack('حدث خطأ: $e', isError: true);
+    } catch (_) {
+      if (mounted)
+        _showSnack('حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }

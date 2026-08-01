@@ -53,10 +53,10 @@ class _PalestineChaletsMapScreenState extends State<PalestineChaletsMapScreen> {
         _chalets = filtered;
         _loading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'تعذر تحميل الخريطة، يرجى المحاولة لاحقاً';
         _loading = false;
       });
     }

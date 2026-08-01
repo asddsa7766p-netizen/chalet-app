@@ -113,10 +113,10 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
       if (mounted) {
         setState(() => _loading = false);
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'تعذر تحميل الأسعار: $e';
+          _error = 'تعذر تحميل الأسعار، يرجى المحاولة لاحقاً';
           _loading = false;
         });
       }
@@ -189,8 +189,8 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
       }
       _showSnack(
           enabled ? 'تم تفعيل "${type.label}"' : 'تم إيقاف "${type.label}"');
-    } catch (e) {
-      _showSnack('فشل الحفظ: $e', isError: true);
+    } catch (_) {
+      _showSnack('فشل الحفظ، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _savingStayType.remove(type));
     }
@@ -220,8 +220,8 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
       );
       if (mounted) setState(() => _stayTypeConfigs[type] = config);
       _showSnack('تم حفظ إعدادات "${type.label}"');
-    } catch (e) {
-      _showSnack('فشل الحفظ: $e', isError: true);
+    } catch (_) {
+      _showSnack('فشل الحفظ، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _savingStayType.remove(type));
     }
@@ -274,8 +274,8 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
         );
       }
       _showSnack('تم حفظ سعر ${ChaletPricingService.weekdayLabels[weekday]}');
-    } catch (e) {
-      _showSnack('فشل الحفظ: $e', isError: true);
+    } catch (_) {
+      _showSnack('فشل الحفظ، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _savingWeekday.remove(weekday));
     }
@@ -378,8 +378,8 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
         });
       }
       _showSnack('تم إضافة السعر الخاص');
-    } catch (e) {
-      _showSnack('فشل الحفظ: $e', isError: true);
+    } catch (_) {
+      _showSnack('فشل الحفظ، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _savingDateOverride = false);
     }
@@ -396,8 +396,8 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
         _dateOverrides.removeWhere((o) => o.date == item.date);
       });
       _showSnack('تم الحذف');
-    } catch (e) {
-      _showSnack('فشل الحذف: $e', isError: true);
+    } catch (_) {
+      _showSnack('فشل الحذف، يرجى المحاولة لاحقاً', isError: true);
     }
   }
 

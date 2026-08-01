@@ -64,10 +64,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
         });
       }
     } catch (e) {
-      print('PRICE ERROR: $e');
+      debugPrint('PRICE ERROR: $e');
       if (mounted) {
         setState(() {
-          _priceError = e.toString();
+          _priceError = 'حدث خطأ في حساب السعر، يرجى المحاولة مرة أخرى.';
           _priceLoading = false;
         });
       }
@@ -94,13 +94,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
       if (!mounted) return;
       _showSuccessDialog();
     } catch (e) {
-      print('BOOKING ERROR: $e');
+      debugPrint('BOOKING ERROR: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              e.toString(),
-              style: const TextStyle(fontFamily: 'Cairo'),
+            content: const Text(
+              'حدث خطأ أثناء الحجز، يرجى المحاولة مجدداً',
+              style: TextStyle(fontFamily: 'Cairo'),
             ),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
@@ -507,7 +507,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           const SizedBox(height: 4),
                           _depositRow(
                             'الباقي عند الوصول (70%)',
-                            AppCurrency.formatPrice(_totalPrice! - _depositAmount!),
+                            AppCurrency.formatPrice(
+                                _totalPrice! - _depositAmount!),
                             color: Colors.black87,
                           ),
                         ],

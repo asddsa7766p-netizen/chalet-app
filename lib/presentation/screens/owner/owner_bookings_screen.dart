@@ -53,9 +53,9 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
       await _load();
       if (!mounted) return;
       _showSnack('تم تأكيد الحجز بنجاح');
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      _showSnack('تعذر تأكيد الحجز: $e', isError: true);
+      _showSnack('تعذر تأكيد الحجز، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -97,9 +97,9 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
       await _load();
       if (!mounted) return;
       _showSnack('تم رفض الحجز');
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      _showSnack('تعذر رفض الحجز: $e', isError: true);
+      _showSnack('تعذر رفض الحجز، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }

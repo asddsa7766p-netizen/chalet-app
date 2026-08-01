@@ -95,10 +95,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       await AuthService.instance.becomeCustomer();
       if (!mounted) return;
       context.go('/home');
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر تنفيذ العملية: $e')),
+        const SnackBar(
+            content: Text('تعذر تنفيذ العملية، يرجى المحاولة لاحقاً')),
       );
     }
   }

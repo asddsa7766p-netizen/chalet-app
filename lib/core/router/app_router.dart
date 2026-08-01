@@ -21,6 +21,7 @@ import '../../presentation/screens/owner/owner_profile_screen.dart';
 import '../../presentation/screens/map/palestine_chalets_map_screen.dart';
 import '../../data/models/chalet_model.dart';
 import '../../data/services/host_service.dart';
+import '../../data/services/services.dart';
 
 import '../../presentation/screens/owner/owner_add_chalet_screen.dart';
 import '../../presentation/screens/admin/admin_dashboard_screen.dart';
@@ -53,6 +54,13 @@ class AppRouter {
       if (isOwnerRoute) {
         final isHost = await HostService.instance.isHost();
         return isHost ? null : '/home';
+      }
+
+      // ✅ Admin route protection
+      if (state.matchedLocation == '/admin-dashboard') {
+        if (!isLoggedIn) return '/auth/login';
+        final isAdmin = await AuthService.instance.isAdmin();
+        return isAdmin ? null : '/home';
       }
 
       return null;

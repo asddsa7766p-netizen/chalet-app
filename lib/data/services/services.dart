@@ -106,6 +106,30 @@ class AuthService {
     final result = await supabase.rpc('become_customer');
     return result as bool;
   }
+
+  /// Cached admin check.
+  /// Returns true if the current user's profile has is_admin = true.
+  bool? _isAdminCache;
+  Future<bool> isAdmin() async {
+    if (_isAdminCache != null) return _isAdminCache!;
+    final userId = currentUser?.id;
+    if (userId == null) return false;
+    try {
+      final row = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', userId)
+          .maybeSingle();
+      _isAdminCache = (row?['is_admin'] as bool?) ?? false;
+      return _isAdminCache!;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void clearAdminCache() {
+    _isAdminCache = null;
+  }
 }
 
 // ============================================
@@ -438,12 +462,17 @@ class ReviewsService {
   ReviewsService._();
 
   Future<List<ReviewModel>> getChaletReviews(String chaletId) async {
-    final data = await supabase
-        .from('reviews')
-        .select('*, profiles(full_name, avatar_url)')
-        .eq('chalet_id', chaletId)
-        .order('created_at', ascending: false);
-    return (data as List).map((e) => ReviewModel.fromJson(e)).toList();
+    final data = await supabase.rpc('get_chalet_reviews_with_author', params: {
+      'p_chalet_id': chaletId,
+    });
+    return (data as List).map((e) {
+      final row = Map<String, dynamic>.from(e as Map<String, dynamic>);
+      row['profiles'] = {
+        'full_name': row['author_full_name'],
+        'avatar_url': row['author_avatar_url'],
+      };
+      return ReviewModel.fromJson(row);
+    }).toList();
   }
 
   Future<void> addReview({

@@ -74,10 +74,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
         _ensureControllerForIndex(0);
         _togglePlaybackForVisibleIndex();
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'تعذر تحميل الفيديوهات، يرجى المحاولة لاحقاً';
         _loading = false;
       });
     }
