@@ -124,7 +124,15 @@ class AppRouter {
           GoRoute(
             path: 'chalet/:id',
             builder: (context, state) {
-              final chalet = state.extra as ChaletModel?;
+              // ✅ تصحيح: كان `state.extra as ChaletModel?` — cast مباشر
+              // يرمي Exception إذا وصل extra بنوع غير متوقع (مثلاً عند
+              // تحديث المتصفح/Hot Restart على الويب، حيث لا ينتقل extra
+              // عبر إعادة تحميل الصفحة). الآن نتحقق من النوع بأمان: لو
+              // extra فعلاً ChaletModel نستخدمه كما كان تمامًا (لا تغيير
+              // في السلوك الطبيعي)، وإلا نمرر null والصفحة نفسها مصممة
+              // أصلاً لتحميل البيانات بنفسها عبر _load() في هذه الحالة.
+              final extra = state.extra;
+              final chalet = extra is ChaletModel ? extra : null;
               final id = state.pathParameters['id']!;
               return ChaletDetailScreen(chaletId: id, chalet: chalet);
             },
