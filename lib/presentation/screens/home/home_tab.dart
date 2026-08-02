@@ -216,7 +216,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         SizedBox(
                           width: 160,
                           child: ElevatedButton(
-                            onPressed: () {},
+                            onPressed: () => context.go('/search'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryLight,
                               foregroundColor: Colors.white,
@@ -238,7 +238,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () {},
+                            onPressed: () => context.go('/search'),
                             style: OutlinedButton.styleFrom(
                               backgroundColor: Colors.white.withOpacity(0.15),
                               foregroundColor: Colors.white,
@@ -305,7 +305,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 ),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () => context.go('/search'),
                 child: const Text(
                   'عرض الكل',
                   style: TextStyle(
@@ -328,7 +328,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 return Padding(
                   padding: const EdgeInsets.only(left: 12),
                   child: InkWell(
-                    onTap: () {},
+                    onTap: () => context.go('/search'),
                     child: Column(
                       children: [
                         Container(
@@ -391,7 +391,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 ),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () => context.go('/search'),
                 child: Row(
                   children: const [
                     Text(
@@ -464,7 +464,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                     topRight: Radius.circular(22),
                                   ),
                                   child: Image.network(
-                                    chalet.coverImage, 
+                                    chalet.coverImage,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) => Container(
                                       color: AppColors.primaryLight,
@@ -477,19 +477,22 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                               Positioned(
                                 top: 10,
                                 right: 10,
-                                child: Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.9),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    isFav
-                                        ? Icons.favorite_rounded
-                                        : Icons.favorite_border_rounded,
-                                    color: isFav ? Colors.red : Colors.grey,
-                                    size: 18,
+                                child: GestureDetector(
+                                  onTap: () => _toggleFavorite(chalet),
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.9),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      isFav
+                                          ? Icons.favorite_rounded
+                                          : Icons.favorite_border_rounded,
+                                      color: isFav ? Colors.red : Colors.grey,
+                                      size: 18,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -871,16 +874,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                     ),
                     Row(
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.border),
+                        GestureDetector(
+                          onTap: () => context.go('/search'),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppColors.card,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: const Icon(Icons.filter_alt_outlined,
+                                color: AppColors.primary),
                           ),
-                          child: const Icon(Icons.filter_alt_outlined,
-                              color: AppColors.primary),
                         ),
                         const SizedBox(width: 10),
                         Container(
