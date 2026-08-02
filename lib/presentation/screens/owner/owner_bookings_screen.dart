@@ -123,6 +123,8 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
         return AppColors.confirmed;
       case BookingStatus.cancelled:
         return AppColors.cancelled;
+      case BookingStatus.rejected:
+        return AppColors.error;
       case BookingStatus.completed:
         return AppColors.completed;
     }
@@ -136,6 +138,8 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
         return 'مؤكد';
       case BookingStatus.cancelled:
         return 'ملغى';
+      case BookingStatus.rejected:
+        return 'مرفوض';
       case BookingStatus.completed:
         return 'مكتمل';
     }
@@ -171,7 +175,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                             crossAxisCount: 1,
                             mainAxisSpacing: 14,
                             crossAxisSpacing: 14,
-                            childAspectRatio: 1.55,
+                            childAspectRatio: 1.35,
                           ),
                           itemBuilder: (context, i) =>
                               _bookingCard(_bookings[i]),
@@ -219,7 +223,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
         SizedBox(height: 14),
         Center(
           child: Text(
-            'لا توجد حجوزات قيد الانتظار حاليًا',
+            'لا توجد حجوزات حاليًا',
             style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 14,
@@ -339,6 +343,12 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                // ✅ بيانات الضيف (الاسم / الهاتف / الصورة) — مطلوبة على كل
+                // بطاقة حجز ليتمكن المالك من رؤية كامل بيانات الضيف فورًا.
+                _buildGuestSection(b),
+
+                const SizedBox(height: 12),
                 if (isPending)
                   Row(
                     children: [
@@ -425,6 +435,81 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuestSection(BookingModel b) {
+    final hasName = (b.guestName ?? '').isNotEmpty;
+    final hasPhone = (b.guestPhone ?? '').isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.background.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border.withOpacity(0.7)),
+      ),
+      child: Row(
+        children: [
+          // صورة الضيف
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary.withOpacity(0.1),
+              image: b.guestAvatar != null && b.guestAvatar!.isNotEmpty
+                  ? DecorationImage(
+                      image: NetworkImage(b.guestAvatar!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
+            child: b.guestAvatar == null || b.guestAvatar!.isEmpty
+                ? const Icon(Icons.person_rounded,
+                    color: AppColors.primary, size: 22)
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasName ? b.guestName! : 'ضيف',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.charcoal,
+                  ),
+                ),
+                if (hasPhone) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    b.guestPhone!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // أيقونة توضيحية
+          Icon(Icons.person_outline_rounded,
+              size: 18, color: AppColors.textMuted),
         ],
       ),
     );

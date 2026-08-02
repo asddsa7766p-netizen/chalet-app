@@ -18,7 +18,7 @@ String? _extractChaletImage(Map<String, dynamic>? chaletJson) {
 // ============================================
 // BOOKING MODEL
 // ============================================
-enum BookingStatus { pending, confirmed, cancelled, completed }
+enum BookingStatus { pending, confirmed, cancelled, rejected, completed }
 
 extension BookingStatusX on BookingStatus {
   String get arabicLabel {
@@ -29,6 +29,8 @@ extension BookingStatusX on BookingStatus {
         return 'مؤكد';
       case BookingStatus.cancelled:
         return 'ملغي';
+      case BookingStatus.rejected:
+        return 'مرفوض';
       case BookingStatus.completed:
         return 'مكتمل';
     }
@@ -51,6 +53,14 @@ class BookingModel {
   final String? chaletImage;
   final String? chaletCity;
 
+  /// ✅ بيانات الضيف (full_name / phone / avatar_url) — تُجلب من جدول
+  /// profiles عبر JOIN في استعلامات المالك (RLS يسمح بذلك للحجوزات
+  /// المرتبطة بشاليهات المالك). كانت غائبة تمامًا، والآن تُعرض مباشرة
+  /// على بطاقة الحجز في شاشة إدارة الحجوزات.
+  final String? guestName;
+  final String? guestPhone;
+  final String? guestAvatar;
+
   /// ✅ جديد: نوع الإقامة الفعلي لهذا الحجز — 'default' (السلوك القديم قبل
   /// دعم أنواع الإقامة) أو أحد القيم: morning / evening / full_day_morning
   /// / full_day_evening. يُستخدم لعرض تفاصيل الحجز ولإعادة حساب الأسعار
@@ -72,6 +82,9 @@ class BookingModel {
     this.chaletName,
     this.chaletImage,
     this.chaletCity,
+    this.guestName,
+    this.guestPhone,
+    this.guestAvatar,
     this.stayType = 'default',
   });
 
@@ -96,6 +109,9 @@ class BookingModel {
       chaletName: json['chalets']?['name'] as String?,
       chaletImage: _extractChaletImage(json['chalets']),
       chaletCity: json['chalets']?['city'] as String?,
+      guestName: json['profiles']?['full_name'] as String?,
+      guestPhone: json['profiles']?['phone'] as String?,
+      guestAvatar: json['profiles']?['avatar_url'] as String?,
       stayType: json['stay_type'] as String? ?? 'default',
     );
   }

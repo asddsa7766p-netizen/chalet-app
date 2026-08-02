@@ -60,6 +60,77 @@ class _HostBookingsScreenState extends State<HostBookingsScreen> {
     return '${d.day}/${d.month}/${d.year}';
   }
 
+  Widget _buildGuestInfo(BookingModel b) {
+    final hasName = (b.guestName ?? '').isNotEmpty;
+    final hasPhone = (b.guestPhone ?? '').isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary.withOpacity(0.1),
+              image: b.guestAvatar != null && b.guestAvatar!.isNotEmpty
+                  ? DecorationImage(
+                      image: NetworkImage(b.guestAvatar!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
+            child: b.guestAvatar == null || b.guestAvatar!.isEmpty
+                ? const Icon(Icons.person_rounded,
+                    color: AppColors.primary, size: 18)
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasName ? b.guestName! : 'ضيف',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.charcoal,
+                  ),
+                ),
+                if (hasPhone) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    b.guestPhone!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Color _bookingStatusColor(BookingStatus status) {
     switch (status) {
       case BookingStatus.pending:
@@ -68,6 +139,8 @@ class _HostBookingsScreenState extends State<HostBookingsScreen> {
         return AppColors.confirmed;
       case BookingStatus.cancelled:
         return AppColors.cancelled;
+      case BookingStatus.rejected:
+        return AppColors.error;
       case BookingStatus.completed:
         return AppColors.completed;
     }
@@ -78,6 +151,7 @@ class _HostBookingsScreenState extends State<HostBookingsScreen> {
     final tabs = const [
       BookingStatus.pending,
       BookingStatus.confirmed,
+      BookingStatus.rejected,
       BookingStatus.cancelled,
     ];
 
@@ -207,6 +281,10 @@ class _HostBookingsScreenState extends State<HostBookingsScreen> {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 12),
+                          // ✅ بيانات الضيف (الاسم / الهاتف / الصورة) —
+                          // مطلوبة على كل بطاقة حجز ليراها المالك فورًا.
+                          _buildGuestInfo(b),
                           const SizedBox(height: 12),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,

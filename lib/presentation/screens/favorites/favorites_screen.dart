@@ -191,7 +191,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _tabs = ['الحالية', 'القادمة', 'السابقة', 'الملغاة'];
-  final _statuses = ['confirmed', 'pending', 'completed', 'cancelled'];
+  final _statuses = [
+    ['confirmed'],
+    ['pending'],
+    ['completed'],
+    ['cancelled', 'rejected'],
+  ];
   Map<int, List<BookingModel>> _bookingsMap = {};
   bool _loading = true;
 
@@ -214,7 +219,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       final all = await BookingService.instance.getMyBookings();
       final map = <int, List<BookingModel>>{};
       for (int i = 0; i < _statuses.length; i++) {
-        map[i] = all.where((b) => b.status.name == _statuses[i]).toList();
+        map[i] =
+            all.where((b) => _statuses[i].contains(b.status.name)).toList();
       }
       if (mounted) {
         setState(() {
@@ -341,6 +347,8 @@ class _BookingCard extends StatelessWidget {
         return AppColors.confirmed;
       case BookingStatus.cancelled:
         return AppColors.cancelled;
+      case BookingStatus.rejected:
+        return AppColors.error;
       case BookingStatus.completed:
         return AppColors.completed;
     }

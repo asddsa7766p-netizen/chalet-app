@@ -332,16 +332,21 @@ class BookingService {
     return dates;
   }
 
-  /// Get incoming bookings for owner
+  /// Get incoming bookings for owner.
+  ///
+  /// ✅ يعرض كل حالات الحجز (قيد الانتظار/مؤكد/مرفوض/ملغي/مكتمل) المرتبطة
+  /// بشاليهات المالك، مع بيانات الضيف (full_name / phone / avatar_url) من
+  /// جدول profiles عبر JOIN — RLS يسمح بقراءتها للحجوزات المرتبطة فعليًا
+  /// بشاليهات المالك، بغض النظر عن حالة الحجز.
   Future<List<BookingModel>> getIncomingBookings() async {
     final userId = _auth.currentUser?.id;
     if (userId == null) return [];
     final data = await supabase
         .from('bookings')
         .select(
-          '*, chalets!inner(name, city, owner_id, images)',
+          '*, chalets!inner(name, city, owner_id, images), '
+          'profiles(full_name, phone, avatar_url)',
         )
-        .eq('status', 'pending')
         .eq('chalets.owner_id', userId)
         .order('created_at', ascending: false);
 
