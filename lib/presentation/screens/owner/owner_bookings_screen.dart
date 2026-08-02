@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/pricing_constants.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 
@@ -349,6 +351,12 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                 _buildGuestSection(b),
 
                 const SizedBox(height: 12),
+
+                // ✅ عرض فقط (DISPLAY-ONLY): تفاصيل عمولة المنصة للمالك —
+                // لا تُخصم فعليًا من أي مبلغ ولا تغير bookings.total_price.
+                _buildOwnerPriceBreakdown(b),
+
+                const SizedBox(height: 12),
                 if (isPending)
                   Row(
                     children: [
@@ -512,6 +520,84 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
               size: 18, color: AppColors.textMuted),
         ],
       ),
+    );
+  }
+
+  Widget _buildOwnerPriceBreakdown(BookingModel b) {
+    final commission = b.totalPrice * kPlatformCommissionPercentage;
+    final netDue = b.totalPrice - commission;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primaryPale.withOpacity(0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'تفاصيل العمولة',
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          _breakdownRow(
+            'قيمة الحجز',
+            AppCurrency.formatPrice(b.totalPrice),
+          ),
+          const SizedBox(height: 2),
+          _breakdownRow(
+            'عمولة المنصة (${(kPlatformCommissionPercentage * 100).toStringAsFixed(0)}%)',
+            '-${AppCurrency.formatPrice(commission)}',
+            valueColor: AppColors.error,
+          ),
+          const Divider(height: 12),
+          _breakdownRow(
+            'المبلغ المستحق',
+            AppCurrency.formatPrice(netDue),
+            bold: true,
+            valueColor: AppColors.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _breakdownRow(
+    String label,
+    String value, {
+    bool bold = false,
+    Color? valueColor,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: bold ? 12 : 11,
+            fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+            color: bold ? AppColors.charcoal : AppColors.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: bold ? 13 : 11,
+            fontWeight: FontWeight.w900,
+            color: valueColor ?? AppColors.charcoal,
+          ),
+        ),
+      ],
     );
   }
 

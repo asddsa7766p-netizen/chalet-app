@@ -6,6 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/constants/pricing_constants.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
@@ -1668,6 +1669,28 @@ class _BookingScreenState extends State<BookingScreen> {
             totalText,
             total: true,
           ),
+          if (_total != null && !_priceLoading) ...[
+            const SizedBox(height: 10),
+            const Divider(),
+            const SizedBox(height: 8),
+            // ✅ عرض فقط (DISPLAY-ONLY): تفاصيل الرسوم للعميل — لا تُضاف إلى
+            // bookings.total_price ولا تؤثر على السعر المخزَّن أو المحسوب.
+            _priceRow(
+              'سعر الشاليه',
+              AppCurrency.formatPrice(_total!),
+            ),
+            const SizedBox(height: 4),
+            _priceRow(
+              'رسوم الخدمة (${(kServiceFeePercentage * 100).toStringAsFixed(0)}%)',
+              AppCurrency.formatPrice(_total! * kServiceFeePercentage),
+            ),
+            const Divider(height: 14),
+            _priceRow(
+              'الإجمالي',
+              AppCurrency.formatPrice(_total! * (1 + kServiceFeePercentage)),
+              total: true,
+            ),
+          ],
           if (_availabilityError != null && !_priceLoading) ...[
             const SizedBox(height: 10),
             Text(
