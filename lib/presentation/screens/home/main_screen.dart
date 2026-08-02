@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_strings.dart';
 import '../home/home_tab.dart';
 import '../favorites/favorites_screen.dart';
@@ -6,6 +7,7 @@ import '../profile/profile_screen.dart';
 import '../reels/reels_screen.dart';
 import '../map/palestine_chalets_map_screen.dart';
 import '../favorites/favorites_screen.dart';
+import '../../widgets/common/login_prompt.dart';
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;
@@ -53,7 +55,24 @@ class _MainScreenState extends State<MainScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: (i) {
+          // Profile tab (index 5) requires login for guests.
+          if (i == 5) {
+            final isLoggedIn =
+                Supabase.instance.client.auth.currentUser != null;
+            if (!isLoggedIn) {
+              requireAuth(context);
+              return;
+            }
+          }
+          // Favorites tab (index 2) and MyBookings tab (index 3) also require login.
+          if ((i == 2 || i == 3) &&
+              Supabase.instance.client.auth.currentUser == null) {
+            requireAuth(context);
+            return;
+          }
+          setState(() => _currentIndex = i);
+        },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFF1A73E8),

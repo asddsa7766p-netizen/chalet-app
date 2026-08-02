@@ -29,35 +29,62 @@ import '../../presentation/screens/admin/admin_dashboard_screen.dart';
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
+  /// Routes that are public (no login required).
+  static bool isPublicRoute(String location) {
+    return location == '/splash' ||
+        location == '/onboarding' ||
+        location.startsWith('/auth/') ||
+        location == '/home' ||
+        location.startsWith('/home/chalet/') ||
+        location == '/search' ||
+        location == '/map' ||
+        location == '/reels';
+  }
+
+  /// Routes that require login (redirect to /auth/login if not logged in).
+  static bool isProtectedRoute(String location) {
+    return location == '/home/booking' ||
+        location == '/payment' ||
+        location.startsWith('/home/reviews/') ||
+        location.startsWith('/owner-') ||
+        location == '/admin-dashboard';
+  }
+
   static final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     redirect: (context, state) async {
       final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
-      final isAuthPath = state.matchedLocation.startsWith('/auth') ||
-          state.matchedLocation == '/splash' ||
-          state.matchedLocation == '/onboarding';
+      final location = state.matchedLocation;
 
-      if (state.matchedLocation == '/splash' ||
-          state.matchedLocation == '/onboarding') {
+      // Always allow splash and onboarding.
+      if (location == '/splash' || location == '/onboarding') {
         return null;
       }
 
-      if (!isLoggedIn && !isAuthPath) return '/auth/login';
-      if (isLoggedIn && isAuthPath) return '/home';
-
-      if (state.matchedLocation == '/payment') {
-        return isLoggedIn ? null : '/auth/login';
+      // Logged-in users on auth pages go to home.
+      if (isLoggedIn && location.startsWith('/auth/')) {
+        return '/home';
       }
-      final isOwnerRoute = state.matchedLocation.startsWith('/owner-') &&
-          state.matchedLocation != '/owner-add-chalet';
-      if (isOwnerRoute) {
+
+      // Public routes: allow guests.
+      if (isPublicRoute(location)) {
+        return null;
+      }
+
+      // Protected routes: require login.
+      if (isProtectedRoute(location)) {
+        if (!isLoggedIn) return '/auth/login';
+      }
+
+      // ✅ Owner routes (excluding add-chalet): require host role.
+      if (location.startsWith('/owner-') && location != '/owner-add-chalet') {
         final isHost = await HostService.instance.isHost();
         return isHost ? null : '/home';
       }
 
       // ✅ Admin route protection
-      if (state.matchedLocation == '/admin-dashboard') {
+      if (location == '/admin-dashboard') {
         if (!isLoggedIn) return '/auth/login';
         final isAdmin = await AuthService.instance.isAdmin();
         return isAdmin ? null : '/home';

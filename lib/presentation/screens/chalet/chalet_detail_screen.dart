@@ -12,6 +12,7 @@ import '../../../data/models/chalet_model.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
+import '../../widgets/common/login_prompt.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:url_launcher/url_launcher.dart';
@@ -75,9 +76,8 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   }
 
   Future<void> _toggleFavorite() async {
-    if (_chalet == null) {
-      return;
-    }
+    if (_chalet == null) return;
+    if (!requireAuth(context)) return;
     setState(() => _heartAnimating = true);
     await ref.read(favoritesProvider.notifier).toggleFavorite(_chalet!);
     Future.delayed(const Duration(milliseconds: 300), () {
@@ -927,9 +927,11 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       fontWeight: FontWeight.w800,
                       color: AppColors.charcoal)),
               TextButton(
-                onPressed: () => context.push(
-                    '/home/reviews/${widget.chaletId}',
-                    extra: _chalet?.name),
+                onPressed: () {
+                  if (!requireAuth(context)) return;
+                  context.push('/home/reviews/${widget.chaletId}',
+                      extra: _chalet?.name);
+                },
                 child: const Text('عرض الكل',
                     style: TextStyle(
                         color: AppColors.primary,
@@ -1022,7 +1024,10 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
           const SizedBox(width: 16),
           Expanded(
             child: ElevatedButton(
-              onPressed: () => context.push('/home/booking', extra: chalet),
+              onPressed: () {
+                if (!requireAuth(context)) return;
+                context.push('/home/booking', extra: chalet);
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 minimumSize: const Size(double.infinity, 50),
