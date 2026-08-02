@@ -75,11 +75,11 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   }
 
   Future<void> _toggleFavorite() async {
-    if (widget.chalet == null) {
+    if (_chalet == null) {
       return;
     }
     setState(() => _heartAnimating = true);
-    await ref.read(favoritesProvider.notifier).toggleFavorite(widget.chalet!);
+    await ref.read(favoritesProvider.notifier).toggleFavorite(_chalet!);
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => _heartAnimating = false);
     });

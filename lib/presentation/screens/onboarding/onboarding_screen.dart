@@ -235,7 +235,11 @@ class _Onboarding1 extends StatelessWidget {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: () => context.go('/auth/login'),
+                    onPressed: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('onboarding_seen', true);
+                      if (context.mounted) context.go('/auth/login');
+                    },
                     style: ElevatedButton.styleFrom(
                       elevation: 0,
                       backgroundColor: AppColors.primary,
@@ -261,7 +265,11 @@ class _Onboarding1 extends StatelessWidget {
                   width: double.infinity,
                   height: 56,
                   child: OutlinedButton(
-                    onPressed: () => context.go('/auth/login'),
+                    onPressed: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('onboarding_seen', true);
+                      if (context.mounted) context.go('/auth/login');
+                    },
                     style: OutlinedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       foregroundColor: AppColors.primary,
@@ -453,7 +461,11 @@ class _Onboarding2 extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () => context.go('/auth/login'),
+                      onPressed: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('onboarding_seen', true);
+                        if (context.mounted) context.go('/auth/login');
+                      },
                       style: ElevatedButton.styleFrom(
                         elevation: 0,
                         backgroundColor: AppColors.primary,
@@ -479,7 +491,11 @@ class _Onboarding2 extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () => context.go('/auth/login'),
+                      onPressed: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('onboarding_seen', true);
+                        if (context.mounted) context.go('/auth/login');
+                      },
                       style: OutlinedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: AppColors.primary,
@@ -613,7 +629,14 @@ class _Onboarding3 extends StatelessWidget {
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton(
-                                  onPressed: () => context.go('/auth/login'),
+                                  onPressed: () async {
+                                    final prefs =
+                                        await SharedPreferences.getInstance();
+                                    await prefs.setBool(
+                                        'onboarding_seen', true);
+                                    if (context.mounted)
+                                      context.go('/auth/login');
+                                  },
                                   style: ElevatedButton.styleFrom(
                                     elevation: 0,
                                     backgroundColor: AppColors.primaryFixedDim,
@@ -636,7 +659,13 @@ class _Onboarding3 extends StatelessWidget {
                               ),
                               const SizedBox(height: 10),
                               TextButton(
-                                onPressed: () => context.go('/auth/login'),
+                                onPressed: () async {
+                                  final prefs =
+                                      await SharedPreferences.getInstance();
+                                  await prefs.setBool('onboarding_seen', true);
+                                  if (context.mounted)
+                                    context.go('/auth/login');
+                                },
                                 child: const Text(
                                   'تخطي الجولة',
                                   style: TextStyle(
