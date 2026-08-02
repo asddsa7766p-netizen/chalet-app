@@ -7,9 +7,11 @@ import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/common_widgets.dart';
+import '../../widgets/common/language_bottom_sheet.dart';
 import '../settings/about_app_screen.dart' show AboutAppScreen;
 import '../settings/privacy_security_screen.dart' show PrivacySecurityScreen;
 import '../settings/settings_screen.dart' show SettingsScreen;
+import '../settings/help_support_screen.dart' show HelpSupportScreen;
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -23,6 +25,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loading = true;
   bool _isHost = false;
   bool _isAdmin = false; // ✅ جديد
+  int _completedCount = 0;
+  int _favoritesCount = 0;
 
   @override
   void initState() {
@@ -33,12 +37,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final profile = await AuthService.instance.getCurrentProfile();
+      final results = await Future.wait([
+        AuthService.instance.getCurrentProfile(),
+        BookingService.instance.getMyBookings(),
+      ]);
+      final profile = results[0] as UserProfile?;
+      final bookings = results[1] as List<BookingModel>;
+      final completed =
+          bookings.where((b) => b.status == BookingStatus.completed).length;
+      final favState = ref.read(favoritesProvider).valueOrNull;
       if (mounted) {
         setState(() {
           _profile = profile;
           _isHost = profile?.isOwner == true || profile?.role == 'owner';
           _isAdmin = profile?.isAdmin == true; // ✅ جديد
+          _completedCount = completed;
+          _favoritesCount = favState?.length ?? 0;
           _loading = false;
         });
       }
@@ -117,13 +131,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Expanded(
                           child: _statCard(
                               label: 'حجز مكتمل',
-                              value: '12',
+                              value: '$_completedCount',
                               accent: AppColors.primary)),
                       const SizedBox(width: 10),
                       Expanded(
                           child: _statCard(
                               label: 'في المفضلة',
-                              value: '5',
+                              value: '$_favoritesCount',
                               accent: const Color(0xFF883454))),
                     ],
                   ),
@@ -191,7 +205,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     iconColor: AppColors.primary,
                     label: 'حجوزاتي',
                     trailingText: null,
-                    onTap: () {},
+                    onTap: () => context.go('/home', extra: 3),
                   ),
                   const SizedBox(height: 10),
                   _menuRow(
@@ -200,7 +214,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     iconColor: AppColors.error,
                     label: 'المفضلة',
                     trailingText: null,
-                    onTap: () {},
+                    onTap: () => context.go('/home', extra: 2),
                   ),
                   const SizedBox(height: 10),
                   _menuRow(
@@ -295,7 +309,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     iconColor: AppColors.primary,
                     label: 'اللغة',
                     trailingText: null,
-                    onTap: () {},
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        showDragHandle: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        builder: (_) => const LanguageBottomSheet(),
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
                   _menuRow(
@@ -304,7 +328,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     iconColor: AppColors.textSecondary,
                     label: 'الدعم الفني',
                     trailingText: null,
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const HelpSupportScreen())),
                   ),
                   const SizedBox(height: 10),
                   _menuRow(

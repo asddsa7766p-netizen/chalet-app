@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_state_providers.dart';
-
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
-
+import '../../widgets/common/language_bottom_sheet.dart';
 import '../settings/about_app_screen.dart';
 import '../settings/privacy_security_screen.dart';
+import '../settings/help_support_screen.dart';
 
 // Settings UI with RTL support and premium styling.
 // (Originally existed inside profile_screen.dart in this project.)
@@ -98,86 +98,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'اختيار اللغة',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _langOption('ar', 'العربية', Icons.language_rounded),
-                const SizedBox(height: 8),
-                _langOption('en', 'English', Icons.language_rounded),
-                const SizedBox(height: 6),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _langOption(String code, String label, IconData icon) {
-    final selected = _language == code;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () async {
-          await _setLanguage(code);
-          if (mounted) Navigator.pop(context);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primaryPale.withValues(alpha: 0.45)
-                : AppColors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected ? AppColors.primary : AppColors.sand,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: AppColors.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.charcoal,
-                  ),
-                ),
-              ),
-              if (selected)
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: const BoxDecoration(
-                    color: AppColors.accent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check_rounded,
-                      size: 16, color: AppColors.white),
-                ),
-            ],
-          ),
-        ),
-      ),
+      builder: (_) => const LanguageBottomSheet(),
     );
   }
 
@@ -308,7 +229,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const _HelpSupportScreen(),
+                      builder: (_) => const HelpSupportScreen(),
                     ),
                   ),
                 ),
