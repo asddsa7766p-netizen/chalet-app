@@ -17,12 +17,6 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _controller = PageController();
 
-  Future<void> _finish() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarding_seen', true);
-    if (mounted) context.go('/auth/login');
-  }
-
   @override
   void dispose() {
     _controller.dispose();
@@ -73,21 +67,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 class _OnboardingStep extends StatelessWidget {
   final int step;
   const _OnboardingStep({required this.step});
-
-  void _primaryAction(BuildContext context, int step) {
-    if (step == 0) {
-      // onboarding_1: start exploration => login
-      context.go('/auth/login');
-      return;
-    }
-    if (step == 1) {
-      // onboarding_2: next
-      // kept as no logic change; navigation handled by PageView swipe
-      return;
-    }
-    // step == 2: start => login
-    context.go('/auth/login');
-  }
 
   @override
   Widget build(BuildContext context) {
