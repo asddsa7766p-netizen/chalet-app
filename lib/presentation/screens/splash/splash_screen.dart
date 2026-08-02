@@ -48,7 +48,10 @@ class _SplashScreenState extends State<SplashScreen>
     } else if (!seen) {
       context.go('/onboarding');
     } else {
-      context.go('/auth/login');
+      // Logged-out user who has already seen onboarding: go straight to the
+      // public browsing screen as a guest. Login is only prompted when they
+      // tap a protected action (requireAuth in router / widgets).
+      context.go('/home');
     }
   }
 
