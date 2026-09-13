@@ -212,7 +212,7 @@ class _PalestineChaletsMapScreenState extends State<PalestineChaletsMapScreen> {
                     TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'friends_chalets',
+                      userAgentPackageName: 'makan',
                       maxZoom: 19,
                     ),
                     MarkerLayer(markers: markers),

@@ -9,10 +9,21 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/app_state_providers.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+const _sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
 
 Future<void> _loadEnv() async {
-  // Loads .env from project root
-  await dotenv.load(fileName: 'assets/.env');
+  // Support both the repo-root .env and the app assets copy if present.
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    try {
+      await dotenv.load(fileName: 'assets/.env');
+    } catch (_) {
+      throw StateError('Missing .env file in project root or assets/.env');
+    }
+  }
 }
 
 /// تخزين آمن لجلسة تسجيل الدخول (access/refresh token) عبر
@@ -77,6 +88,27 @@ Future<void> main() async {
     ),
   );
 
+  if (_sentryDsn.isNotEmpty) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = _sentryDsn;
+        options.tracesSampleRate = 1.0;
+        options.environment = 'production';
+      },
+    );
+  }
+
+  FlutterError.onError = (details) {
+    if (_sentryDsn.isNotEmpty) {
+      Sentry.captureException(
+        details.exception,
+        stackTrace: details.stack,
+        hint: Hint.withMap({'source': 'flutter_error'}),
+      );
+    }
+    FlutterError.presentError(details);
+  };
+
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -129,7 +161,7 @@ class _FriendsChaletsAppState extends ConsumerState<FriendsChaletsApp> {
     final localeNotifier = ref.watch(localeNotifierProvider);
 
     return MaterialApp.router(
-      title: 'شاليهات الأصدقاء',
+      title: 'مكان',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

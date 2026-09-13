@@ -1,7 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../models/models.dart';
-
 // Supabase client
 final supabase = Supabase.instance.client;
 

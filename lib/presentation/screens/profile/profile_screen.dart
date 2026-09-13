@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:makan/presentation/screens/profile/profile_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../data/models/models.dart';
@@ -21,49 +22,39 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  UserProfile? _profile;
-  bool _loading = true;
-  bool _isHost = false;
-  bool _isAdmin = false; // ✅ جديد
+  // NEW: البروفايل (وبالتالي isHost/isAdmin) صار يُقرأ من profileProvider
+  // بدل تحميله مرة وحدة بـ initState — هيك بيتحدث تلقائيًا بأي وقت
+  // ينادى فيه ref.invalidate(profileProvider) من أي مكان بالتطبيق
+  // (مثلاً بعد ما يصير المستخدم "مالك" بعد إضافة شاليه)، حتى لو هاد
+  // التبويب كان محفوظ بالخلفية بالتنقل السفلي.
+  bool _loadingStats = true;
   int _completedCount = 0;
   int _favoritesCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadStats();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  // إحصائيات الحجوزات والمفضلة — ما إلها علاقة بدور المستخدم (owner/admin)،
+  // فبتضل محملة محليًا زي ما كانت.
+  Future<void> _loadStats() async {
+    setState(() => _loadingStats = true);
     try {
-      final results = await Future.wait([
-        AuthService.instance.getCurrentProfile(),
-        BookingService.instance.getMyBookings(),
-      ]);
-      final profile = results[0] as UserProfile?;
-      final bookings = results[1] as List<BookingModel>;
+      final bookings = await BookingService.instance.getMyBookings();
       final completed =
           bookings.where((b) => b.status == BookingStatus.completed).length;
       final favState = ref.read(favoritesProvider).valueOrNull;
       if (mounted) {
         setState(() {
-          _profile = profile;
-          _isHost = profile?.isOwner == true || profile?.role == 'owner';
-          _isAdmin = profile?.isAdmin == true; // ✅ جديد
           _completedCount = completed;
           _favoritesCount = favState?.length ?? 0;
-          _loading = false;
+          _loadingStats = false;
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _isHost = false;
-          _isAdmin = false;
-        });
-      }
+      if (mounted) setState(() => _loadingStats = false);
     }
   }
 
@@ -93,6 +84,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // never sees previous user's cached data.
       if (mounted) {
         ref.invalidate(favoritesProvider);
+        ref.invalidate(profileProvider);
         context.go('/auth/login');
       }
     }
@@ -100,6 +92,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // NEW: مراقبة profileProvider — أي invalidate من أي مكان بالتطبيق
+    // (مثلاً بعد إضافة شاليه) بيعيد بناء هاد الجزء فورًا بالقيم الجديدة.
+    final profileAsync = ref.watch(profileProvider);
+    final profile = profileAsync.valueOrNull;
+    final isHost = profile?.isOwner == true || profile?.role == 'owner';
+    final isAdmin = profile?.isAdmin == true;
+    final loading =
+        _loadingStats || (profileAsync.isLoading && profile == null);
+
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
@@ -116,14 +117,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ),
       ),
-      body: _loading
+      body: loading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
           : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 92),
               child: Column(
                 children: [
-                  _buildHeader(),
+                  _buildHeader(profile, isHost, isAdmin),
                   const SizedBox(height: 16),
 
                   Row(
@@ -143,7 +144,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
 
                   // ✅ زر لوحة تحكم الأدمن — مخفي تماماً عن غير الأدمن
-                  if (_isAdmin) ...[
+                  if (isAdmin) ...[
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
@@ -169,7 +170,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ],
 
                   // زر لوحة تحكم المالك
-                  if (_isHost) ...[
+                  if (isHost) ...[
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
@@ -231,7 +232,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                   const SizedBox(height: 16),
 
-                  if (!_isHost)
+                  if (!isHost)
                     GestureDetector(
                       onTap: () => context.push('/owner-add-chalet'),
                       child: Container(
@@ -486,7 +487,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(UserProfile? profile, bool isHost, bool isAdmin) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -500,11 +501,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             CircleAvatar(
               radius: 38,
               backgroundColor: AppColors.primary.withOpacity(0.1),
-              backgroundImage: _profile?.avatarUrl != null
-                  ? NetworkImage(_profile!.avatarUrl!)
+              backgroundImage: profile?.avatarUrl != null
+                  ? NetworkImage(profile!.avatarUrl!)
                   : null,
-              child: _profile?.avatarUrl == null
-                  ? Text((_profile?.fullName ?? 'م').characters.first,
+              child: profile?.avatarUrl == null
+                  ? Text((profile?.fullName ?? 'م').characters.first,
                       style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 26,
@@ -516,7 +517,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               bottom: 0,
               right: 0,
               child: GestureDetector(
-                onTap: _showEditProfile,
+                onTap: () => _showEditProfile(profile),
                 child: Container(
                   width: 24,
                   height: 24,
@@ -535,7 +536,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(_profile?.fullName ?? 'المستخدم',
+                Text(profile?.fullName ?? 'المستخدم',
                     textAlign: TextAlign.right,
                     style: const TextStyle(
                         fontFamily: 'Cairo',
@@ -544,7 +545,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
                 Text(
-                    _profile?.email ??
+                    profile?.email ??
                         AuthService.instance.currentUser?.email ??
                         '',
                     textAlign: TextAlign.right,
@@ -552,9 +553,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         fontFamily: 'Cairo',
                         fontSize: 13,
                         color: AppColors.textSecondary)),
-                if (_profile?.phone != null) ...[
+                if (profile?.phone != null) ...[
                   const SizedBox(height: 4),
-                  Text(_profile!.phone!,
+                  Text(profile!.phone!,
                       textAlign: TextAlign.right,
                       style: const TextStyle(
                           fontFamily: 'Cairo',
@@ -567,7 +568,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     // ✅ شارة الأدمن
-                    if (_isAdmin)
+                    if (isAdmin)
                       Container(
                         margin: const EdgeInsets.only(left: 6),
                         padding: const EdgeInsets.symmetric(
@@ -585,7 +586,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF8A6D3B))),
                       ),
-                    if (_isHost)
+                    if (isHost)
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 3),
@@ -612,9 +613,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _showEditProfile() {
-    final nameCtrl = TextEditingController(text: _profile?.fullName);
-    final phoneCtrl = TextEditingController(text: _profile?.phone);
+  void _showEditProfile(UserProfile? profile) {
+    final nameCtrl = TextEditingController(text: profile?.fullName);
+    final phoneCtrl = TextEditingController(text: profile?.phone);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -650,7 +651,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 await AuthService.instance.updateProfile(
                     fullName: nameCtrl.text, phone: phoneCtrl.text);
                 Navigator.pop(ctx);
-                _load();
+                // NEW: بدل _load()، ننعش الـ provider فيتحدث كل شي
+                // يعتمد عليه (بما فيه هاد الهيدر) تلقائيًا.
+                ref.invalidate(profileProvider);
               },
             ),
           ],

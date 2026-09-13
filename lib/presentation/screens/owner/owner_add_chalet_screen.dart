@@ -4,23 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/services/services.dart';
+import '../../../data/services/location_service.dart';
 import '../../../data/models/models.dart';
 import '../../../data/models/chalet_model.dart';
-
-// NOTE: OwnerAddChaletScreen supports both create & edit (via optional chalet).
-//
-// تعديل بنيوي مهم عن النسخة السابقة:
-// - لم يعد يتم إنشاء سجل بقاعدة البيانات إلا بعد اكتمال كل الخطوات والضغط
-//   على "حفظ الشاليه" بالخطوة الأخيرة. سابقًا كان يتم إنشاء سجل فور إنهاء
-//   الخطوة الأولى، وهذا كان يترك سجلات "يتيمة" ناقصة البيانات لو خرج
-//   المستخدم بمنتصف الطريق.
-// - رفع الصور يحدث بعد إنشاء السجل مباشرة وضمن نفس عملية الحفظ؛ في حال
-//   فشل الرفع، السجل يبقى موجودًا لكنه قابل لإعادة المحاولة لاحقًا (وضع
-//   تعديل)، وهذا أسلم من فقدان كل البيانات.
 
 import '../../widgets/common/common_widgets.dart';
 
@@ -34,18 +23,11 @@ class OwnerAddChaletScreen extends StatefulWidget {
 }
 
 class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
-  // مفتاح Form منفصل لكل خطوة، بدل مفتاح واحد مشترك لكل الخطوات الأربعة.
-  //
-  // ⚠️ سبب هذا التعديل: Stepper يبني كل الخطوات الأربعة ضمن شجرة الواجهة
-  // دفعة واحدة (حتى غير النشطة منها)، وكانت كل الحقول مرتبطة بـ Form واحد
-  // مشترك (_formKey). نتيجة ذلك، استدعاء _formKey.currentState.validate()
-  // بالخطوة 1 كان يتحقق أيضًا من حقول الخطوة 4 (مثل السعر، الذي تكون
-  // قيمته الافتراضية صفرًا وفاشلة بالتحقق)، فيفشل التحقق بصمت دون أي رسالة
-  // ظاهرة للمستخدم (لأن رسالة الخطأ كانت تظهر في خطوة بعيدة غير مرئية)،
-  // ويبقى زر "التالي" بلا أي أثر ظاهري.
+  static const Color _darkGreen = Color(0xFF3D5228);
+  static const Color _gold = Color(0xFFC9A24B);
+
   final _step1FormKey = GlobalKey<FormState>();
   final _step4FormKey = GlobalKey<FormState>();
-  final _supabase = Supabase.instance.client;
 
   int _currentStep = 0;
 
@@ -68,6 +50,12 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
   int _bedrooms = 1;
   int _bathrooms = 1;
 
+  // NEW: إحداثيات موقع الشاليه — تُملأ عبر زر "استخدم موقعي الحالي"
+  // (GPS الحقيقي لصاحب الشاليه وقت الإضافة). null يعني لسا ما تحدد.
+  double? _latitude;
+  double? _longitude;
+  bool _fetchingLocation = false;
+
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _newImages = [];
   final List<Uint8List> _newImageBytes = [];
@@ -87,25 +75,19 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
   ];
 
   bool _saving = false;
-
-  // معرف الشاليه الحالي عند التعديل (وضع تعديل شاليه موجود مسبقًا).
-  //
-  // ⚠️ ملاحظة مهمة: ChaletModel الحالي لا يحتوي حاليًا على كل الحقول
-  // المخزّنة فعليًا بجدول chalets في Supabase (مثل deposit_amount,
-  // min_nights, video_url, booking_type, و images كقائمة كاملة — الموديل
-  // يحتوي فقط على coverImage كصورة واحدة). لذلك تم تعطيل تحميل بيانات
-  // شاليه قائم تلقائيًا من ChaletModel مؤقتًا، تجنبًا لاستخدام بيانات
-  // ناقصة أو خاطئة في وضع التعديل. هذه الشاشة حاليًا تدعم فعليًا إنشاء
-  // شاليه جديد فقط. دعم التعديل الكامل يتطلب أولًا تحديث ChaletModel
-  // لمطابقة كل أعمدة قاعدة البيانات.
   String? _editingChaletId;
+
+  static const List<_StepInfo> _stepsInfo = [
+    _StepInfo('معلومات أساسية', Icons.info_outline_rounded),
+    _StepInfo('الصور والفيديو', Icons.photo_camera_outlined),
+    _StepInfo('المميزات', Icons.star_outline_rounded),
+    _StepInfo('الأسعار والتوافر', Icons.attach_money_rounded),
+  ];
 
   @override
   void initState() {
     super.initState();
     if (widget.chalet != null) {
-      // وضع التعديل غير مفعّل بعد لنفس السبب أعلاه. نعرض تنبيهًا بدل
-      // محاولة قراءة بيانات قد تكون ناقصة بصمت.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _showSnack(
@@ -132,43 +114,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
 
   // ====================== UI helpers ======================
 
-  Widget _buildBackToUserButton() {
-    return SizedBox(
-      width: 160,
-      child: OutlinedButton.icon(
-        onPressed: _saving
-            ? null
-            : () async {
-                final confirmed = await _confirmLeaveIfDirty();
-                if (!confirmed) return;
-                try {
-                  await AuthService.instance.becomeCustomer();
-                } catch (_) {
-                  // تجاهل الخطأ هنا: حتى لو فشل تحديث الحالة على السيرفر،
-                  // المستخدم لا يزال بحاجة للخروج من هذه الشاشة.
-                }
-                if (!mounted) return;
-                context.go('/home');
-              },
-        icon: const Icon(Icons.arrow_back_rounded, size: 18),
-        label: const Text(
-          'العودة كمستخدم',
-          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w900),
-        ),
-        style: OutlinedButton.styleFrom(
-          backgroundColor: AppColors.white,
-          foregroundColor: AppColors.primary,
-          side: BorderSide(color: AppColors.sand),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-      ),
-    );
-  }
-
-  /// يسأل المستخدم تأكيد الخروج إذا كان بدأ تعبئة بيانات فعلية، لتجنّب فقدان
-  /// العمل بالخطأ بضغطة واحدة.
   Future<bool> _confirmLeaveIfDirty() async {
     final hasData = _nameCtrl.text.trim().isNotEmpty ||
         _descCtrl.text.trim().isNotEmpty ||
@@ -201,67 +146,15 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
     return result ?? false;
   }
 
-  Widget _stepNavTop(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: AppColors.charcoal,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          _buildBackToUserButton(),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionCard(
-      {required Widget child, required IconData icon, required String title}) {
+  Widget _sectionCard({required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.sand),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: AppColors.primary, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.charcoal,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
+      child: child,
     );
   }
 
@@ -275,11 +168,11 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primaryPale.withValues(alpha: 0.4)
-              : AppColors.cream,
+              ? _darkGreen.withValues(alpha: 0.08)
+              : const Color(0xFFF6F2E7),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.sand,
+            color: selected ? _darkGreen : AppColors.sand,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -287,8 +180,7 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon,
-                size: 18,
-                color: selected ? AppColors.primary : AppColors.textHint),
+                size: 18, color: selected ? _darkGreen : AppColors.textHint),
             const SizedBox(width: 6),
             Text(
               label,
@@ -296,13 +188,40 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
                 fontFamily: 'Cairo',
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-                color: selected ? AppColors.primary : AppColors.textHint,
+                color: selected ? _darkGreen : AppColors.textHint,
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  // ====================== Location ======================
+
+  // NEW: يطلب صلاحية الموقع ويجلب موقع صاحب الشاليه الحالي (GPS)،
+  // ويخزّنه ليُرسل مع بيانات الشاليه عند الحفظ. لا يعطّل الحفظ لو
+  // فشل — الموقع اختياري، مش شرط لإنشاء الشاليه.
+  Future<void> _useCurrentLocation() async {
+    setState(() => _fetchingLocation = true);
+    try {
+      final pos = await LocationService.instance.getCurrentPosition();
+      if (!mounted) return;
+      if (pos == null) {
+        _showSnack(
+          'تعذر الوصول لموقعك، تأكد من تفعيل GPS ومنح صلاحية الموقع',
+          isError: true,
+        );
+        return;
+      }
+      setState(() {
+        _latitude = pos.latitude;
+        _longitude = pos.longitude;
+      });
+      _showSnack('تم تحديد موقع الشاليه بنجاح ✅');
+    } finally {
+      if (mounted) setState(() => _fetchingLocation = false);
+    }
   }
 
   // ====================== Images ======================
@@ -327,8 +246,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
     final toAdd = picked.take(remaining).toList();
     if (toAdd.isEmpty) return;
 
-    // دائماً نقرأ الـ bytes — يعمل على الويب والموبايل.
-    // أي ملف يفشل قراءته (بايتات فاضية) يتم تجاهله بدل إضافته كصورة فاسدة.
     final validFiles = <XFile>[];
     final bytesList = <Uint8List>[];
     for (final x in toAdd) {
@@ -338,7 +255,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
         validFiles.add(x);
         bytesList.add(bytes);
       } catch (_) {
-        // تجاهل هذا الملف فقط، استمر بالباقي.
         continue;
       }
     }
@@ -360,7 +276,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
     for (int i = 0; i < _newImages.length; i++) {
       final xFile = _newImages[i];
 
-      // نحدد الـ extension بأمان — إذا blob أو path فارغ نستخدم jpg
       String ext = 'jpg';
       final path = xFile.path.toLowerCase();
       if (!path.startsWith('blob:') && path.contains('.')) {
@@ -371,7 +286,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
         }
       }
 
-      // نحدد الـ content type
       final contentType = ext == 'png'
           ? 'image/png'
           : ext == 'webp'
@@ -382,33 +296,13 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
           'chalets/$chaletId/${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
 
       try {
-        // نستخدم uploadBinary دائماً — يعمل على الويب والموبايل
         final bytes = i < _newImageBytes.length && _newImageBytes[i].isNotEmpty
             ? _newImageBytes[i]
             : await xFile.readAsBytes();
 
-        if (bytes.isEmpty) {
-          // ملف فاسد أو غير قابل للقراءة؛ نتجاوزه دون إيقاف باقي الرفع.
-          continue;
-        }
-
-        await _supabase.storage.from('chalet-images').uploadBinary(
-              fileName,
-              bytes,
-              fileOptions: FileOptions(
-                contentType: contentType,
-                cacheControl: '3600',
-                upsert: false,
-              ),
-            );
-
-        final url =
-            _supabase.storage.from('chalet-images').getPublicUrl(fileName);
-        uploadedUrls.add(url);
+        if (bytes.isEmpty) continue;
       } catch (_) {
-        // فشل رفع صورة واحدة لا يجب أن يوقف رفع الباقي، لكن يجب إعلام
-        // المستخدم بأن صورة لم تُرفع.
-        _showSnack('فشل رفع إحدى الصور، سيتم تجاهلها', isError: true);
+        continue;
       }
     }
 
@@ -430,12 +324,9 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
 
   // ====================== Validation helpers ======================
 
-  /// تحقق أكثر دقة من رابط يوتيوب: يتطلب صيغة domain صحيحة بدل احتواء
-  /// النص على كلمة "youtube.com" في أي موضع (كان يقبل سابقًا أي نص عشوائي
-  /// يحتوي هذه الكلمة، مثل "هذا ليس youtube.com رابط").
   bool _isValidYoutubeUrl(String value) {
     final trimmed = value.trim();
-    if (trimmed.isEmpty) return true; // اختياري
+    if (trimmed.isEmpty) return true;
     final uri = Uri.tryParse(trimmed);
     if (uri == null || !uri.isAbsolute) return false;
     final host = uri.host.toLowerCase();
@@ -448,7 +339,7 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
 
   // ====================== Save ======================
 
-  Map<String, dynamic> _buildChaletPayload({required List<String> images}) {
+  Map<String, dynamic> _buildChaletPayload() {
     final ownerId = AuthService.instance.currentUser?.id;
     if (ownerId == null) {
       throw Exception('لا يوجد مستخدم مسجل دخول حاليًا');
@@ -458,8 +349,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
       'name': _nameCtrl.text.trim(),
       'description': _descCtrl.text.trim(),
       'price_per_night': double.tryParse(_pricePerNightCtrl.text.trim()) ?? 0,
-      // location must be non-null in payload for supabase
-      // (keep a safe default if user didn't provide address)
       'location': (() {
         final loc = _locationCtrl.text.trim();
         if (loc.isNotEmpty) return loc;
@@ -468,6 +357,10 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
         return 'غير محدد';
       })(),
       'city': _cityCtrl.text.trim(),
+      // NEW: إحداثيات الموقع الفعلي (اختياري) — تُرسل فقط لو المالك
+      // ضغط "استخدم موقعي الحالي" ونجح جلب GPS.
+      'latitude': _latitude,
+      'longitude': _longitude,
       'max_guests': int.tryParse(_maxGuestsCtrl.text.trim()) ?? 1,
       'bedrooms': _bedrooms,
       'bathrooms': _bathrooms,
@@ -478,7 +371,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
       'deposit_amount': double.tryParse(_depositCtrl.text.trim()) ?? 0,
       'min_nights': int.tryParse(_minNightsCtrl.text.trim()) ?? 1,
       'booking_type': _bookingType,
-      'images': images,
       'video_url':
           _videoUrlCtrl.text.trim().isEmpty ? null : _videoUrlCtrl.text.trim(),
       'is_available': true,
@@ -499,8 +391,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
       return;
     }
 
-    // تحقق نهائي إضافي على رابط اليوتيوب وقت الحفظ (وليس فقط أثناء
-    // التنقل بين الخطوات) لأن المستخدم قد يعدّل الحقل بعد تجاوز الخطوة.
     if (!_isValidYoutubeUrl(_videoUrlCtrl.text)) {
       _showSnack('رابط اليوتيوب غير صالح', isError: true);
       setState(() => _currentStep = 0);
@@ -513,51 +403,26 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
       return;
     }
 
-    if (_saving) return; // يحمي من الضغط المتكرر على زر الحفظ
+    if (_saving) return;
     setState(() => _saving = true);
 
     try {
-      String chaletId;
-
-      if (_editingChaletId != null) {
-        // وضع تعديل شاليه موجود: نرفع الصور الجديدة أولًا، ثم نحدّث السجل
-        // كاملًا دفعة واحدة.
-        chaletId = _editingChaletId!;
-        final newUrls = await _uploadNewImages(chaletId);
-        final allImages = [..._existingImageUrls, ...newUrls];
-        final payload = _buildChaletPayload(images: allImages);
-        await _supabase.from('chalets').update(payload).eq('id', chaletId);
-      } else {
-        // وضع إنشاء جديد: ننشئ السجل الكامل دفعة واحدة بعد رفع الصور.
-        // لرفع الصور نحتاج معرف الشاليه أولًا، فننشئه بحالة غير متاحة
-        // للعامة (is_available: false) كخطوة وسيطة آمنة، ثم نكمل التحديث
-        // الكامل فورًا بعد رفع الصور. لو فشل أي شيء بعد هذه النقطة، يبقى
-        // للمستخدم سجل بحالة "غير متاح" بدل ضياع كل العمل، وهو قابل
-        // لإعادة المحاولة (تعديل) دون أن يظهر للعامة أبدًا.
-        final ownerId = AuthService.instance.currentUser?.id;
-        if (ownerId == null) {
-          throw Exception('لا يوجد مستخدم مسجل دخول حاليًا');
-        }
-        final inserted = await _supabase
-            .from('chalets')
-            .insert({
-              'owner_id': ownerId,
-              'name': _nameCtrl.text.trim(),
-              'is_available': false,
-              'is_approved': false,
-            })
-            .select('id')
-            .single();
-        chaletId = inserted['id'] as String;
-
-        final newUrls = await _uploadNewImages(chaletId);
-        final allImages = [..._existingImageUrls, ...newUrls];
-        final payload = _buildChaletPayload(images: allImages);
-        await _supabase.from('chalets').update(payload).eq('id', chaletId);
+      final ownerId = AuthService.instance.currentUser?.id;
+      if (ownerId == null) {
+        throw Exception('لا يوجد مستخدم مسجل دخول حاليًا');
       }
 
-      // التحويل لصفة "مالك" يحدث فقط بعد نجاح حفظ الشاليه بالكامل، حتى لا
-      // يصبح المستخدم مالكًا بدون أي شاليه فعلي في حال فشل الحفظ.
+      final payload = _buildChaletPayload();
+      await ChaletService.instance.createOrUpdateChaletWithImages(
+        isEditing: _editingChaletId != null,
+        editingChaletId: _editingChaletId,
+        ownerId: ownerId,
+        chaletData: payload,
+        newImages: _newImages,
+        newImageBytes: _newImageBytes,
+        existingImageUrls: _existingImageUrls,
+      );
+
       await AuthService.instance.becomeOwner();
 
       if (!mounted) return;
@@ -566,21 +431,39 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
       if (!mounted) return;
       context.go('/owner-dashboard');
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         _showSnack('حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _saveDraft() {
+    // ⚠️ حفظ كمسودة فعلي غير مفعّل بعد — بس رسالة تنبيه مؤقتة. إذا بدك
+    // سلوك حقيقي (حفظ جزئي بدون تحقق كامل)، خبرني وبنبنيها.
+    _showSnack('سيتم دعم "حفظ كمسودة" قريبًا');
   }
 
   // ====================== Step content ======================
 
   Widget _buildStep1() {
     return _sectionCard(
-      icon: Icons.info_outline_rounded,
-      title: 'المعلومات الأساسية',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text('المعلومات الأساسية',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          const Text('أدخل المعلومات الأساسية للشاليه',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  color: AppColors.textSecondary)),
+          const SizedBox(height: 16),
           CustomTextField(
             controller: _nameCtrl,
             label: 'اسم الشاليه',
@@ -589,20 +472,32 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
             validator: (v) =>
                 v == null || v.trim().isEmpty ? 'هاد الحقل مطلوب' : null,
           ),
-          const SizedBox(height: 12),
-          CustomTextField(
-            controller: _descCtrl,
-            label: 'تفاصيل / وصف الشاليه',
-            hint: 'اكتب وصفاً مختصراً...',
-            prefixIcon: Icons.description_outlined,
-            maxLines: 4,
-            validator: (v) =>
-                v == null || v.trim().isEmpty ? 'هاد الحقل مطلوب' : null,
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _numberField(
+                    label: 'غرف النوم',
+                    value: _bedrooms,
+                    onChanged: (v) => setState(() => _bedrooms = v),
+                    min: 1,
+                    max: 50),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _numberField(
+                    label: 'الحمامات',
+                    value: _bathrooms,
+                    onChanged: (v) => setState(() => _bathrooms = v),
+                    min: 1,
+                    max: 50),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           CustomTextField(
             controller: _maxGuestsCtrl,
-            label: 'عدد الضيوف',
+            label: 'عدد الأشخاص المسموح بهم',
             hint: 'مثال: 10',
             prefixIcon: Icons.group_outlined,
             keyboardType: TextInputType.number,
@@ -613,15 +508,15 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
               return null;
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             value: _cities.contains(_cityCtrl.text.trim())
                 ? _cityCtrl.text.trim()
                 : _cities.first,
             decoration: InputDecoration(
               labelText: 'المدينة',
-              prefixIcon: const Icon(Icons.location_city_rounded,
-                  color: AppColors.primary),
+              prefixIcon:
+                  const Icon(Icons.location_city_rounded, color: _darkGreen),
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -639,44 +534,115 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
             },
             validator: (v) => v == null || v.isEmpty ? 'هاد الحقل مطلوب' : null,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           CustomTextField(
             controller: _locationCtrl,
             label: 'العنوان',
             hint: 'مثال: قرب مدخل بيتا',
             prefixIcon: Icons.location_on_outlined,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          // NEW: زر تحديد الموقع الفعلي عبر GPS + رسالة تأكيد بعد النجاح.
+          _buildLocationPicker(),
+          const SizedBox(height: 14),
           CustomTextField(
-            controller: _videoUrlCtrl,
-            label: 'رابط فيديو يوتيوب (اختياري)',
-            hint: 'https://youtube.com/watch?v=...',
-            prefixIcon: Icons.smart_display_outlined,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return null; // اختياري
-              if (!_isValidYoutubeUrl(v)) {
-                return 'يرجى إدخال رابط يوتيوب صحيح';
-              }
-              return null;
-            },
+            controller: _descCtrl,
+            label: 'وصف مختصر',
+            hint: 'اكتب وصفًا جذابًا ومختصرًا عن الشاليه...',
+            prefixIcon: Icons.description_outlined,
+            maxLines: 4,
+            validator: (v) =>
+                v == null || v.trim().isEmpty ? 'هاد الحقل مطلوب' : null,
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(Icons.info_outline_rounded,
-                  size: 14, color: AppColors.textHint),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'إضافة فيديو يزيد من فرص حجز شاليهك بشكل ملحوظ',
+        ],
+      ),
+    );
+  }
+
+  // NEW: بطاقة صغيرة فيها زر "استخدم موقعي الحالي" وحالة النتيجة
+  // (لسا ما تحدد / جاري التحديد / تم بنجاح مع عرض الإحداثيات).
+  Widget _buildLocationPicker() {
+    final hasLocation = _latitude != null && _longitude != null;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: hasLocation
+            ? _darkGreen.withValues(alpha: 0.06)
+            : const Color(0xFFF6F2E7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color:
+              hasLocation ? _darkGreen.withValues(alpha: 0.4) : AppColors.sand,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            hasLocation
+                ? Icons.check_circle_rounded
+                : Icons.my_location_rounded,
+            color: hasLocation ? _darkGreen : AppColors.textHint,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasLocation
+                      ? 'تم تحديد موقع الشاليه ✅'
+                      : 'موقع الشاليه على الخريطة (اختياري)',
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 11,
-                    color: AppColors.textHint,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: hasLocation ? _darkGreen : AppColors.charcoal,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  hasLocation
+                      ? 'يساعد الضيوف اللي بالقرب منك على إيجاد شاليهك'
+                      : 'كن واقفًا عند الشاليه واضغط الزر لتحديد موقعه بدقة',
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: 38,
+            child: OutlinedButton(
+              onPressed: _fetchingLocation ? null : _useCurrentLocation,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                    color: hasLocation ? _darkGreen : AppColors.sand),
+                foregroundColor: _darkGreen,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
-            ],
+              child: _fetchingLocation
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      hasLocation ? 'تحديث' : 'استخدم موقعي الحالي',
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
           ),
         ],
       ),
@@ -686,27 +652,33 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
   Widget _buildStep2() {
     final allCount = _existingImageUrls.length + _newImages.length;
     return _sectionCard(
-      icon: Icons.photo_library_rounded,
-      title: 'صور الشاليه',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text('الصور والفيديو',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 16),
+          _CoverImageBox(
+            hasImages: allCount > 0,
+            onTap: _saving ? null : _pickImages,
+          ),
+          const SizedBox(height: 14),
           Row(
             children: [
               const Icon(Icons.star_rounded, size: 14, color: Colors.red),
               const SizedBox(width: 4),
-              Text(
-                'إضافة صورة واحدة على الأقل إجباري',
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.error,
-                ),
-              ),
+              Text('إضافة صورة واحدة على الأقل إجباري',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.error)),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           if (allCount > 0)
             GridView.builder(
               shrinkWrap: true,
@@ -770,42 +742,23 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
                 }
               },
             ),
-          if (allCount > 0) const SizedBox(height: 12),
-          if (allCount < 8)
-            InkWell(
-              onTap: _saving ? null : _pickImages,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPale.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.4)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.add_photo_alternate_outlined,
-                        color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      'إضافة صور ($allCount/8)',
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: 10),
-          Text(
-            'سيتم رفع الصور إلى Supabase Storage عند حفظ الشاليه.',
-            style: TextStyle(
-                fontFamily: 'Cairo', color: AppColors.textHint, fontSize: 12),
+          if (allCount > 0) const SizedBox(height: 14),
+          Text('$allCount / 8 صور',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  color: AppColors.textHint)),
+          const SizedBox(height: 18),
+          CustomTextField(
+            controller: _videoUrlCtrl,
+            label: 'رابط فيديو يوتيوب (اختياري)',
+            hint: 'https://youtube.com/watch?v=...',
+            prefixIcon: Icons.smart_display_outlined,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return null;
+              if (!_isValidYoutubeUrl(v)) return 'يرجى إدخال رابط يوتيوب صحيح';
+              return null;
+            },
           ),
         ],
       ),
@@ -814,11 +767,15 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
 
   Widget _buildStep3() {
     return _sectionCard(
-      icon: Icons.star_outline_rounded,
-      title: 'المميزات',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text('المميزات',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 16),
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -833,26 +790,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
                   (v) => setState(() => _parking = v)),
             ],
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                  child: _numberField(
-                      label: 'غرف النوم',
-                      value: _bedrooms,
-                      onChanged: (v) => setState(() => _bedrooms = v),
-                      min: 1,
-                      max: 50)),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: _numberField(
-                      label: 'الحمامات',
-                      value: _bathrooms,
-                      onChanged: (v) => setState(() => _bathrooms = v),
-                      min: 1,
-                      max: 50)),
-            ],
-          ),
         ],
       ),
     );
@@ -860,118 +797,90 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
 
   Widget _buildStep4() {
     return _sectionCard(
-      icon: Icons.attach_money_rounded,
-      title: 'الأسعار',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: CustomTextField(
-                  controller: _pricePerNightCtrl,
-                  label: 'السعر لكل ليلة',
-                  hint: 'مثال: 350',
-                  prefixIcon: Icons.attach_money_rounded,
-                  keyboardType: TextInputType.number,
-                  validator: (v) {
-                    final val = double.tryParse(v?.trim() ?? '');
-                    if (val == null || val <= 0) {
-                      return 'أدخل رقم أكبر من صفر';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: CustomTextField(
-                  controller: _depositCtrl,
-                  label: 'مبلغ الوديعة',
-                  hint: 'مثال: 100',
-                  prefixIcon: Icons.account_balance_wallet_outlined,
-                  keyboardType: TextInputType.number,
-                  validator: (v) {
-                    final val = double.tryParse(v?.trim() ?? '');
-                    if (val == null || val < 0) return 'أدخل رقم صحيح';
-                    return null;
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: CustomTextField(
-                  controller: _minNightsCtrl,
-                  label: 'الحد الأدنى للليالي',
-                  hint: 'مثال: 1',
-                  prefixIcon: Icons.nights_stay_outlined,
-                  keyboardType: TextInputType.number,
-                  validator: (v) {
-                    final val = int.tryParse(v?.trim() ?? '');
-                    if (val == null || val <= 0) return 'أدخل رقم صحيح';
-                    return null;
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _bookingType,
-                  decoration: InputDecoration(
-                    labelText: 'نوع الحجز',
-                    prefixIcon: const Icon(Icons.calendar_today_rounded,
-                        color: AppColors.primary),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'يومي',
-                        child: Text('يومي',
-                            style: TextStyle(fontFamily: 'Cairo'))),
-                    DropdownMenuItem(
-                        value: 'خارجي',
-                        child: Text('خارجي',
-                            style: TextStyle(fontFamily: 'Cairo'))),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => _bookingType = v);
-                  },
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'اختر نوع الحجز' : null,
-                ),
-              ),
-            ],
+          const Text('الأسعار والتوافر',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 16),
+          CustomTextField(
+            controller: _pricePerNightCtrl,
+            label: 'السعر لكل ليلة',
+            hint: 'مثال: 350',
+            prefixIcon: Icons.attach_money_rounded,
+            keyboardType: TextInputType.number,
+            validator: (v) {
+              final val = double.tryParse(v?.trim() ?? '');
+              if (val == null || val <= 0) return 'أدخل رقم أكبر من صفر';
+              return null;
+            },
           ),
           const SizedBox(height: 14),
-          Text(
-            'سيتم حفظ هذه القيم مباشرة في جدول chalets في Supabase.',
-            style: TextStyle(
-                fontFamily: 'Cairo', color: AppColors.textHint, fontSize: 12),
+          CustomTextField(
+            controller: _depositCtrl,
+            label: 'مبلغ الوديعة',
+            hint: 'مثال: 100',
+            prefixIcon: Icons.account_balance_wallet_outlined,
+            keyboardType: TextInputType.number,
+            validator: (v) {
+              final val = double.tryParse(v?.trim() ?? '');
+              if (val == null || val < 0) return 'أدخل رقم صحيح';
+              return null;
+            },
+          ),
+          const SizedBox(height: 14),
+          CustomTextField(
+            controller: _minNightsCtrl,
+            label: 'الحد الأدنى للليالي',
+            hint: 'مثال: 1',
+            prefixIcon: Icons.nights_stay_outlined,
+            keyboardType: TextInputType.number,
+            validator: (v) {
+              final val = int.tryParse(v?.trim() ?? '');
+              if (val == null || val <= 0) return 'أدخل رقم صحيح';
+              return null;
+            },
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            value: _bookingType,
+            decoration: InputDecoration(
+              labelText: 'نوع الحجز',
+              prefixIcon:
+                  const Icon(Icons.calendar_today_rounded, color: _darkGreen),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            items: const [
+              DropdownMenuItem(
+                  value: 'يومي',
+                  child: Text('يومي', style: TextStyle(fontFamily: 'Cairo'))),
+              DropdownMenuItem(
+                  value: 'خارجي',
+                  child: Text('خارجي', style: TextStyle(fontFamily: 'Cairo'))),
+            ],
+            onChanged: (v) {
+              if (v != null) setState(() => _bookingType = v);
+            },
+            validator: (v) => v == null || v.isEmpty ? 'اختر نوع الحجز' : null,
           ),
         ],
       ),
     );
   }
 
-  Widget _numberField(
-      {required String label,
-      required int value,
-      required ValueChanged<int> onChanged,
-      required int min,
-      required int max}) {
-    // نستخدم مفتاح ثابت على قيمة value عبر controller منفصل بدل إعادة بناء
-    // controller جديد بكل build (كان يفقد موضع المؤشر/الفوكس قبليًا).
+  Widget _numberField({
+    required String label,
+    required int value,
+    required ValueChanged<int> onChanged,
+    required int min,
+    required int max,
+  }) {
     return _NumberFieldInput(
-      label: label,
-      value: value,
-      min: min,
-      max: max,
-      onChanged: onChanged,
-    );
+        label: label, value: value, min: min, max: max, onChanged: onChanged);
   }
 
   Widget _deleteButton(VoidCallback onTap) {
@@ -992,9 +901,26 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
-        backgroundColor: isError ? AppColors.error : AppColors.primary,
+        backgroundColor: isError ? AppColors.error : _darkGreen,
       ),
     );
+  }
+
+  Future<void> _handleScreenBack() async {
+    if (_saving) {
+      _showSnack('يرجى الانتظار حتى انتهاء عملية الحفظ');
+      return;
+    }
+
+    final confirmed = await _confirmLeaveIfDirty();
+    if (!confirmed || !mounted) return;
+
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+
+    context.go('/owner-dashboard');
   }
 
   Future<void> _handleStepContinue() async {
@@ -1029,109 +955,272 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // يمنع الخروج بالخطأ بدون تأكيد إذا كانت هناك بيانات لم تُحفظ، وأيضًا
-      // أثناء عملية الحفظ نفسها (لتجنب إيقاف عملية الرفع في منتصفها).
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        if (_saving) {
-          _showSnack('يرجى الانتظار حتى انتهاء عملية الحفظ');
-          return;
-        }
-        final confirmed = await _confirmLeaveIfDirty();
-        if (confirmed && mounted) {
-          context.pop();
-        }
+        await _handleScreenBack();
       },
       child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          title: const Text('إضافة شاليه',
-              style:
-                  TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w900)),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_rounded),
-            onPressed: _saving
-                ? null
-                : () async {
-                    final confirmed = await _confirmLeaveIfDirty();
-                    if (confirmed && mounted) context.pop();
-                  },
+        backgroundColor: const Color(0xFFF7F4EC),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildTopBar(),
+              _buildStepHeader(),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  child: _currentStep == 0
+                      ? Form(key: _step1FormKey, child: _buildStep1())
+                      : _currentStep == 1
+                          ? _buildStep2()
+                          : _currentStep == 2
+                              ? _buildStep3()
+                              : Form(key: _step4FormKey, child: _buildStep4()),
+                ),
+              ),
+              _buildBottomBar(),
+            ],
           ),
         ),
-        body: SafeArea(
-          child: Stepper(
-            type: StepperType.horizontal,
-            currentStep: _currentStep,
-            onStepContinue: _saving ? null : _handleStepContinue,
-            onStepCancel: _saving ? null : _handleStepCancel,
-            controlsBuilder: (context, details) {
-              return Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: _saving ? null : _handleScreenBack,
+            child: const CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white,
+              child:
+                  Icon(Icons.arrow_back, size: 18, color: AppColors.charcoal),
+            ),
+          ),
+          const Expanded(
+            child: Text(
+              'إعدادات تسجيل الشاليه',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.charcoal),
+            ),
+          ),
+          const SizedBox(width: 36),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepHeader() {
+    return SizedBox(
+      height: 86,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: List.generate(_stepsInfo.length, (i) {
+            final info = _stepsInfo[i];
+            final active = i == _currentStep;
+            final done = i < _currentStep;
+            return Row(
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: AppButton(
-                        label: _currentStep == 3
-                            ? (_saving ? 'جارٍ الحفظ...' : 'حفظ الشاليه')
-                            : 'التالي',
-                        loading: _saving,
-                        icon: _currentStep == 3
-                            ? Icons.save_rounded
-                            : Icons.navigate_next_rounded,
-                        onPressed: details.onStepContinue,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    if (_currentStep > 0)
-                      SizedBox(
-                        width: 130,
-                        child: AppButton(
-                          label: 'رجوع',
-                          outline: true,
-                          icon: Icons.arrow_back_rounded,
-                          onPressed: details.onStepCancel,
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: active || done ? _darkGreen : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: active || done ? _darkGreen : AppColors.sand,
                         ),
                       ),
+                      child: Icon(
+                        done ? Icons.check : info.icon,
+                        size: 18,
+                        color:
+                            active || done ? Colors.white : AppColors.textHint,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 78,
+                      child: Text(
+                        info.label,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 9.5,
+                          height: 1.1,
+                          fontWeight:
+                              active ? FontWeight.w800 : FontWeight.w600,
+                          color: active ? _darkGreen : AppColors.textHint,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              );
-            },
-            steps: [
-              Step(
-                title: const Text('1'),
-                content: Column(children: [
-                  _stepNavTop('إضافة الشاليه — الخطوة 1'),
-                  // كل خطوة فيها validators تُلف بـ Form مستقل خاص بها فقط،
-                  // بدل Form واحد مشترك لكل الخطوات الأربعة، تجنبًا لتحقق
-                  // النموذج من حقول خطوات أخرى لم يصلها المستخدم بعد.
-                  Form(key: _step1FormKey, child: _buildStep1()),
-                ]),
-                isActive: _currentStep == 0,
+                if (i != _stepsInfo.length - 1)
+                  Container(
+                    width: 30,
+                    height: 2,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    color: done ? _darkGreen : AppColors.sand,
+                  ),
+              ],
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F4EC),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 12,
+              offset: const Offset(0, -3)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _handleStepContinue,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _darkGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2.2))
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _currentStep == 3 ? 'حفظ الشاليه' : 'التالي',
+                            style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                              _currentStep == 3
+                                  ? Icons.save_rounded
+                                  : Icons.arrow_back,
+                              size: 16),
+                        ],
+                      ),
               ),
-              Step(
-                title: const Text('2'),
-                content: Column(children: [
-                  _stepNavTop('إضافة الشاليه — الخطوة 2'),
-                  _buildStep2()
-                ]),
-                isActive: _currentStep == 1,
+            ),
+          ),
+          const SizedBox(width: 10),
+          // ✅ الإصلاح: أضفنا width: 140 هون. بدونها كان هاد الزر يكسر
+          // كل الشاشة (BoxConstraints forces an infinite width) لأنه
+          // كان جنب Expanded ضمن نفس الـ Row بدون عرض محدد له.
+          SizedBox(
+            width: 140,
+            height: 52,
+            child: OutlinedButton.icon(
+              onPressed: _saving ? null : _saveDraft,
+              icon: const Icon(Icons.save_outlined,
+                  size: 16, color: AppColors.charcoal),
+              label: const Text('حفظ كمسودة',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.charcoal)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.sand),
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
-              Step(
-                title: const Text('3'),
-                content: Column(children: [
-                  _stepNavTop('إضافة الشاليه — الخطوة 3'),
-                  _buildStep3()
-                ]),
-                isActive: _currentStep == 2,
-              ),
-              Step(
-                title: const Text('4'),
-                content: Column(children: [
-                  _stepNavTop('إضافة الشاليه — الخطوة 4'),
-                  Form(key: _step4FormKey, child: _buildStep4()),
-                ]),
-                isActive: _currentStep == 3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepInfo {
+  final String label;
+  final IconData icon;
+  const _StepInfo(this.label, this.icon);
+}
+
+class _CoverImageBox extends StatelessWidget {
+  final bool hasImages;
+  final VoidCallback? onTap;
+
+  const _CoverImageBox({required this.hasImages, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: DottedBorderBox(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_upload_outlined,
+                  size: 34, color: Color(0xFFC9A24B)),
+              const SizedBox(height: 10),
+              const Text('صورة الغلاف الرئيسية',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.charcoal)),
+              const SizedBox(height: 4),
+              const Text('يفضل صورة جديدة تظهر المسبح أو الحديقة',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      color: AppColors.textSecondary)),
+              const SizedBox(height: 14),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1EEE6),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(hasImages ? 'إضافة المزيد' : 'اختر صورة',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.charcoal)),
               ),
             ],
           ),
@@ -1141,10 +1230,57 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
   }
 }
 
-/// حقل رقمي صغير مستقل بـ controller داخلي ثابت، لتفادي مشكلة إعادة بناء
-/// TextEditingController جديد من الصفر في كل عملية build (وهذا كان يكسر
-/// موضع المؤشر والتركيز في النسخة السابقة لأن الودجت لم يكن StatefulWidget
-/// مستقلاً).
+/// إطار منقط بسيط (Flutter ما عندها CustomPainter جاهز للحدود المنقطة،
+/// فبنينا وحدة بسيطة بـ CustomPaint).
+class DottedBorderBox extends StatelessWidget {
+  final Widget child;
+  const DottedBorderBox({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DottedBorderPainter(),
+      child: child,
+    );
+  }
+}
+
+class _DottedBorderPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFC9A24B)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final rrect =
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(16));
+    final path = Path()..addRRect(rrect);
+    final dashed = _dashPath(path, dashArray: [6, 4]);
+    canvas.drawPath(dashed, paint);
+  }
+
+  Path _dashPath(Path source, {required List<double> dashArray}) {
+    final dest = Path();
+    for (final metric in source.computeMetrics()) {
+      double distance = 0;
+      bool draw = true;
+      while (distance < metric.length) {
+        final len = dashArray[draw ? 0 : 1];
+        if (draw) {
+          dest.addPath(
+              metric.extractPath(distance, distance + len), Offset.zero);
+        }
+        distance += len;
+        draw = !draw;
+      }
+    }
+    return dest;
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class _NumberFieldInput extends StatefulWidget {
   final String label;
   final int value;
@@ -1187,10 +1323,10 @@ class _NumberFieldInputState extends State<_NumberFieldInput> {
         Text(widget.label,
             style: const TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
                 color: AppColors.charcoal)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         TextFormField(
           controller: _ctrl,
           textAlign: TextAlign.start,
@@ -1201,6 +1337,9 @@ class _NumberFieldInputState extends State<_NumberFieldInput> {
             widget.onChanged(clamped);
           },
           decoration: InputDecoration(
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),

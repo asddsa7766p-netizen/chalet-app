@@ -1,15 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:makan/presentation/screens/auth/auth_shared.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../data/services/services.dart';
 import '../../widgets/common/common_widgets.dart';
 
 /// شاشة "نسيت كلمة المرور"
 ///
 /// ترسل رابط إعادة تعيين كلمة المرور عبر Supabase Auth (resetPasswordForEmail).
-/// لا تحتاج أي إعداد إضافي — Supabase يرسل الإيميل تلقائياً بناءً على إعدادات
-/// المشروع في Authentication → Email Templates.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -23,10 +24,34 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _loading = false;
   bool _sent = false;
 
+  // ✅ إصلاح: تبريد (cooldown) لإعادة الإرسال حتى لا يقدر المستخدم يسبم
+  // طلبات reset متتالية على Supabase (تجنّب rate limiting وسوء استخدام).
+  static const int _resendCooldownSeconds = 30;
+  int _remainingCooldown = 0;
+  Timer? _cooldownTimer;
+
   @override
   void dispose() {
     _emailCtrl.dispose();
+    _cooldownTimer?.cancel();
     super.dispose();
+  }
+
+  void _startCooldown() {
+    setState(() => _remainingCooldown = _resendCooldownSeconds);
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_remainingCooldown <= 1) {
+        timer.cancel();
+        setState(() => _remainingCooldown = 0);
+      } else {
+        setState(() => _remainingCooldown--);
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -34,17 +59,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (_loading) return;
     setState(() => _loading = true);
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        _emailCtrl.text.trim(),
-      );
+      await AuthService.instance.resetPassword(_emailCtrl.text.trim());
       if (!mounted) return;
       setState(() => _sent = true);
+      _startCooldown();
     } catch (e) {
       if (!mounted) return;
+      // ✅ إصلاح: رسالة عربية ودّية بدل عرض نص الاستثناء التقني الخام.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content:
-            Text('حدث خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')),
+        content: Text(friendlyAuthError(e),
+            style: const TextStyle(fontFamily: 'Cairo')),
         backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
       ));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -90,7 +116,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 20),
-          // أيقونة
           Center(
             child: Container(
               width: 72,
@@ -129,13 +154,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             hint: 'example@email.com',
             prefixIcon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'أدخل بريدك الإلكتروني';
-              final emailRegex = RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w]{2,}$');
-              if (!emailRegex.hasMatch(v.trim()))
-                return 'بريد إلكتروني غير صالح';
-              return null;
-            },
+            // ✅ إصلاح: استخدام Validators الموحّد بدل regex محلي مختلف عن باقي الشاشات.
+            validator: Validators.email,
           ),
           const SizedBox(height: 24),
           AppButton(
@@ -161,6 +181,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _buildSuccessState() {
+    final canResend = _remainingCooldown == 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -210,14 +231,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           onPressed: () => context.go('/auth/login'),
         ),
         const SizedBox(height: 12),
-        // إعادة الإرسال لو ما وصل الإيميل
+        // ✅ إصلاح: زر إعادة المحاولة معطّل خلال فترة التبريد + عدّاد تنازلي مرئي.
         TextButton(
-          onPressed: () => setState(() => _sent = false),
-          child: const Text(
-            'لم يصلني الإيميل — إعادة المحاولة',
+          onPressed: canResend ? _submit : null,
+          child: Text(
+            canResend
+                ? 'لم يصلني الإيميل — إعادة المحاولة'
+                : 'يمكنك إعادة المحاولة بعد $_remainingCooldown ث',
             style: TextStyle(
                 fontFamily: 'Cairo',
-                color: AppColors.textSecondary,
+                color:
+                    canResend ? AppColors.textSecondary : AppColors.textMuted,
                 fontSize: 12),
           ),
         ),

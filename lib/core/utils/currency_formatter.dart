@@ -9,14 +9,14 @@ class AppCurrency {
     String symbol = defaultSymbol,
     int decimalDigits = 0,
   }) {
-    final formatted = NumberFormat.currency(
-      locale: 'ar',
-      symbol: includeSymbol ? symbol : '',
-      decimalDigits: decimalDigits,
-    ).format(value);
+    final formatter = NumberFormat.decimalPattern('en')
+      ..minimumFractionDigits = decimalDigits
+      ..maximumFractionDigits = decimalDigits;
 
-    return includeSymbol
-        ? formatted.replaceAll('ر.س', symbol).replaceAll('SAR', symbol)
-        : formatted.replaceAll('ر.س', '').replaceAll('SAR', '').trim();
+    final formattedNumber = formatter.format(value);
+    final normalized =
+        formattedNumber.replaceAll(RegExp(r'[\u200F\u00A0]'), '');
+
+    return includeSymbol ? '$symbol$normalized' : normalized;
   }
 }

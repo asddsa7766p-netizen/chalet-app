@@ -60,21 +60,11 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
     }
 
     try {
-      // استعلام مباشر بدل ChaletModel، لأن الموديل الحالي لا يحتوي على كل
-      // الأعمدة الفعلية في قاعدة البيانات (انظر ملاحظة الموديل أعلى الملف).
-      // نقرأ هنا الحقول الخام مباشرة كـ Map لضمان عرض البيانات الصحيحة
-      // كاملة دون فقدان أي قيمة بسبب نقص الموديل.
-      final data = await _supabase
-          .from('chalets')
-          .select(
-            'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count',
-          )
-          .eq('owner_id', ownerId)
-          .order('created_at', ascending: false);
+      final data = await ChaletService.instance.getOwnerChalets(ownerId);
 
       if (!mounted) return;
       setState(() {
-        _chalets = (data as List).cast<Map<String, dynamic>>();
+        _chalets = data;
         _loading = false;
       });
     } catch (e) {

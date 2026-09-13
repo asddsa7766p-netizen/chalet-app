@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../data/services/services.dart' show AuthService;
+import '../../../data/services/services.dart';
 import '../../widgets/common/common_widgets.dart';
 
 class OwnerExternalScreen extends StatefulWidget {
@@ -19,8 +19,6 @@ class OwnerExternalScreen extends StatefulWidget {
 }
 
 class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
-  final _supabase = Supabase.instance.client;
-
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _bookings = [];
@@ -47,26 +45,14 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
     }
     try {
       // جلب الشاليهات الخارجية للمالك
-      final chalets = await _supabase
-          .from('chalets')
-          .select('id, name')
-          .eq('owner_id', ownerId)
-          .eq('booking_type', 'خارجي');
-
-      _externalChalets = (chalets as List).cast<Map<String, dynamic>>();
+      _externalChalets =
+          await ChaletService.instance.getOwnerExternalChalets(ownerId);
       final chaletIds = _externalChalets.map((c) => c['id'] as String).toList();
 
       List<Map<String, dynamic>> bookings = [];
       if (chaletIds.isNotEmpty) {
-        final rows = await _supabase
-            .from('bookings')
-            .select(
-                'id, chalet_id, check_in, check_out, total_price, status, notes, '
-                'chalets!inner(name)')
-            .inFilter('chalet_id', chaletIds)
-            .order('check_in', ascending: false)
-            .limit(100);
-        bookings = (rows as List).cast<Map<String, dynamic>>();
+        bookings =
+            await BookingService.instance.getOwnerExternalBookings(chaletIds);
       }
 
       if (!mounted) return;
@@ -127,7 +113,7 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
     );
     if (confirmed != true) return;
     try {
-      await _supabase.from('bookings').delete().eq('id', bookingId);
+      await BookingService.instance.deleteBookingRecord(bookingId);
       _showSnack('تم حذف الحجز');
       _load();
     } catch (_) {
@@ -321,7 +307,6 @@ class _AddExternalBookingSheet extends StatefulWidget {
 }
 
 class _AddExternalBookingSheetState extends State<_AddExternalBookingSheet> {
-  final _supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
   final _notesCtrl = TextEditingController();
   final _priceCtrl = TextEditingController(text: '0');
@@ -377,20 +362,16 @@ class _AddExternalBookingSheetState extends State<_AddExternalBookingSheet> {
       final guestPhone =
           userId; // fallback; RPC will validate/override if needed
 
-      await _supabase.rpc(
-        'create_external_booking',
-        params: {
-          'p_chalet_id': _selectedChaletId,
-          'p_check_in': _checkIn!.toIso8601String().split('T').first,
-          'p_check_out': _checkOut!.toIso8601String().split('T').first,
-          'p_guests_count': guestsCount,
-          'p_total_price': totalPrice,
-          'p_guest_name': guestName,
-          'p_guest_phone': guestPhone,
-          'p_notes':
-              _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-          'p_stay_type': 'خارجي',
-        },
+      await BookingService.instance.createExternalBooking(
+        chaletId: _selectedChaletId!,
+        checkIn: _checkIn!,
+        checkOut: _checkOut!,
+        guestsCount: guestsCount,
+        totalPrice: totalPrice,
+        guestName: guestName,
+        guestPhone: guestPhone,
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        stayType: 'خارجي',
       );
       widget.onSaved();
     } catch (_) {

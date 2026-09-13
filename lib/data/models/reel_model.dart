@@ -44,11 +44,8 @@ class ReelModel {
       createdAt: DateTime.parse(json['created_at'] as String),
       chaletName: chalet['name'] as String? ?? '',
       chaletDescription: chalet['description'] as String? ?? '',
-      chaletImages: (chalet['chalet_images'] as List? ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .where((e) => (e['is_cover'] as bool?) == true || e['is_cover'] == 1)
-          .map((e) => e['cover_image'] as String?)
-          .whereType<String>()
+      chaletImages: (chalet['images'] as List? ?? const [])
+          .map((e) => e.toString())
           .toList(),
       chaletCity: chalet['city'] as String? ?? '',
       chaletLocation: chalet['location'] as String? ?? '',

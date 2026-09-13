@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/pricing_constants.dart';
@@ -147,11 +148,24 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
     }
   }
 
+  Future<void> _handleBack() async {
+    if (context.canPop()) {
+      if (mounted) context.pop();
+      return;
+    }
+    if (mounted) context.go('/owner-dashboard');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(
+          onPressed: _handleBack,
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          tooltip: 'رجوع',
+        ),
         title: const Text('إدارة الحجوزات',
             style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
         backgroundColor: AppColors.background,

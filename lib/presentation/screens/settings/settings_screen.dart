@@ -21,13 +21,11 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  static const _kDarkMode = 'settings_dark_mode';
   static const _kNotifications = 'settings_notifications';
   static const _kLanguage = 'settings_language'; // 'ar' | 'en'
   static const _kCurrency =
       'settings_currency'; // 'ILS' | 'USD' | 'EUR' | 'JOD'
 
-  bool _darkMode = false;
   bool _notificationsEnabled = true;
   String _language = 'ar';
   String _currency = 'ILS';
@@ -43,7 +41,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _darkMode = prefs.getBool(_kDarkMode) ?? false;
       _notificationsEnabled = prefs.getBool(_kNotifications) ?? true;
       _language = prefs.getString(_kLanguage) ?? 'ar';
       _currency = prefs.getString(_kCurrency) ?? 'ILS';
@@ -52,9 +49,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _setDarkMode(bool value) async {
-    setState(() => _darkMode = value);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kDarkMode, value);
     await ref.read(themeNotifierProvider).setDarkMode(value);
   }
 
@@ -62,13 +56,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _notificationsEnabled = value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kNotifications, value);
-  }
-
-  Future<void> _setLanguage(String languageCode) async {
-    setState(() => _language = languageCode);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kLanguage, languageCode);
-    await ref.read(localeNotifierProvider).setLanguage(languageCode);
   }
 
   Future<void> _setCurrency(String currency) async {
@@ -165,6 +152,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = ref.watch(themeNotifierProvider).isDarkMode;
+
     return Scaffold(
       appBar: AppBar(title: const Text(AppStrings.settings)),
       body: _loading
@@ -198,7 +187,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   icon: Icons.dark_mode_outlined,
                   label: 'الوضع المظلم',
                   trailing: Switch(
-                    value: _darkMode,
+                    value: isDarkMode,
                     onChanged: _setDarkMode,
                     activeThumbColor: AppColors.primary,
                   ),

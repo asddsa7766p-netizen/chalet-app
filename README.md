@@ -1,4 +1,4 @@
-# 🏡 شاليهات الأصدقاء - Friends Chalets
+# 🏡 مكان - Makan
 
 > تطبيق Flutter لحجز الشاليهات في فلسطين مع Supabase كـ Backend
 
@@ -170,7 +170,7 @@ flutter build ios --release
 
 ## 👨‍💻 تطوير
 
-**شاليهات الأصدقاء** | Friends Chalets  
+**مكان** | Makan  
 📧 info@friendschalets.com  
 📱 +966 50 123 4567
 

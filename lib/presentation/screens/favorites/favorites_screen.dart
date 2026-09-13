@@ -609,7 +609,21 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       });
       _load();
     } catch (_) {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+        final msg = _ is Exception ? _.toString() : 'error';
+        if (msg.contains('not_eligible_review')) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('لا يمكنك إضافة تقييم قبل إكمال حجز'),
+            backgroundColor: AppColors.primary,
+          ));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('حدث خطأ أثناء إضافة التقييم'),
+            backgroundColor: AppColors.error,
+          ));
+        }
+      }
     }
   }
 

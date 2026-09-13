@@ -1,4 +1,4 @@
-# Friends Chalets — Flutter Frontend Engineering Documentation
+# Makan — Flutter Frontend Engineering Documentation
 
 > الوثيقة مخصصة لشرح المشروع **كما هو موجود** لمهندس Flutter Senior جديد سينضم للفريق.
 > 

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../data/services/admin_service.dart';
 
 import '../../../core/constants/app_colors.dart';
 
-/// لوحة تحكم الأدمن الشاملة — friends_chalets
+/// لوحة تحكم الأدمن الشاملة — makan
 ///
 /// مبنية على البنية الفعلية لقاعدة البيانات (jugnkxeqqgtoerlknadm):
 ///
@@ -48,21 +49,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Future<void> _checkAccess() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) {
-      setState(() {
-        _checkingAccess = false;
-        _isAdmin = false;
-      });
-      return;
-    }
     try {
-      final row = await _supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('id', userId)
-          .maybeSingle();
-      final isAdmin = (row?['is_admin'] as bool?) ?? false;
+      final isAdmin = await AdminService.instance.isCurrentUserAdmin();
       if (!mounted) return;
       setState(() {
         _isAdmin = isAdmin;
@@ -232,39 +220,18 @@ class _OverviewTabState extends State<_OverviewTab> {
       _error = null;
     });
     try {
-      // استخدمنا is_owner (اسمه الفعلي بجدول profiles)
-      final usersRes = await _supabase.from('profiles').select('id').count();
-      final ownersRes = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('is_owner', true)
-          .count();
-      final chaletsRes = await _supabase.from('chalets').select('id').count();
-      final pendingRes = await _supabase
-          .from('chalets')
-          .select('id')
-          .eq('is_approved', false)
-          .count();
-      final bookingsRows =
-          await _supabase.from('bookings').select('total_price, status');
-
-      double revenue = 0;
-      for (final row in (bookingsRows as List)) {
-        final map = row as Map<String, dynamic>;
-        final status = map['status'] as String? ?? '';
-        if (status == 'confirmed' || status == 'completed') {
-          revenue += (map['total_price'] as num?)?.toDouble() ?? 0;
-        }
-      }
-
+      final stats = await AdminService.instance.getOverviewStats();
       if (!mounted) return;
       setState(() {
-        _totalUsers = usersRes.count;
-        _totalOwners = ownersRes.count;
-        _totalChalets = chaletsRes.count;
-        _pendingChalets = pendingRes.count;
-        _totalBookings = bookingsRows.length;
-        _totalRevenue = revenue;
+        _totalUsers = stats['totalUsers'] as int? ?? 0;
+        _totalOwners = stats['totalOwners'] as int? ?? 0;
+        _totalChalets = stats['totalChalets'] as int? ?? 0;
+        _pendingChalets = stats['pendingChalets'] as int? ?? 0;
+        _totalBookings = stats['totalBookings'] as int? ?? 0;
+        _totalRevenue = (stats['totalRevenue'] as double?) ??
+            (stats['totalRevenue'] is num
+                ? (stats['totalRevenue'] as num).toDouble()
+                : 0);
         _loading = false;
       });
     } catch (e) {
@@ -404,15 +371,10 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
       _error = null;
     });
     try {
-      final data = await _supabase
-          .from('chalets')
-          .select(
-              'id, name, city, location, price_per_night, images, created_at')
-          .eq('is_approved', false)
-          .order('created_at', ascending: false);
+      final data = await AdminService.instance.getPendingChalets();
       if (!mounted) return;
       setState(() {
-        _chalets = (data as List).cast<Map<String, dynamic>>();
+        _chalets = data;
         _loading = false;
       });
     } catch (e) {
@@ -671,16 +633,10 @@ class _UsersTabState extends State<_UsersTab> {
       _error = null;
     });
     try {
-      // الأعمدة الفعلية في جدول profiles:
-      // full_name | email | is_owner | is_admin | is_active
-      final data = await _supabase
-          .from('profiles')
-          .select(
-              'id, full_name, email, is_owner, is_admin, is_active, created_at')
-          .order('created_at', ascending: false);
+      final data = await AdminService.instance.getAllUsers();
       if (!mounted) return;
       setState(() {
-        _users = (data as List).cast<Map<String, dynamic>>();
+        _users = data;
         _loading = false;
       });
     } catch (e) {

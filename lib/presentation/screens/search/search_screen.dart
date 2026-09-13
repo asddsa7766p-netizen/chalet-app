@@ -19,21 +19,6 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final _searchCtrl = TextEditingController();
 
-  // UI-only constants to match stitch_/search_filter/code.html
-  static const Color _surfaceContainerLowest = Color(0xFFFFFFFF);
-  static const Color _surfaceContainerLow = Color(0xFFF2F5EC);
-  static const Color _outlineVariant = Color(0xFFC0C9BB);
-  static const Color _tertiary = Color(0xFF883454);
-
-  Widget _keffiyehPattern() {
-    // Removed the missing keffiyeh_pattern asset.
-    return Positioned.fill(
-      child: Container(
-        color: AppColors.primary.withOpacity(0.03),
-      ),
-    );
-  }
-
   String _city = 'الكل';
   double? _minPrice;
   double? _maxPrice;
@@ -134,7 +119,13 @@ class _SearchScreenState extends State<SearchScreen> {
         title: const Text(AppStrings.explore),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
       ),
       body: RefreshIndicator(

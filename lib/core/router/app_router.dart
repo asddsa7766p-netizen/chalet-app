@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:friends_chalets/presentation/screens/favorites/favorites_screen.dart';
+import 'package:makan/presentation/screens/favorites/favorites_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../presentation/screens/splash/splash_screen.dart';
+
 import '../../presentation/screens/onboarding/onboarding_screen.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
+import '../../presentation/screens/auth/forgot_password_screen.dart';
 import '../../presentation/screens/home/main_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
-import '../../presentation/screens/payment/payment_screen.dart';
+import 'package:makan/presentation/screens/payment/payment_flow_entry.dart';
 import '../../presentation/screens/reels/reels_screen.dart';
 import '../../presentation/screens/chalet/chalet_detail_screen.dart';
 import '../../presentation/screens/booking/booking_screen.dart';
@@ -25,14 +26,15 @@ import '../../data/services/services.dart';
 
 import '../../presentation/screens/owner/owner_add_chalet_screen.dart';
 import '../../presentation/screens/admin/admin_dashboard_screen.dart';
+import '../../presentation/screens/notifications/owner_notifications_screen.dart';
+import '../../presentation/screens/owner/owner_reports_screen.dart';
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
   /// Routes that are public (no login required).
   static bool isPublicRoute(String location) {
-    return location == '/splash' ||
-        location == '/onboarding' ||
+    return location == '/onboarding' ||
         location.startsWith('/auth/') ||
         location == '/home' ||
         location.startsWith('/home/chalet/') ||
@@ -52,13 +54,23 @@ class AppRouter {
 
   static final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/splash',
+    initialLocation: '/onboarding',
     redirect: (context, state) async {
-      final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
       final location = state.matchedLocation;
 
-      // Always allow splash and onboarding.
-      if (location == '/splash' || location == '/onboarding') {
+      // Guard access before Supabase is initialized (for tests, hot reload, or early boot).
+      if (!Supabase.instance.isInitialized) {
+        if (location.startsWith('/auth/') || location == '/onboarding') {
+          return null;
+        }
+        return '/onboarding';
+      }
+
+      final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+
+      // Onboarding: لو مسجل دخول، وجّهه على الهوم مباشرة بدل شاشة الترحيب.
+      if (location == '/onboarding') {
+        if (isLoggedIn) return '/home';
         return null;
       }
 
@@ -77,13 +89,13 @@ class AppRouter {
         if (!isLoggedIn) return '/auth/login';
       }
 
-      // ✅ Owner routes (excluding add-chalet): require host role.
+      // Owner routes (excluding add-chalet): require host role.
       if (location.startsWith('/owner-') && location != '/owner-add-chalet') {
         final isHost = await HostService.instance.isHost();
         return isHost ? null : '/home';
       }
 
-      // ✅ Admin route protection
+      // Admin route protection
       if (location == '/admin-dashboard') {
         if (!isLoggedIn) return '/auth/login';
         final isAdmin = await AuthService.instance.isAdmin();
@@ -94,16 +106,20 @@ class AppRouter {
     },
     routes: [
       GoRoute(
+        path: '/owner-notifications',
+        builder: (context, state) => const OwnerNotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/owner-reports',
+        builder: (context, state) => const OwnerReportsScreen(),
+      ),
+      GoRoute(
         path: '/admin-dashboard',
         builder: (context, state) => const AdminDashboardScreen(),
       ),
       GoRoute(
         path: '/owner-add-chalet',
         builder: (_, __) => const OwnerAddChaletScreen(),
-      ),
-      GoRoute(
-        path: '/splash',
-        builder: (_, __) => const SplashScreen(),
       ),
       GoRoute(
         path: '/onboarding',
@@ -129,7 +145,7 @@ class AppRouter {
         path: '/payment',
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>;
-          return PaymentScreen(
+          return buildPaymentFlow(
             chalet: extra['chalet'] as ChaletModel,
             checkIn: extra['checkIn'] as DateTime,
             checkOut: extra['checkOut'] as DateTime,
@@ -167,8 +183,16 @@ class AppRouter {
           GoRoute(
             path: 'booking',
             builder: (context, state) {
-              final chalet = state.extra as ChaletModel;
-              return BookingScreen(chalet: chalet);
+              final extra = state.extra;
+              if (extra is ChaletModel) {
+                return BookingScreen(chalet: extra);
+              }
+              if (extra is Map<String, dynamic>) {
+                final chaletId = extra['chaletId'] as String?;
+                return BookingScreen(chalet: null, chaletId: chaletId);
+              }
+              // Fallback: no extra — BookingScreen will load from route params if available
+              return BookingScreen(chalet: null);
             },
           ),
           GoRoute(

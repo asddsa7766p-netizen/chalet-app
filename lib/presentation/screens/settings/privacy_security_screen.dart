@@ -160,7 +160,7 @@ class PrivacySecurityScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'صفحة مبسطة وواضحة توضح كيف نتعامل مع بياناتك داخل تطبيق شاليهات الأصدقاء.',
+                  'صفحة مبسطة وواضحة توضح كيف نتعامل مع بياناتك داخل تطبيق مكان.',
                   textAlign: TextAlign.start,
                   style: TextStyle(
                     fontFamily: 'Cairo',
@@ -265,7 +265,7 @@ class PrivacySecurityScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        '© 2026 شاليهات الأصدقاء',
+                        '© 2026 مكان',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'Cairo',

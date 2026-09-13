@@ -2,12 +2,13 @@ class AppStrings {
   AppStrings._();
 
   // App
-  static const String appName = 'شاليهات الأصدقاء';
+  static const String appName = 'مكان';
   static const String appTagline = 'بيتك بعيداً عن البيت';
-  static const String appNameEn = 'Friends Chalets';
+  static const String appNameEn = 'Makan';
 
   // Onboarding
-  static const String onboarding1Title = 'اكتشف أجمل الشاليهات\nفي أروع المواقع';
+  static const String onboarding1Title =
+      'اكتشف أجمل الشاليهات\nفي أروع المواقع';
   static const String onboarding1Sub = 'راحة، خصوصية، وطبيعة خلابة تنتظرك';
   static const String onboarding2Title = 'احجز بسهولة\nوأمان';
   static const String onboarding2Sub = 'خطوات بسيطة لحجز شاليهك المثالي';
@@ -33,9 +34,11 @@ class AppStrings {
   static const String logout = 'تسجيل خروج';
   static const String resetPassword = 'إعادة تعيين كلمة المرور';
   static const String sendResetLink = 'إرسال الرابط';
-  static const String forgotPasswordSub = 'أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور';
+  static const String forgotPasswordSub =
+      'أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور';
   static const String resetSuccess = 'تم بنجاح!';
-  static const String resetSuccessMsg = 'تم تحديث كلمة المرور بنجاح، بإمكانك الآن تسجيل الدخول';
+  static const String resetSuccessMsg =
+      'تم تحديث كلمة المرور بنجاح، بإمكانك الآن تسجيل الدخول';
   static const String newPassword = 'كلمة المرور الجديدة';
   static const String confirmNewPassword = 'تأكيد كلمة المرور';
   static const String updatePassword = 'تحديث كلمة المرور';
@@ -76,7 +79,8 @@ class AppStrings {
   static const String onlinePayment = 'دفع إلكتروني';
   static const String confirmBooking = 'تأكيد الحجز';
   static const String bookingSuccess = 'تم الحجز بنجاح!';
-  static const String bookingSuccessMsg = 'تم تأكيد حجزك بنجاح. نتمنى لك إقامة ممتعة!';
+  static const String bookingSuccessMsg =
+      'تم تأكيد حجزك بنجاح. نتمنى لك إقامة ممتعة!';
 
   // My Bookings
   static const String myBookings = 'حجوزاتي';
@@ -130,7 +134,8 @@ class AppStrings {
   // Errors & Validation
   static const String fieldRequired = 'هذا الحقل مطلوب';
   static const String invalidEmail = 'بريد إلكتروني غير صحيح';
-  static const String passwordTooShort = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+  static const String passwordTooShort =
+      'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
   static const String passwordsNotMatch = 'كلمتا المرور غير متطابقتين';
   static const String invalidPhone = 'رقم هاتف غير صحيح';
 

@@ -1,6 +1,6 @@
 {
-    "name": "friends_chalets",
-    "short_name": "friends_chalets",
+    "name": "مكان",
+    "short_name": "مكان",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/currency_formatter.dart';
@@ -16,6 +17,8 @@ import '../../widgets/common/login_prompt.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../../data/services/location_service.dart';
 
 class ChaletDetailScreen extends ConsumerStatefulWidget {
   final String chaletId;
@@ -31,21 +34,45 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   List<ReviewModel> _reviews = [];
 
   bool _loading = true;
+  // ✅ إصلاح: نفرّق بين فشل تحميل الشاليه نفسه (خطأ حقيقي يحتاج إعادة
+  // محاولة) وفشل التقييمات (ثانوي، لا يجب أن يمنع عرض الشاليه أصلاً).
+  bool _chaletLoadError = false;
   int _currentImage = 0;
   final _pageController = PageController();
 
+  // وصف قابل للتوسيع "عرض المزيد" — زي الصورة المرجعية
+  bool _descriptionExpanded = false;
+
+  // مشغّل يوتيوب (لروابط youtube.com / youtu.be / shorts)
+  YoutubePlayerController? _youtubeController;
+  String? _youtubeVideoUrl;
+
+  // مشغّل الفيديو المباشر (mp4 وغيره) — يُستخدم فقط إذا الرابط ليس يوتيوب
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   bool _videoInitialized = false;
   bool _videoError = false;
+  // ✅ إصلاح: منع استدعاءات متزامنة متعددة لـ _initVideoPlayer (كانت
+  // ممكن تصير كل ما تُعاد بناء الشاشة قبل ما يخلص أول تهيئة، وينتج عنها
+  // تعارض على نفس الـ controller أو استهلاك شبكة مضاعف).
+  bool _videoInitializing = false;
 
   bool _heartAnimating = false;
+  Position? _userPosition;
 
   @override
   void initState() {
     super.initState();
     _chalet = widget.chalet;
     _load();
+    _loadUserLocation();
+  }
+
+  Future<void> _loadUserLocation() async {
+    final pos = await LocationService.instance.getCurrentPosition();
+    if (mounted && pos != null) {
+      setState(() => _userPosition = pos);
+    }
   }
 
   @override
@@ -53,36 +80,129 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     _pageController.dispose();
     _chewieController?.dispose();
     _videoController?.dispose();
+    _youtubeController?.close();
     super.dispose();
   }
 
   Future<void> _load() async {
-    try {
-      final results = await Future.wait([
-        ChaletService.instance.getChaletById(widget.chaletId),
-        ReviewsService.instance.getChaletReviews(widget.chaletId),
-      ]);
+    setState(() {
+      _loading = true;
+      _chaletLoadError = false;
+    });
 
-      if (mounted) {
-        setState(() {
-          _chalet = results[0] as ChaletModel? ?? _chalet;
-          _reviews = results[1] as List<ReviewModel>;
-          _loading = false;
-        });
-      }
+    // ✅ إصلاح: كان استخدام Future.wait يربط فشل تحميل التقييمات بفشل
+    // تحميل الشاليه نفسه (Future.wait بيفشل بالكامل أول ما أي Future
+    // جواه يفشل)، فلو صار خطأ بجلب التقييمات بس، الشاليه كان يختفي
+    // بالكامل رغم نجاح تحميله فعلياً. الحل: تحميل مستقل لكل واحد.
+    ChaletModel? chalet;
+    var chaletFailed = false;
+    try {
+      chalet = await ChaletService.instance.getChaletById(widget.chaletId);
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      chaletFailed = true;
     }
+
+    List<ReviewModel> reviews = [];
+    try {
+      reviews = await ReviewsService.instance.getChaletReviews(widget.chaletId);
+    } catch (_) {
+      // فشل التقييمات لا يمنع عرض باقي بيانات الشاليه — تبقى القائمة فاضية
+      // ويظهر "لا يوجد تقييمات بعد" بدل كسر الشاشة كاملة.
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _chalet = chalet ?? _chalet;
+      _reviews = reviews;
+      _loading = false;
+      // ✅ إصلاح: خطأ فعلي بس إذا فشل تحميل الشاليه ومافي أي بيانات
+      // بديلة (لا widget.chalet ولا نتيجة سابقة) — عشان نعرض شاشة خطأ
+      // بزر إعادة محاولة بدل مؤشر تحميل بيدور للأبد.
+      _chaletLoadError = chaletFailed && _chalet == null;
+    });
   }
 
   Future<void> _toggleFavorite() async {
     if (_chalet == null) return;
-    if (!requireAuth(context)) return;
+    if (!requireAuth(context,
+        PendingAuthAction('toggle_favorite', {'chaletId': _chalet!.id}))) {
+      return;
+    }
     setState(() => _heartAnimating = true);
-    await ref.read(favoritesProvider.notifier).toggleFavorite(_chalet!);
+    try {
+      await ref.read(favoritesProvider.notifier).toggleFavorite(_chalet!);
+    } catch (_) {
+      // ✅ إصلاح: كان فشل تبديل المفضلة يمر بصمت والمستخدم يشوف تأثير
+      // حركي وكأنها نجحت رغم فشلها فعلياً بالسيرفر.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذر تحديث المفضلة، حاول مرة أخرى',
+              style: TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => _heartAnimating = false);
     });
+  }
+
+  /// مشاركة رابط/تفاصيل الشاليه.
+  /// ⚠️ هاي نسخة مبسطة عبر واتساب (نفس الأسلوب المستخدم بشاشة الحجز)
+  /// حتى ما نضيف اعتمادية جديدة (share_plus). إذا عندكم الحزمة مضافة
+  /// أصلاً بالمشروع، الأفضل استبدالها بـ Share.share() لفتح قائمة
+  /// المشاركة الأصلية للنظام بدل تحديد واتساب فقط.
+  Future<void> _shareChalet(ChaletModel chalet) async {
+    final text = Uri.encodeComponent(
+      'شاهد هذا الشاليه: ${chalet.name}\n'
+      '${AppCurrency.formatPrice(chalet.pricePerNight)} لليلة\n'
+      '${chalet.city}',
+    );
+    final uri = Uri.parse('https://wa.me/?text=$text');
+    try {
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('تعذرت المشاركة', style: TextStyle(fontFamily: 'Cairo')),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('تعذرت المشاركة', style: TextStyle(fontFamily: 'Cairo')),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
+
+  /// يتحقق إذا كان الرابط رابط يوتيوب (watch / shorts / youtu.be / embed)
+  bool _isYoutubeUrl(String url) {
+    return YoutubePlayerController.convertUrlToId(url) != null;
+  }
+
+  void _initYoutubePlayer(String videoUrl) {
+    if (_youtubeVideoUrl == videoUrl && _youtubeController != null) return;
+
+    final videoId = YoutubePlayerController.convertUrlToId(videoUrl);
+    if (videoId == null) return;
+
+    _youtubeController?.close();
+    _youtubeController = YoutubePlayerController.fromVideoId(
+      videoId: videoId,
+      autoPlay: false,
+      params: const YoutubePlayerParams(
+        showFullscreenButton: true,
+        showControls: true,
+        strictRelatedVideos: true,
+      ),
+    );
+    _youtubeVideoUrl = videoUrl;
   }
 
   Future<void> _initVideoPlayer(String? videoUrl) async {
@@ -93,6 +213,13 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     if (_videoController != null && _videoController!.dataSource == videoUrl) {
       return;
     }
+    // ✅ إصلاح: بدون هاد الحارس، كل إعادة بناء للشاشة (مثلاً بسبب
+    // setState من تبديل المفضلة) قبل ما تخلص تهيئة الفيديو الأولى كانت
+    // تجدول استدعاء جديد لـ _initVideoPlayer عبر addPostFrameCallback،
+    // فيصير أكتر من controller يتنافسوا على نفس المصدر ويعملوا dispose
+    // لبعض وهم لسا قيد الإنشاء.
+    if (_videoInitializing) return;
+    _videoInitializing = true;
 
     try {
       _chewieController?.dispose();
@@ -138,6 +265,8 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
           _videoError = true;
         });
       }
+    } finally {
+      _videoInitializing = false;
     }
   }
 
@@ -146,16 +275,21 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     if (_chalet == null && _loading) {
       return _buildSkeletonLoader();
     }
+    // ✅ إصلاح: سابقاً، لو فشل التحميل (loading=false) وبقي _chalet فاضي،
+    // كانت الشاشة تعرض CircularProgressIndicator للأبد بدون أي رسالة
+    // خطأ أو زر إعادة محاولة — يعني المستخدم يضل عالق بمؤشر تحميل كاذب.
     if (_chalet == null) {
-      return const Scaffold(
-        body:
-            Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: _chaletLoadError
+              ? _buildLoadError()
+              : const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary)),
+        ),
       );
     }
     final chalet = _chalet!;
-    // ملاحظة: مصدر الخطأ الوحيد في الملف الأصلي — chalet.mainImage غير موجود
-    // في ChaletModel الحالي؛ تم استبداله بـ chalet.coverImage (السلوك مطابق:
-    // يرجع أول صورة، أو نص فارغ إذا لا توجد صور).
     final images =
         chalet.images.isNotEmpty ? chalet.images : [chalet.coverImage];
 
@@ -167,16 +301,22 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
             slivers: [
               // Image Gallery AppBar
               SliverAppBar(
-                expandedHeight: 300,
+                expandedHeight: 320,
                 pinned: true,
                 backgroundColor: AppColors.primary,
                 leading: GestureDetector(
                   onTap: () => context.pop(),
                   child: Container(
-                    margin: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
+                    margin: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                            color: Color(0x1A000000),
+                            blurRadius: 8,
+                            offset: Offset(0, 2))
+                      ],
                     ),
                     child: const Icon(Icons.arrow_back_ios_rounded,
                         color: AppColors.charcoal, size: 18),
@@ -186,11 +326,17 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                   GestureDetector(
                     onTap: _toggleFavorite,
                     child: Container(
-                      margin: const EdgeInsets.all(8),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
+                      margin: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(9),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                              color: Color(0x1A000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 2))
+                        ],
                       ),
                       child: AnimatedScale(
                         scale: _heartAnimating ? 1.35 : 1.0,
@@ -208,28 +354,53 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       ),
                     ),
                   ),
+                  // ✅ إصلاح: زر المشاركة كان بدون أي onTap إطلاقاً — يعني
+                  // زر ميت بصرياً، المستخدم يضغطه ولا يصير أي شي.
+                  GestureDetector(
+                    onTap: () => _shareChalet(chalet),
+                    child: Container(
+                      margin: const EdgeInsets.only(
+                          right: 10, left: 10, top: 10, bottom: 10),
+                      padding: const EdgeInsets.all(9),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                              color: Color(0x1A000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 2))
+                        ],
+                      ),
+                      child: const Icon(Icons.ios_share_rounded,
+                          color: AppColors.charcoal, size: 18),
+                    ),
+                  ),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
                   background: Stack(
                     children: [
-                      InteractiveViewer(
-                        minScale: 1.0,
-                        maxScale: 3.0,
-                        child: PageView.builder(
-                          controller: _pageController,
-                          itemCount: images.length,
-                          onPageChanged: (i) =>
-                              setState(() => _currentImage = i),
-                          itemBuilder: (_, i) => CachedNetworkImage(
-                            imageUrl: images[i],
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) =>
-                                Container(color: AppColors.sand),
-                            errorWidget: (_, __, ___) => Container(
-                              color: AppColors.sand,
-                              child: const Icon(Icons.home_work_rounded,
-                                  size: 60, color: AppColors.textHint),
-                            ),
+                      // ✅ إصلاح: كان الـ PageView (سحب أفقي للتنقل بين
+                      // الصور) ملفوف بـ InteractiveViewer (تكبير بالقرص).
+                      // Flutter بتتعارض فيها إيماءات السحب الأفقي مع
+                      // إيماءات InteractiveViewer، فيصير التنقل بين
+                      // الصور متردد/غير سلس. شلت InteractiveViewer من
+                      // هون؛ التكبير بالقرص ميزة إضافية ممكن تُبنى
+                      // كـ viewer منفصل بشاشة كاملة عند الضغط على الصورة
+                      // بدل ما تكون مفعّلة فوق الكاروسيل نفسه.
+                      PageView.builder(
+                        controller: _pageController,
+                        itemCount: images.length,
+                        onPageChanged: (i) => setState(() => _currentImage = i),
+                        itemBuilder: (_, i) => CachedNetworkImage(
+                          imageUrl: images[i],
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) =>
+                              Container(color: AppColors.sand),
+                          errorWidget: (_, __, ___) => Container(
+                            color: AppColors.sand,
+                            child: const Icon(Icons.home_work_rounded,
+                                size: 60, color: AppColors.textHint),
                           ),
                         ),
                       ),
@@ -276,7 +447,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                                 height: 6,
                                 decoration: BoxDecoration(
                                   color: _currentImage == i
-                                      ? AppColors.accent
+                                      ? Colors.white
                                       : Colors.white.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
@@ -316,22 +487,27 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeaderCard(chalet),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       _buildStatsRow(chalet),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       _buildDescription(chalet),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       _buildAmenities(chalet),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       if (chalet.videoUrl != null &&
                           chalet.videoUrl!.isNotEmpty) ...[
                         _buildVideoSection(chalet),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
                       ],
                       _buildLocationPreview(chalet),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
+                      // TODO: قسم "أماكن مشابهة" زي الصورة المرجعية يحتاج
+                      // دالة جديدة بالسيرفس مثلاً:
+                      // ChaletService.instance.getSimilarChalets(chalet.city, excludeId: chalet.id)
+                      // لما تضيفها بالباك اند، خبرني وبربطها هون بنفس تصميم
+                      // الكاردز الموجودة بصفحة الاستكشاف.
                       _buildReviews(),
-                      const SizedBox(height: 100),
+                      const SizedBox(height: 110),
                     ],
                   ),
                 ),
@@ -345,6 +521,51 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
             child: _buildBottomBar(chalet),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline_rounded,
+                size: 48, color: AppColors.error),
+            const SizedBox(height: 12),
+            const Text('تعذر تحميل بيانات الشاليه',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal)),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton(
+                  onPressed: () => context.pop(),
+                  child:
+                      const Text('رجوع', style: TextStyle(fontFamily: 'Cairo')),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _load,
+                  icon: const Icon(Icons.refresh_rounded),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  label: const Text('إعادة المحاولة',
+                      style: TextStyle(fontFamily: 'Cairo')),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -428,159 +649,107 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     );
   }
 
+  // بطاقة رأس الصفحة — عنوان + شارة "مميز" + تقييم + موقع
+  // مطابقة لتصميم الصورة المرجعية
   Widget _buildHeaderCard(ChaletModel chalet) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(chalet.name,
-                    style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.charcoal)),
+              // تقييم بنمط الصورة: نجمة + رقم أعلى العنوان
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.star_rounded,
+                          size: 20, color: AppColors.accent),
+                      const SizedBox(width: 4),
+                      Text(chalet.rating.toStringAsFixed(1),
+                          style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.charcoal)),
+                    ],
+                  ),
+                  Text('(${chalet.reviewsCount} تقييم)',
+                      style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          color: AppColors.textSecondary)),
+                ],
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPale.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(20),
+              const Spacer(),
+              if (chalet.isFeatured)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text('مميز',
+                      style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white)),
                 ),
-                child: Text(chalet.city,
-                    style: const TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 12,
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.w700)),
-              ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          Text(chalet.name,
+              style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.charcoal)),
+          const SizedBox(height: 6),
           Row(
             children: [
               const Icon(Icons.location_on_outlined,
                   size: 15, color: AppColors.primary),
               const SizedBox(width: 4),
               Expanded(
-                  child: Text(chalet.location,
+                  child: Text('${chalet.city}، ${chalet.location}',
                       style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 13,
                           color: AppColors.textSecondary))),
             ],
           ),
-          const SizedBox(height: 10),
-
-          // Luxury badges
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _luxuryBadge(Icons.verified_rounded, 'VIP', AppColors.accent),
-              if (chalet.hasPool)
-                _luxuryBadge(
-                    Icons.whatshot_rounded, 'مسبح مدفأ', Colors.deepOrange),
-              _luxuryBadge(
-                  Icons.landscape_rounded, 'إطلالة جبلية', Colors.teal),
-              if (chalet.hasBbq)
-                _luxuryBadge(Icons.outdoor_grill_rounded, 'شواء', Colors.brown),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          Row(
-            children: [
-              const Icon(Icons.star_rounded, size: 18, color: AppColors.accent),
-              const SizedBox(width: 4),
-              Text(chalet.rating.toStringAsFixed(1),
-                  style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.charcoal)),
-              Text(' (${chalet.reviewsCount} تقييم)',
-                  style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 12,
-                      color: AppColors.textSecondary)),
-              const Spacer(),
-              RichText(
-                text: const TextSpan(children: [
-                  TextSpan(
-                      text: 'يبدأ من ',
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 12,
-                          color: AppColors.textSecondary)),
-                ]),
-              ),
-              RichText(
-                text: TextSpan(children: [
-                  TextSpan(
-                      text: AppCurrency.formatPrice(chalet.pricePerNight),
-                      style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primary)),
-                  const TextSpan(
-                      text: '/ليلة',
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 12,
-                          color: AppColors.textSecondary)),
-                ]),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _luxuryBadge(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color)),
-        ],
-      ),
-    );
-  }
-
+  // صف الإحصائيات السريعة (غرف/حمامات/ضيوف) — أعمدة داخل بطاقة موحّدة
+  // ملاحظة: الموديل الحالي لا يحوي حقل مساحة (م²) أو نوع عقار كما بالصورة
+  // المرجعية، فتم الاكتفاء بالحقول المتوفرة فعلياً بقاعدة البيانات.
   Widget _buildStatsRow(ChaletModel chalet) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -589,7 +758,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
           _divider(),
           _stat(Icons.bathroom_rounded, '${chalet.bathrooms}', 'حمامات'),
           _divider(),
-          _stat(Icons.people_rounded, '${chalet.maxGuests}', 'ضيف'),
+          _stat(Icons.people_alt_rounded, '${chalet.maxGuests}', 'ضيف'),
         ],
       ),
     );
@@ -598,12 +767,19 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   Widget _stat(IconData icon, String value, String label) {
     return Column(
       children: [
-        Icon(icon, color: AppColors.primary, size: 22),
-        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: const BoxDecoration(
+            color: AppColors.primaryPale,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
+        const SizedBox(height: 8),
         Text(value,
             style: const TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w900,
                 color: AppColors.charcoal)),
         Text(label,
@@ -616,7 +792,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   }
 
   Widget _divider() =>
-      Container(height: 40, width: 1, color: AppColors.divider);
+      Container(height: 44, width: 1, color: AppColors.divider);
 
   Widget _buildLocationPreview(ChaletModel chalet) {
     final lat = chalet.latitude;
@@ -628,11 +804,14 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -646,12 +825,44 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
               color: AppColors.charcoal,
             ),
           ),
-          const SizedBox(height: 10),
+          if (chalet.address != null && chalet.address!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(chalet.address!,
+                style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    color: AppColors.textSecondary)),
+          ],
+          if (_userPosition != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.near_me_rounded,
+                    size: 14, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Text(
+                  'يبعد عنك ${LocationService.instance.distanceInKm(
+                        lat1: _userPosition!.latitude,
+                        lon1: _userPosition!.longitude,
+                        lat2: lat,
+                        lon2: lng,
+                      ).toStringAsFixed(1)} كم',
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
           SizedBox(
             height: 200,
             width: double.infinity,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               child: FlutterMap(
                 options: MapOptions(
                   initialCenter: center,
@@ -664,7 +875,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                   TileLayer(
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'friends_chalets',
+                    userAgentPackageName: 'makan',
                     maxZoom: 19,
                   ),
                   MarkerLayer(
@@ -675,7 +886,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                         height: 40,
                         child: const Icon(
                           Icons.location_on_rounded,
-                          color: Color(0xFF0D5BAE),
+                          color: AppColors.primary,
                           size: 36,
                         ),
                       ),
@@ -685,18 +896,25 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
+            child: OutlinedButton.icon(
               onPressed: () {
                 final url =
                     'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
                 launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
               },
-              icon: const Icon(Icons.directions),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.directions_rounded, size: 18),
               label: const Text(
-                'Get Directions',
+                'عرض على الخريطة',
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 14,
@@ -710,39 +928,65 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     );
   }
 
+  // وصف قابل للتوسيع "عرض المزيد" — زي الصورة المرجعية بالضبط
   Widget _buildDescription(ChaletModel chalet) {
+    final text = chalet.description.isNotEmpty
+        ? chalet.description
+        : 'شاليه فاخر بإطلالة خلابة على الطبيعة، يوفر لك الراحة والخصوصية التامة بعيداً عن صخب المدينة. مجهز بالكامل بكل ما تحتاجه لقضاء إجازة مثالية مع عائلتك وأصدقائك.';
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('وصف الشاليه',
+          const Text('لمحة عن المكان',
               style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: AppColors.charcoal)),
           const SizedBox(height: 10),
-          Text(
-              chalet.description.isNotEmpty
-                  ? chalet.description
-                  : 'شاليه فاخر بإطلالة خلابة على الطبيعة، يوفر لك الراحة والخصوصية التامة بعيداً عن صخب المدينة. مجهز بالكامل بكل ما تحتاجه لقضاء إجازة مثالية مع عائلتك وأصدقائك.',
+          Text(text,
+              maxLines: _descriptionExpanded ? null : 3,
+              overflow: _descriptionExpanded
+                  ? TextOverflow.visible
+                  : TextOverflow.ellipsis,
               style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 14,
                   color: AppColors.textSecondary,
                   height: 1.7)),
+          if (text.length > 100)
+            GestureDetector(
+              onTap: () =>
+                  setState(() => _descriptionExpanded = !_descriptionExpanded),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  _descriptionExpanded ? 'عرض أقل' : 'عرض المزيد',
+                  style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
+  // شبكة المرافق والخدمات — أيقونة دائرية بأعلى + تسمية أسفلها، زي الصورة
   Widget _buildAmenities(ChaletModel chalet) {
     final amenities = <Map<String, dynamic>>[
       {
@@ -756,26 +1000,33 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
         'available': chalet.hasWifi
       },
       {
-        'icon': Icons.outdoor_grill_rounded,
-        'label': 'منطقة شواء',
-        'available': chalet.hasBbq
-      },
-      {
         'icon': Icons.local_parking_rounded,
-        'label': 'مواقف سيارات',
+        'label': 'موقف سيارات',
         'available': chalet.hasParking
       },
-      {'icon': Icons.ac_unit_rounded, 'label': 'تكييف', 'available': true},
-      {'icon': Icons.kitchen_rounded, 'label': 'مطبخ', 'available': true},
+      {'icon': Icons.kitchen_rounded, 'label': 'مطبخ مجهز', 'available': true},
+      {
+        'icon': Icons.ac_unit_rounded,
+        'label': 'تكييف مركزي',
+        'available': true
+      },
+      {
+        'icon': Icons.outdoor_grill_rounded,
+        'label': 'أدوات شواء',
+        'available': chalet.hasBbq
+      },
     ];
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -786,57 +1037,49 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: AppColors.charcoal)),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: amenities.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              childAspectRatio: 1.8,
+              childAspectRatio: 0.9,
               crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
+              mainAxisSpacing: 16,
             ),
             itemBuilder: (_, i) {
               final a = amenities[i];
               final available = a['available'] as bool;
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: available
-                      ? AppColors.primaryPale.withOpacity(0.4)
-                      : AppColors.cream,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color:
-                          available ? AppColors.primaryPale : AppColors.sand),
-                ),
-                child: Row(
-                  children: [
-                    Icon(a['icon'] as IconData,
-                        size: 15,
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: available ? AppColors.primaryPale : AppColors.sand,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(a['icon'] as IconData,
+                        size: 22,
                         color:
                             available ? AppColors.primary : AppColors.textHint),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(a['label'] as String,
-                          style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 10,
-                              color: available
-                                  ? AppColors.primary
-                                  : AppColors.textHint,
-                              fontWeight: available
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              decoration: available
-                                  ? null
-                                  : TextDecoration.lineThrough),
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(a['label'] as String,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          color: available
+                              ? AppColors.charcoal
+                              : AppColors.textHint,
+                          fontWeight: FontWeight.w600,
+                          decoration:
+                              available ? null : TextDecoration.lineThrough)),
+                ],
               );
             },
           ),
@@ -851,18 +1094,59 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
       return const SizedBox.shrink();
     }
 
-    if (_videoController == null || _videoController!.dataSource != videoUrl) {
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _initVideoPlayer(videoUrl));
+    final isYoutube = _isYoutubeUrl(videoUrl);
+
+    Widget playerChild;
+
+    if (isYoutube) {
+      _initYoutubePlayer(videoUrl);
+
+      if (_youtubeController == null) {
+        playerChild = Container(
+          color: AppColors.sand,
+          child: const Center(
+            child: Icon(Icons.error_outline_rounded,
+                color: AppColors.textHint, size: 40),
+          ),
+        );
+      } else {
+        playerChild = YoutubePlayer(controller: _youtubeController!);
+      }
+    } else {
+      if (_videoController == null ||
+          _videoController!.dataSource != videoUrl) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _initVideoPlayer(videoUrl));
+      }
+
+      playerChild = _videoError
+          ? Container(
+              color: AppColors.sand,
+              child: const Center(
+                child: Icon(Icons.error_outline_rounded,
+                    color: AppColors.textHint, size: 40),
+              ),
+            )
+          : (_videoInitialized && _chewieController != null
+              ? Chewie(controller: _chewieController!)
+              : Container(
+                  color: AppColors.sand,
+                  child: const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                ));
     }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -878,26 +1162,10 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
           ),
           const SizedBox(height: 10),
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: _videoError
-                  ? Container(
-                      color: AppColors.sand,
-                      child: const Center(
-                        child: Icon(Icons.error_outline_rounded,
-                            color: AppColors.textHint, size: 40),
-                      ),
-                    )
-                  : (_videoInitialized && _chewieController != null
-                      ? Chewie(controller: _chewieController!)
-                      : Container(
-                          color: AppColors.sand,
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.primary),
-                          ),
-                        )),
+              child: playerChild,
             ),
           ),
         ],
@@ -905,14 +1173,28 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     );
   }
 
+  // تقييمات الضيوف — إضافة توزيع النجوم (5★...1★) زي الصورة المرجعية
   Widget _buildReviews() {
+    // حساب توزيع التقييمات من قائمة المراجعات الفعلية
+    final distribution = <int, int>{5: 0, 4: 0, 3: 0, 2: 0, 1: 0};
+    for (final r in _reviews) {
+      final rounded = r.rating.round().clamp(1, 5);
+      distribution[rounded] = (distribution[rounded] ?? 0) + 1;
+    }
+    final maxCount = distribution.values.isEmpty
+        ? 1
+        : distribution.values.reduce((a, b) => a > b ? a : b).clamp(1, 999999);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -928,7 +1210,12 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       color: AppColors.charcoal)),
               TextButton(
                 onPressed: () {
-                  if (!requireAuth(context)) return;
+                  if (!requireAuth(
+                      context,
+                      PendingAuthAction('open_reviews', {
+                        'chaletId': widget.chaletId,
+                        'chaletName': _chalet?.name ?? ''
+                      }))) return;
                   context.push('/home/reviews/${widget.chaletId}',
                       extra: _chalet?.name);
                 },
@@ -941,20 +1228,21 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
               ),
             ],
           ),
-          if (_chalet != null) ...[
+          const SizedBox(height: 8),
+          if (_chalet != null)
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(_chalet!.rating.toStringAsFixed(1),
-                    style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 42,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.charcoal)),
-                const SizedBox(width: 12),
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(_chalet!.rating.toStringAsFixed(1),
+                        style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 40,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.charcoal)),
                     Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: List.generate(
                             5,
                             (i) => Icon(
@@ -962,18 +1250,26 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                                     ? Icons.star_rounded
                                     : Icons.star_outline_rounded,
                                 color: AppColors.accent,
-                                size: 20))),
+                                size: 16))),
                     Text('${_chalet!.reviewsCount} تقييم',
                         style: const TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 12,
+                            fontSize: 11,
                             color: AppColors.textSecondary)),
                   ],
                 ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    children: [5, 4, 3, 2, 1]
+                        .map((star) =>
+                            _ratingBar(star, distribution[star] ?? 0, maxCount))
+                        .toList(),
+                  ),
+                ),
               ],
             ),
-          ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           if (_reviews.isEmpty)
             const Center(
                 child: Padding(
@@ -989,12 +1285,53 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     );
   }
 
+  Widget _ratingBar(int star, int count, int maxCount) {
+    final ratio = maxCount == 0 ? 0.0 : count / maxCount;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Text('$star',
+              style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  color: AppColors.textSecondary)),
+          const SizedBox(width: 4),
+          const Icon(Icons.star_rounded, size: 12, color: AppColors.accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 6,
+                backgroundColor: AppColors.sand,
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 18,
+            child: Text('$count',
+                style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    color: AppColors.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // الشريط السفلي — زر الحجز الأساسي + زر ثانوي "تواصل مع المضيف" زي الصورة
   Widget _buildBottomBar(ChaletModel chalet) {
     return Container(
       padding: EdgeInsets.fromLTRB(
           16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: AppColors.card,
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(0.08),
@@ -1002,40 +1339,79 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
               offset: const Offset(0, -4))
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          Row(
             children: [
-              const Text('السعر لليلة',
-                  style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11,
-                      color: AppColors.textSecondary)),
-              Text(AppCurrency.formatPrice(chalet.pricePerNight),
-                  style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.primary)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('السعر لليلة',
+                      style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          color: AppColors.textSecondary)),
+                  Text(AppCurrency.formatPrice(chalet.pricePerNight),
+                      style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary)),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (!requireAuth(
+                        context,
+                        PendingAuthAction(
+                            'open_booking', {'chaletId': chalet.id}))) return;
+                    context
+                        .push('/home/booking', extra: {'chaletId': chalet.id});
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text(AppStrings.bookNow,
+                      style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ),
             ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: ElevatedButton(
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
               onPressed: () {
-                if (!requireAuth(context)) return;
-                context.push('/home/booking', extra: chalet);
+                if (!requireAuth(
+                    context,
+                    PendingAuthAction(
+                        'open_chat', {'ownerId': chalet.ownerId}))) return;
+                // TODO: اربطها بمسار الرسائل/التواصل مع المضيف عندك
+                // مثال: context.push('/home/chat', extra: chalet.ownerId);
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                minimumSize: const Size(double.infinity, 50),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
-              child: const Text(AppStrings.bookNow,
+              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+              label: const Text('تواصل مع المضيف',
                   style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700)),
             ),
           ),
@@ -1051,6 +1427,14 @@ class _ReviewItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ إصلاح: كان (review.userName ?? 'م').characters.first بيرمي
+    // StateError لو userName نص فاضي '' (مو null) — بدون عنصر أول.
+    final displayName =
+        (review.userName != null && review.userName!.trim().isNotEmpty)
+            ? review.userName!
+            : 'مستخدم';
+    final avatarLetter = displayName.characters.first;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -1065,7 +1449,7 @@ class _ReviewItem extends StatelessWidget {
                     ? NetworkImage(review.userAvatar!)
                     : null,
                 child: review.userAvatar == null
-                    ? Text((review.userName ?? 'م').characters.first,
+                    ? Text(avatarLetter,
                         style: const TextStyle(
                             fontFamily: 'Cairo',
                             color: AppColors.primary,
@@ -1077,7 +1461,7 @@ class _ReviewItem extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(review.userName ?? 'مستخدم',
+                    Text(displayName,
                         style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 13,
@@ -1112,7 +1496,7 @@ class _ReviewItem extends StatelessWidget {
                     height: 1.6)),
           ],
           const SizedBox(height: 10),
-          const Divider(height: 1),
+          const Divider(height: 1, color: AppColors.divider),
         ],
       ),
     );

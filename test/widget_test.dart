@@ -1,33 +1,26 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:friends_chalets/main.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:makan/presentation/screens/auth/login_screen.dart';
 
 void main() {
-  // Avoid initializing bindings here because FriendsChaletsApp/other code may
-  // already initialize WidgetsFlutterBinding during widget build.
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const ProviderScope(child: FriendsChaletsApp()));
+  testWidgets('login screen renders the main auth form', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('تسجيل الدخول'), findsAtLeastNWidgets(1));
+    expect(find.text('أهلاً بعودتك 👋'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNWidgets(2));
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('login screen exposes a clear Google unavailable message',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    final googleButton = find.text('تسجيل الدخول عبر Google');
+    await tester.ensureVisible(googleButton);
+    await tester.tap(googleButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.textContaining('Google غير متاح'), findsOneWidget);
   });
 }

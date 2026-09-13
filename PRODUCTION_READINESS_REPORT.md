@@ -1,4 +1,4 @@
-# تقرير جاهزية الإنتاج - Friends Chalets 🚀
+# تقرير جاهزية الإنتاج - Makan 🚀
 
 **التاريخ**: 18 يوليو 2026  
 **الإصدار**: 1.0.0  
@@ -17,8 +17,8 @@
 ### 1️⃣ **android/app/build.gradle.kts** ✅ (معدّل)
 
 **التغييرات:**
-- **Namespace**: `com.example.friends_chalets` → `com.friendschalets.app`
-- **Application ID**: `com.example.friends_chalets` → `com.friendschalets.app`
+- **Namespace**: `com.example.makan` → `com.makan.app`
+- **Application ID**: `com.example.makan` → `com.makan.app`
 - **إضافة signingConfigs.release**: تحميل بيانات التوقيع من `local.properties`
 - **buildTypes.release**: تغيير التوقيع من debug إلى release
 
@@ -32,9 +32,9 @@ signingConfigs {
             keystoreProperties.load(keystoreFile.inputStream())
         }
         
-        keyAlias = keystoreProperties.getProperty("RELEASE_KEY_ALIAS", "friends_chalets_key")
+        keyAlias = keystoreProperties.getProperty("RELEASE_KEY_ALIAS", "makan_key")
         keyPassword = keystoreProperties.getProperty("RELEASE_KEY_PASSWORD", "dev@2026")
-        storeFile = file(keystoreProperties.getProperty("RELEASE_STORE_FILE", "friends_chalets_release.keystore"))
+        storeFile = file(keystoreProperties.getProperty("RELEASE_STORE_FILE", "makan_release.keystore"))
         storePassword = keystoreProperties.getProperty("RELEASE_STORE_PASSWORD", "dev@2026")
     }
 }
@@ -51,7 +51,7 @@ buildTypes {
 ### 2️⃣ **android/app/src/main/kotlin/com/friendschalets/app/MainActivity.kt** ✅ (منقول)
 
 **التغييرات:**
-- **Package**: تغيير من `com.example.friends_chalets` إلى `com.friendschalets.app`
+- **Package**: تغيير من `com.example.makan` إلى `com.makan.app`
 - **الملف**: منقول من `com/example/friends_chalets/MainActivity.kt` إلى `com/friendschalets/app/MainActivity.kt`
 
 **المحتوى:**
@@ -97,13 +97,13 @@ class MainActivity : FlutterActivity()
 
 ---
 
-### 5️⃣ **android/app/friends_chalets_release.keystore** ✨ (جديد)
+### 5️⃣ **android/app/makan_release.keystore** ✨ (جديد)
 
 **المواصفات:**
 - **نوع المفتاح**: RSA
 - **حجم المفتاح**: 2048-bit
 - **صلاحية المفتاح**: 30 سنة (حتى 10 يوليو 2056)
-- **اسم المفتاح**: friends_chalets_key
+- **اسم المفتاح**: makan_key
 - **شهادة التوقيع**:
   - CN: Friends Chalets
   - O: Friends Chalets Inc
@@ -121,9 +121,9 @@ class MainActivity : FlutterActivity()
 ```properties
 # Release Signing Configuration
 # IMPORTANT: Change passwords for production before uploading to Play Store
-RELEASE_STORE_FILE=app/friends_chalets_release.keystore
+RELEASE_STORE_FILE=app/makan_release.keystore
 RELEASE_STORE_PASSWORD=dev@2026
-RELEASE_KEY_ALIAS=friends_chalets_key
+RELEASE_KEY_ALIAS=makan_key
 RELEASE_KEY_PASSWORD=dev@2026
 ```
 
@@ -213,7 +213,7 @@ flutter build appbundle --release
 
 ### قبل النشر على الإنتاج:
 1. **غيّر كلمات المرور**: استبدل `dev@2026` بكلمة مرور قوية
-2. **احفظ الـ Keystore بأمان**: احفظ نسخة احتياطية من `friends_chalets_release.keystore`
+2. **احفظ الـ Keystore بأمان**: احفظ نسخة احتياطية من `makan_release.keystore`
 3. **لا تنسَ كلمات المرور**: إذا فقدت كلمات المرور، لن تتمكن من تحديث التطبيق
 4. **تحديث Google Play**: تأكد من تطابق رقم الإصدار والتفاصيل
 
@@ -228,7 +228,7 @@ flutter build appbundle --release
 
 | المعيار | قبل | بعد | الحالة |
 |--------|------|-----|-------|
-| Package ID | com.example.friends_chalets | com.friendschalets.app | ✅ |
+| Package ID | com.example.makan | com.makan.app | ✅ |
 | التوقيع | Debug | Release (2048-bit RSA) | ✅ |
 | اسم التطبيق | مكود في Manifest | مورد قابل للتمييز | ✅ |
 | Keystore | غير موجود | موجود وآمن | ✅ |

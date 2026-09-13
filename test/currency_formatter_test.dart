@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:friends_chalets/core/utils/currency_formatter.dart';
+import 'package:makan/core/utils/currency_formatter.dart';
 
 void main() {
   group('AppCurrency', () {
