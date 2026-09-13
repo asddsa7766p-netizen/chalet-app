@@ -33,9 +33,9 @@ signingConfigs {
         }
         
         keyAlias = keystoreProperties.getProperty("RELEASE_KEY_ALIAS", "makan_key")
-        keyPassword = keystoreProperties.getProperty("RELEASE_KEY_PASSWORD", "dev@2026")
+        keyPassword = keystoreProperties.getProperty("RELEASE_KEY_PASSWORD", "[REDACTED — credential rotated and invalidated 2026-09-14]")
         storeFile = file(keystoreProperties.getProperty("RELEASE_STORE_FILE", "makan_release.keystore"))
-        storePassword = keystoreProperties.getProperty("RELEASE_STORE_PASSWORD", "dev@2026")
+        storePassword = keystoreProperties.getProperty("RELEASE_STORE_PASSWORD", "[REDACTED — credential rotated and invalidated 2026-09-14]")
     }
 }
 
@@ -122,9 +122,9 @@ class MainActivity : FlutterActivity()
 # Release Signing Configuration
 # IMPORTANT: Change passwords for production before uploading to Play Store
 RELEASE_STORE_FILE=app/makan_release.keystore
-RELEASE_STORE_PASSWORD=dev@2026
+RELEASE_STORE_PASSWORD=[REDACTED — credential rotated and invalidated 2026-09-14]
 RELEASE_KEY_ALIAS=makan_key
-RELEASE_KEY_PASSWORD=dev@2026
+RELEASE_KEY_PASSWORD=[REDACTED — credential rotated and invalidated 2026-09-14]
 ```
 
 **ملاحظة أمنية**: هذا الملف في `.gitignore` وليس معروض في المستودع
@@ -212,7 +212,7 @@ flutter build appbundle --release
 ## ⚠️ التحذيرات والتوصيات
 
 ### قبل النشر على الإنتاج:
-1. **غيّر كلمات المرور**: استبدل `dev@2026` بكلمة مرور قوية
+1. **غيّر كلمات المرور**: استبدل `[REDACTED — credential rotated and invalidated 2026-09-14]` بكلمة مرور قوية
 2. **احفظ الـ Keystore بأمان**: احفظ نسخة احتياطية من `makan_release.keystore`
 3. **لا تنسَ كلمات المرور**: إذا فقدت كلمات المرور، لن تتمكن من تحديث التطبيق
 4. **تحديث Google Play**: تأكد من تطابق رقم الإصدار والتفاصيل
