@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/location_service.dart';
 import '../../../data/models/models.dart';
@@ -62,18 +63,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
   final List<Uint8List> _newImageBytes = [];
   final List<String> _existingImageUrls = [];
 
-  final List<String> _cities = [
-    'نابلس',
-    'رام الله',
-    'الخليل',
-    'جنين',
-    'طولكرم',
-    'قلقيلية',
-    'أريحا',
-    'بيت لحم',
-    'طوباس',
-    'سلفيت',
-  ];
+  final List<String> _cities = AppStrings.cities;
 
   bool _saving = false;
   String? _editingChaletId;

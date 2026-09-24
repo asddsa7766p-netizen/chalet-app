@@ -211,6 +211,30 @@ class ShimmerCard extends StatelessWidget {
   }
 }
 
+/// عنصر نائب محلي لشاليه بلا صورة (أو فشل تحميل صورته).
+class ChaletImagePlaceholder extends StatelessWidget {
+  final double width;
+  final double height;
+
+  const ChaletImagePlaceholder({
+    super.key,
+    required this.width,
+    required this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      color: AppColors.sand,
+      alignment: Alignment.center,
+      child: const Icon(Icons.home_work_rounded,
+          size: 40, color: AppColors.primary, semanticLabel: 'لا توجد صورة'),
+    );
+  }
+}
+
 class ChaletCard extends StatelessWidget {
   final ChaletModel chalet;
   final bool horizontal;
@@ -229,9 +253,18 @@ class ChaletCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = chalet.coverImage.isNotEmpty
-        ? chalet.coverImage
-        : 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80';
+    // بلا صورة غلاف: عنصر نائب محلي (لا صورة خارجية قد تُفهم كصورة العقار).
+    Widget cover({required double width, required double height}) {
+      final placeholder = ChaletImagePlaceholder(width: width, height: height);
+      if (chalet.coverImage.isEmpty) return placeholder;
+      return CachedNetworkImage(
+        imageUrl: chalet.coverImage,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => placeholder,
+      );
+    }
 
     final card = Container(
       decoration: BoxDecoration(
@@ -247,17 +280,7 @@ class ChaletCard extends StatelessWidget {
                     topRight: Radius.circular(18),
                     bottomRight: Radius.circular(18),
                   ),
-                  child: CachedNetworkImage(
-                    imageUrl: image,
-                    width: 130,
-                    height: 130,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(
-                      width: 130,
-                      height: 130,
-                      color: AppColors.border,
-                    ),
-                  ),
+                  child: cover(width: 130, height: 130),
                 ),
                 Expanded(
                   child: Padding(
@@ -323,17 +346,7 @@ class ChaletCard extends StatelessWidget {
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(18),
                   ),
-                  child: CachedNetworkImage(
-                    imageUrl: image,
-                    width: double.infinity,
-                    height: 180,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(
-                      width: double.infinity,
-                      height: 180,
-                      color: AppColors.border,
-                    ),
-                  ),
+                  child: cover(width: double.infinity, height: 180),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(12),

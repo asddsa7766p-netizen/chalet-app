@@ -6,16 +6,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/error_reporter.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/location_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/luxury_widgets.dart';
-import '../profile/profile_screen.dart' show NotificationsScreen;
 import '../profile/profile_provider.dart';
 import '../../widgets/common/login_prompt.dart';
-import 'dart:async' if (dart.library.html) 'dart:async';
+import 'dart:async';
 
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
@@ -26,10 +26,10 @@ class HomeTab extends ConsumerStatefulWidget {
 
 class _HomeTabState extends ConsumerState<HomeTab> {
   final _searchCtrl = TextEditingController();
-  String _selectedCity = 'الكل';
+  String _selectedCity = AppStrings.allCities;
 
   // ✅ إصلاح: يتتبع إذا المستخدم اختار مدينة فعلياً (بدل الاعتماد بس على
-  // القيمة الافتراضية 'الكل'). يُستخدم لإجبار فتح شاشة اختيار المدينة
+  // القيمة الافتراضية "الكل"). يُستخدم لإجبار فتح شاشة اختيار المدينة
   // فقط لما ما يكون في اختيار محفوظ سابقًا لهالمستخدم (انظر
   // _initCityPreferenceThenLoad/_persistCityPreference). القيمة محفوظة
   // عبر SharedPreferences بمفتاح خاص بكل مستخدم (auth uid)، فما بترجع
@@ -44,23 +44,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   String get _preferredCityKey =>
       '$_preferredCityKeyPrefix${Supabase.instance.client.auth.currentUser?.id ?? 'guest'}';
 
-  // ✅ إصلاح: كانت القائمة تغطي 6 مدن فقط بينما شاشة "إضافة شاليه" تسمح
-  // للمالك باختيار 10 مدن فعلية (owner_add_chalet_screen.dart) — يعني
-  // شاليهات طولكرم/قلقيلية/طوباس/سلفيت ما كانت قابلة للوصول عبر فلتر
-  // المدينة بالرئيسية إطلاقًا. الآن القائمة تطابق كل المدن الحقيقية.
-  static const _chips = [
-    'الكل',
-    'رام الله',
-    'نابلس',
-    'جنين',
-    'الخليل',
-    'أريحا',
-    'بيت لحم',
-    'طولكرم',
-    'قلقيلية',
-    'طوباس',
-    'سلفيت',
-  ];
+  // نفس مصدر المدن بكل التطبيق (AppStrings.cities) مسبوقاً بـ "الكل".
+  static const _chips = [AppStrings.allCities, ...AppStrings.cities];
 
   // ------------------------------------------------------------
   // cities shown as their own horizontal sections on the home
@@ -86,7 +71,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   List<ChaletModel> _allForGrouping = [];
   bool _loading = true;
   String? _error;
-  String? _userName;
 
   // NEW: موقع المستخدم الحالي (GPS) — يُستخدم لحساب المسافة وعرض
   // قسم "بالقرب منك". null يعني الصلاحية مرفوضة/معطلة أو لم يُجلب بعد.
@@ -174,9 +158,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       _error = null;
     });
     try {
+      // اسم المستخدم للترحيب يأتي من profileProvider (لا جلب ثانٍ للبروفايل هنا).
       final results = await Future.wait([
         ChaletService.instance.getFeaturedChalets(),
-        AuthService.instance.getCurrentProfile(),
         // مجموعة غير مفلترة (بدون تحديد مدينة) نبني منها أقسام المدن
         // ونفلترها محلياً عند اختيار مدينة من الهيدر، بدل طلب شبكة منفصل
         // لكل مدينة أو عند كل تبديل.
@@ -184,15 +168,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       ]);
       if (mounted) {
         setState(() {
-          _featured = results[0] as List<ChaletModel>;
-          _userName = (results[1] as dynamic)?.fullName;
-          _allForGrouping = results[2] as List<ChaletModel>;
+          _featured = results[0];
+          _allForGrouping = results[1];
           _loading = false;
         });
       }
     } catch (e, stack) {
-      debugPrint('HOME ERROR: $e');
-      debugPrint('STACK: $stack');
+      reportError(e, stack, context: 'home_load');
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -329,7 +311,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                           child: Row(
                             children: [
                               Icon(
-                                city == 'الكل'
+                                city == AppStrings.allCities
                                     ? Icons.public_rounded
                                     : Icons.location_city_rounded,
                                 size: 20,
@@ -340,7 +322,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  city == 'الكل' ? 'كل المدن' : city,
+                                  city == AppStrings.allCities ? 'كل المدن' : city,
                                   style: TextStyle(
                                     fontFamily: 'Cairo',
                                     fontSize: 14,
@@ -430,7 +412,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   // ✅ إصلاح: عند اختيار مدينة معيّنة من الهيدر، نعرض قسمها
                   // فقط بدل كل الأقسام الأربعة الثابتة — بما إنه فعلياً صار
                   // فلتر حقيقي (انظر _filterByCity) بدل تسمية بلا أثر مرئي.
-                  for (final city in _selectedCity == 'الكل'
+                  for (final city in _selectedCity == AppStrings.allCities
                       ? _featuredCitySections
                       : [_selectedCity])
                     SliverToBoxAdapter(child: _buildCitySection(city)),
@@ -483,19 +465,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         color: Theme.of(context).cardColor,
                         border: Border.all(color: AppColors.border),
                       ),
-                      // ✅ إصلاح: شاشة الإشعارات الفعلية للعميل موجودة أصلًا
-                      // داخل profile_screen.dart (NotificationsScreen) —
-                      // ربطناها هنا بدل زر معطّل بلا وظيفة.
+                      // عبر GoRouter (/notifications) حتى يمر بحراسة المسارات؛
+                      // الضيف يُوجَّه لتسجيل الدخول ثم تُفتح الإشعارات.
                       child: IconButton(
                         padding: EdgeInsets.zero,
-                        icon: Icon(Icons.notifications_none_rounded,
+                        tooltip: 'الإشعارات',
+                        icon: const Icon(Icons.notifications_none_rounded,
                             color: AppColors.primary, size: 22),
                         onPressed: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const NotificationsScreen()),
-                          );
+                          if (!requireAuth(context,
+                              const PendingAuthAction('open_notifications'))) {
+                            return;
+                          }
+                          await context.push('/notifications');
                           if (mounted) _loadUnreadNotifications();
                         },
                       ),
@@ -530,7 +512,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         // ✅ إصلاح: سابقاً كانت تعرض "رام الله" ثابتة لما
                         // المدينة المختارة "الكل"، وكأنها المدينة الفعلية
                         // المختارة رغم إنه ما في اختيار حقيقي — مضلل.
-                        _selectedCity == 'الكل' ? 'كل المدن' : _selectedCity,
+                        _selectedCity == AppStrings.allCities ? 'كل المدن' : _selectedCity,
                         style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 14,
@@ -556,17 +538,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   }
 
   // ------------------------------------------------------------
-  // ✅ إصلاح: كان اسم المستخدم (_userName) يُجلب من الملف الشخصي بنجاح
-  // (AuthService.getCurrentProfile) لكنه لا يُعرض بأي مكان بالشاشة على
-  // الإطلاق — بيانات حقيقية موجودة ومهدورة. ترحيب شخصي بسيط باسمه
-  // الأول يعطي إحساساً أكثر دفئاً بدل شاشة عامة للجميع. يختفي بهدوء
-  // للضيوف (لا يوجد _userName).
+  // ترحيب شخصي باسم المستخدم الأول. يختفي بهدوء للضيوف.
   // ------------------------------------------------------------
   Widget _buildGreeting() {
-    // الاسم من profileProvider (يتحدّث عند تسجيل الدخول/الخروج) مع الرجوع
-    // للقيمة المحمّلة سابقاً كاحتياط.
-    final name =
-        (ref.watch(profileProvider).valueOrNull?.fullName ?? _userName)?.trim();
+    // الاسم من profileProvider (يتحدّث عند تسجيل الدخول/الخروج).
+    final name = ref.watch(profileProvider).valueOrNull?.fullName?.trim();
     if (name == null || name.isEmpty) return const SizedBox.shrink();
     final firstName = name.split(' ').first;
     return Padding(
@@ -744,7 +720,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     // ✅ إصلاح: اختيار مدينة من الهيدر كان لا يغيّر أي محتوى مرئي فعلياً
     // (فقط نص الهيدر) لأن هذا القسم كان يعرض كل الشاليهات المميزة بغض
     // النظر عن المدينة المختارة. الآن يُفلتر محلياً حسب _selectedCity.
-    final pool = _selectedCity == 'الكل'
+    final pool = _selectedCity == AppStrings.allCities
         ? _featured
         : _featured.where((c) => c.city == _selectedCity).toList();
     final items = pool.take(2).toList();

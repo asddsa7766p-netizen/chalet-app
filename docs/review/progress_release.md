@@ -51,3 +51,16 @@
 - اختبار جديد: `admin_service_test.dart` (تحليل ناتج الإحصائيات).
 
 **البوابة:** analyze 232 (0 جديد). test: 325 نجاح.
+
+## المرحلة 4: الرئيسية والبحث — ✅ منتهية
+- **مقارنة إملاء المدن (قبل التغيير):** 6 قوائم (home_tab ×2، app_strings، search عبر AppStrings، owner_add، owner_edit) — **لا أي اختلاف إملائي**؛ كل مدينة مشتركة مكتوبة حرفياً بنفس الشكل (مثل "أريحا" بالهمزة). والقاعدة الحية (نابلس، جنين فقط) مطابقة. الفرق الوحيد: AppStrings كانت 8 مدن + "الكل" (بلا طوباس وسلفيت) وترتيب مختلف.
+- `AppStrings.cities` = المدن العشر بترتيب home_tab، و`AppStrings.allCities` = "الكل" منفصلة. مستخدمة في: home_tab (`_chips`)، search_screen، owner_add_chalet_screen، owner_edit_chalet_screen، و`ChaletService.getChalets`.
+- `search_screen`: `minGuests` صار `null` افتراضياً (لا فلتر سعة)، "مسح الكل" وحذف الشريحة يعيدانه null، والعدّاد يعرض "أي عدد" و"−" من 1 يعود لـ null.
+- `home_tab`: `reportError` (Sentry + debugPrint، ملف جديد `core/utils/error_reporter.dart`) في catch الخاص بـ `_load()`؛ مسار `/notifications` جديد بـ app_router (محمي) بدل `Navigator.push`؛ الضيف يضغط الجرس ← `requireAuth` (تسجيل الدخول ثم فتح الإشعارات تلقائياً عبر إجراء `open_notifications` بـ login_screen)؛ حُذف جلب البروفايل المكرر و`_userName` (الترحيب من `profileProvider`)؛ `import 'dart:async';` عادي بدل الشرطي.
+- `LuxurySearchBar`: يستمع للـ controller فيظهر/يختفي زر المسح أثناء الكتابة، ويمسح بنفسه إن لم يُمرَّر `onClear`.
+- `common_widgets.dart`: `ChaletImagePlaceholder` محلي (أيقونة على خلفية رملية) بدل صورة Unsplash، ويُستخدم أيضاً عند فشل تحميل الصورة.
+- اختبار جديد: `luxury_search_bar_test.dart` (زر المسح، قائمة المدن، العنصر النائب).
+
+**مكتشفات للمرحلة 8:** `getOwnerChalets` لا يفلتر `deleted_at` (الحذف الناعم يضبط `is_available=false` فالقوائم العامة سليمة، لكن "شاليهاتي" تعرض المحذوف)؛ `login_screen.dart` يشير لـ `assets/images/google_logo.png` غير الموجود.
+
+**البوابة:** analyze 231 (0 جديد). test: 328 نجاح.

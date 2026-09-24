@@ -34,10 +34,6 @@ class SearchScreen extends ConsumerStatefulWidget {
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
-// قيمة "عدد الضيوف" الافتراضية — لا تُحتسب كفلتر نشط طالما لم يغيّرها
-// المستخدم (تُرسل دائماً للـbackend، لكنها لا تُعرض كشريحة فلتر فعّال).
-const int _kDefaultGuests = 2;
-
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchCtrl = TextEditingController();
 
@@ -48,10 +44,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _minPriceCtrl = TextEditingController();
   final _maxPriceCtrl = TextEditingController();
 
-  late String _city = widget.initialCity ?? 'الكل';
+  late String _city = widget.initialCity ?? AppStrings.allCities;
   double? _minPrice;
   double? _maxPrice;
-  int _guests = _kDefaultGuests;
+  // null = لم يحدد المستخدم عدد ضيوف (لا فلتر سعة إطلاقاً).
+  int? _guests;
 
   late bool _hasPool = widget.initialHasPool;
   late bool _hasWifi = widget.initialHasWifi;
@@ -136,12 +133,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _resetFilters() {
     _debounce?.cancel();
     setState(() {
-      _city = 'الكل';
+      _city = AppStrings.allCities;
       _minPrice = null;
       _maxPrice = null;
       _minPriceCtrl.clear();
       _maxPriceCtrl.clear();
-      _guests = _kDefaultGuests;
+      _guests = null;
       _hasPool = false;
       _hasWifi = false;
       _hasBbq = false;
@@ -162,7 +159,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     String draftCity = _city;
     double? draftMin = _minPrice;
     double? draftMax = _maxPrice;
-    int draftGuests = _guests;
+    int? draftGuests = _guests;
     bool draftPool = _hasPool;
     bool draftWifi = _hasWifi;
     bool draftBbq = _hasBbq;
@@ -212,12 +209,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           TextButton(
                             onPressed: () {
                               setSheetState(() {
-                                draftCity = 'الكل';
+                                draftCity = AppStrings.allCities;
                                 draftMin = null;
                                 draftMax = null;
                                 minCtrl.clear();
                                 maxCtrl.clear();
-                                draftGuests = _kDefaultGuests;
+                                draftGuests = null;
                                 draftPool = false;
                                 draftWifi = false;
                                 draftBbq = false;
@@ -308,15 +305,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         _circleBtn(
                                           Icons.remove_rounded,
                                           () => setSheetState(() {
-                                            if (draftGuests > 1) {
-                                              draftGuests--;
+                                            final g = draftGuests;
+                                            // من 1 للأسفل: رجوع لـ "أي عدد" (لا فلتر).
+                                            if (g != null) {
+                                              draftGuests = g > 1 ? g - 1 : null;
                                             }
                                           }),
                                         ),
                                         Padding(
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 16),
-                                          child: Text('$draftGuests',
+                                          child: Text(draftGuests?.toString() ?? 'أي عدد',
                                               style: const TextStyle(
                                                   fontFamily: 'Cairo',
                                                   fontSize: 18,
@@ -326,7 +325,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                         _circleBtn(
                                           Icons.add_rounded,
                                           () => setSheetState(
-                                              () => draftGuests++),
+                                              () => draftGuests =
+                                                  (draftGuests ?? 0) + 1),
                                         ),
                                       ],
                                     ),
@@ -421,9 +421,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   // ------------------------------------------------------------
   List<_ActiveFilter> get _activeFilters {
     final chips = <_ActiveFilter>[];
-    if (_city != 'الكل') {
+    if (_city != AppStrings.allCities) {
       chips.add(_ActiveFilter(_city, () {
-        setState(() => _city = 'الكل');
+        setState(() => _city = AppStrings.allCities);
         _load();
       }));
     }
@@ -445,9 +445,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         _load();
       }));
     }
-    if (_guests != _kDefaultGuests) {
+    if (_guests != null) {
       chips.add(_ActiveFilter('$_guests+ ضيوف', () {
-        setState(() => _guests = _kDefaultGuests);
+        setState(() => _guests = null);
         _load();
       }));
     }
@@ -489,10 +489,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   //     (قد تكون المدينة نفسها فيها شاليهات لكن الجمع مع فلتر آخر
   //     استبعدها جميعاً).
   bool get _isCityOnlyEmptyResult {
-    if (_city == 'الكل') return false;
+    if (_city == AppStrings.allCities) return false;
     final hasOtherFilters = _minPrice != null ||
         _maxPrice != null ||
-        _guests != _kDefaultGuests ||
+        _guests != null ||
         _hasPool ||
         _hasWifi ||
         _hasBbq ||
@@ -502,7 +502,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _clearCityFilter() {
-    setState(() => _city = 'الكل');
+    setState(() => _city = AppStrings.allCities);
     _load();
   }
 
@@ -941,10 +941,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          items: {
-            'الكل',
+          items: [
+            AppStrings.allCities,
             ...AppStrings.cities,
-          }.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+          ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
           onChanged: (v) {
             if (v == null) return;
             onChanged(v);

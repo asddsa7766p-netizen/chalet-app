@@ -78,6 +78,11 @@ class _LoginScreenState extends State<LoginScreen> {
             final idx = pending.data['index'] as int? ?? 0;
             goToMainTab(context, idx);
             break;
+          case 'open_notifications':
+            final router = GoRouter.of(context);
+            router.go('/home');
+            Future.microtask(() => router.push('/notifications'));
+            break;
           default:
             context.go('/home');
         }

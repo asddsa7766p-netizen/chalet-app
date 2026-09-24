@@ -19,8 +19,29 @@ class LuxurySearchBar extends StatelessWidget {
     this.onClear,
   });
 
+  void _clear() {
+    if (onClear != null) {
+      onClear!();
+      return;
+    }
+    controller?.clear();
+    onChanged?.call('');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final ctrl = controller;
+    // زر المسح يتبع نص الحقل مباشرة (يستمع للـ controller) بدل الاعتماد
+    // على إعادة بناء من المستدعي — كان لا يظهر/يختفي أثناء الكتابة.
+    if (ctrl == null) return _field(context, hasText: false);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: ctrl,
+      builder: (context, value, _) =>
+          _field(context, hasText: value.text.isNotEmpty),
+    );
+  }
+
+  Widget _field(BuildContext context, {required bool hasText}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: TextField(
@@ -38,9 +59,11 @@ class LuxurySearchBar extends StatelessWidget {
           fillColor: AppColors.white,
           prefixIcon:
               const Icon(Icons.search_rounded, color: AppColors.primary),
-          suffixIcon: controller != null && controller!.text.isNotEmpty
+          suffixIcon: hasText
               ? IconButton(
-                  onPressed: onClear,
+                  key: const Key('luxury_search_clear'),
+                  tooltip: 'مسح',
+                  onPressed: _clear,
                   icon: const Icon(Icons.close_rounded,
                       color: AppColors.textSecondary),
                 )

@@ -21,6 +21,8 @@ import '../../presentation/screens/owner/owner_calendar_screen.dart';
 import '../../presentation/screens/owner/owner_external_screen.dart';
 import '../../presentation/screens/owner/owner_profile_screen.dart';
 import '../../presentation/screens/map/palestine_chalets_map_screen.dart';
+import '../../presentation/screens/profile/profile_screen.dart'
+    show NotificationsScreen;
 import '../../data/models/chalet_model.dart';
 import '../../data/services/host_service.dart';
 import '../../data/services/services.dart';
@@ -51,6 +53,7 @@ class AppRouter {
   /// Routes that require login (redirect to /auth/login if not logged in).
   static bool isProtectedRoute(String location) {
     return location == '/home/booking' ||
+        location == '/notifications' ||
         location == '/payment' ||
         location.startsWith('/home/reviews/') ||
         location.startsWith('/owner-') ||
@@ -110,6 +113,10 @@ class AppRouter {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
       GoRoute(
         path: '/owner-notifications',
         builder: (context, state) => const OwnerNotificationsScreen(),

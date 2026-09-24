@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/utils/date_utils.dart';
 import '../models/chalet_model.dart';
 import '../models/models.dart';
@@ -349,7 +350,7 @@ class ChaletService {
           .eq('is_available', true)
           .eq('is_approved', true);
 
-      if (city != null && city.isNotEmpty && city != 'الكل') {
+      if (city != null && city.isNotEmpty && city != AppStrings.allCities) {
         query = query.eq('city', city);
       }
       if (minPrice != null) query = query.gte('price_per_night', minPrice);

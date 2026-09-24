@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../data/services/location_service.dart';
 import 'chalet_edit_data_source.dart';
 import 'chalet_edit_model.dart';
@@ -50,18 +51,7 @@ enum _LoadState { loading, error, forbidden, ready }
 enum _LeaveChoice { save, discard, stay }
 
 class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
-  static const List<String> _baseCities = [
-    'نابلس',
-    'رام الله',
-    'الخليل',
-    'جنين',
-    'طولكرم',
-    'قلقيلية',
-    'أريحا',
-    'بيت لحم',
-    'طوباس',
-    'سلفيت',
-  ];
+  static const List<String> _baseCities = AppStrings.cities;
 
   // مفاتيح الحقول بترتيب ظهورها (للتمرير لأول خطأ).
   static const List<String> _fieldOrder = [
