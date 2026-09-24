@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_colors.dart';
+
 /// ألوان مشتركة لشاشات المصادقة (Login / Register / ForgotPassword)
 ///
-/// ⚠️ يفضّل نقل هذين اللونين إلى AppColors المركزي (core/constants/app_colors.dart)
-/// بدل تعريفهم محلياً بكل شاشة، حتى يصير أي تعديل بمكان واحد فقط.
+/// موحّدة الآن مع AppColors المركزي بدل تعريف قيم منفصلة هون، حتى يصير
+/// أي تعديل مستقبلي على هوية Makan اللونية بمكان واحد فقط.
 class AuthColors {
   AuthColors._();
-  static const Color darkGreen = Color(0xFF3D5228);
-  static const Color gold = Color(0xFFC9A24B);
-  static const Color fieldBorder = Color(0xFFD9D2C2);
+  static const Color darkGreen = AppColors.primaryDark;
+  static const Color gold = AppColors.accentMuted;
+  static const Color fieldBorder = AppColors.border;
 }
 
 /// دوال تحقق (Validation) موحّدة لكل حقول شاشات المصادقة.
@@ -84,6 +86,15 @@ String friendlyAuthError(Object error) {
   if (msg.contains('rate limit') || msg.contains('too many')) {
     return 'محاولات كثيرة متتالية، يرجى الانتظار قليلاً ثم المحاولة مرة أخرى';
   }
+  if (msg.contains('token has expired') ||
+      msg.contains('otp_expired') ||
+      msg.contains('token expired')) {
+    return 'انتهت صلاحية الرمز، يرجى طلب رمز جديد';
+  }
+  if (msg.contains('invalid') &&
+      (msg.contains('otp') || msg.contains('token'))) {
+    return 'الرمز الذي أدخلته غير صحيح، يرجى التحقق منه والمحاولة مجدداً';
+  }
   return 'حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى';
 }
 
@@ -126,9 +137,12 @@ class AuthHeader extends StatelessWidget {
             child: Image.asset('assets/images/logo.png',
                 width: 110, height: 110, fit: BoxFit.contain),
           ),
-          Positioned(
+          // ✅ إصلاح RTL: كان الزر بـ left:16 (يسار الشاشة) لكن سهم Icons.arrow_back
+          // ينعكس تلقائياً بالعربية ليشير لليمين — سهم "رجوع" يشير لليمين على
+          // اليسار! PositionedDirectional يضعه بجهة البداية (يمين بالعربية).
+          PositionedDirectional(
             top: 16,
-            left: 16,
+            start: 16,
             child: SafeArea(
               child: Material(
                 color: Colors.white,

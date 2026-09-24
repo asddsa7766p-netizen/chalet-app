@@ -7,12 +7,14 @@ import '../../../core/constants/app_strings.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
+import '../../../data/services/notification_service.dart';
 import '../../widgets/common/common_widgets.dart';
 import '../../widgets/common/language_bottom_sheet.dart';
 import '../settings/about_app_screen.dart' show AboutAppScreen;
 import '../settings/privacy_security_screen.dart' show PrivacySecurityScreen;
 import '../settings/settings_screen.dart' show SettingsScreen;
 import '../settings/help_support_screen.dart' show HelpSupportScreen;
+import '../home/main_screen.dart' show goToMainTab;
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -30,6 +32,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loadingStats = true;
   int _completedCount = 0;
   int _favoritesCount = 0;
+  // ✅ إصلاح: شارة التنبيهات كانت نصاً ثابتاً '2' لكل المستخدمين. الآن العدد
+  // الفعلي غير المقروء (يُخفى عند الصفر).
+  int _unreadNotifications = 0;
+
+  // ✅ جديد: هل عند المستخدم شاليه معتمد (is_approved=true) مسجّل باسمه
+  // فعلاً؟ يُستخدم فقط لإظهار زر "العودة إلى لوحة المالك" لمن كان مالكًا
+  // سابقًا، بدون أي RPC/جدول جديد — إعادة استخدام getOwnerChalets
+  // الموجودة أصلاً (نفس الاستعلام المستخدم بشاشة "شاليهاتي").
+  bool _hasApprovedChalet = false;
 
   @override
   void initState() {
@@ -46,15 +57,78 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final completed =
           bookings.where((b) => b.status == BookingStatus.completed).length;
       final favState = ref.read(favoritesProvider).valueOrNull;
+      final hasApproved = await _fetchHasApprovedChalet();
+      int unread = 0;
+      try {
+        unread = await NotificationService.instance.getUnreadCount();
+      } catch (_) {
+        // عدّاد ثانوي — فشله لا يعطّل باقي الإحصائيات.
+      }
+
       if (mounted) {
         setState(() {
+          _unreadNotifications = unread;
           _completedCount = completed;
           _favoritesCount = favState?.length ?? 0;
+          _hasApprovedChalet = hasApproved;
           _loadingStats = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _loadingStats = false);
+    }
+  }
+
+  // ✅ جديد: استُخرجت من _loadStats() لإعادة استخدامها من ref.listen أدناه
+  // (Problem #5) بدون تكرار منطق الفحص في مكانين.
+  Future<bool> _fetchHasApprovedChalet() async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null) return false;
+    try {
+      final ownerChalets = await ChaletService.instance.getOwnerChalets(userId);
+      return ownerChalets.any((c) => c['is_approved'] == true);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ✅ إصلاح (Problem #5): profileProvider يتحدث (ref.invalidate) من عدة
+  // أماكن بالتطبيق عند تبديل الدور (Owner⇄Customer، إضافة شاليه...)، لكن
+  // _hasApprovedChalet كانت تُحسب مرة واحدة فقط بـinitState ولا تتحدث بعد
+  // ذلك طالما ProfileScreen باقية بالذاكرة ضمن IndexedStack. نستمع الآن
+  // لتغيّرات profileProvider ونعيد فحص الشاليه المعتمد فقط (بدون لمس
+  // _loadingStats أو إعادة تحميل الحجوزات/المفضلة)، فلا يوجد أي polling
+  // أو Timer، ولا حلقة لأن هذا لا يُغيّر profileProvider نفسه.
+  Future<void> _onProfileChanged() async {
+    final hasApproved = await _fetchHasApprovedChalet();
+    if (!mounted) return;
+    setState(() => _hasApprovedChalet = hasApproved);
+  }
+
+  // ✅ جديد: تفعيل وضع المالك من جديد لمن كان "Owner" سابقًا، بدون المرور
+  // عبر شاشة إضافة شاليه جديد. يعيد استخدام becomeOwner() الموجودة أصلاً
+  // (لا RPC جديد) ويتحقق من قيمتها المرجعة بصدق بدل تجاهلها.
+  Future<void> _becomeOwnerAgain() async {
+    try {
+      final success = await AuthService.instance.becomeOwner();
+      if (!mounted) return;
+      if (success) {
+        ref.invalidate(profileProvider);
+        context.go('/owner-dashboard');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'لا يوجد حاليًا شاليه معتمد يسمح بتفعيل وضع المالك'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('تعذر تنفيذ العملية، يرجى المحاولة لاحقاً')),
+      );
     }
   }
 
@@ -94,10 +168,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     // NEW: مراقبة profileProvider — أي invalidate من أي مكان بالتطبيق
     // (مثلاً بعد إضافة شاليه) بيعيد بناء هاد الجزء فورًا بالقيم الجديدة.
+    // ✅ إصلاح (Problem #5): ref.listen يعيد فحص الشاليه المعتمد أيضًا عند
+    // أي تغيّر بـprofileProvider، حتى لا تبقى _hasApprovedChalet قديمة.
+    ref.listen(profileProvider, (previous, next) => _onProfileChanged());
     final profileAsync = ref.watch(profileProvider);
     final profile = profileAsync.valueOrNull;
     final isHost = profile?.isOwner == true || profile?.role == 'owner';
     final isAdmin = profile?.isAdmin == true;
+    // عدد المفضلة الحي من المزوّد (كان لقطة ثابتة وقت initState فقط).
+    final favoritesCount =
+        ref.watch(favoritesProvider).valueOrNull?.length ?? _favoritesCount;
     final loading =
         _loadingStats || (profileAsync.isLoading && profile == null);
 
@@ -138,7 +218,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Expanded(
                           child: _statCard(
                               label: 'في المفضلة',
-                              value: '$_favoritesCount',
+                              value: '$favoritesCount',
                               accent: const Color(0xFF883454))),
                     ],
                   ),
@@ -195,6 +275,34 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ],
 
+                  // ✅ جديد: زر "العودة إلى لوحة المالك" — يظهر فقط لمن كان
+                  // مالكًا سابقًا ولديه شاليه معتمد فعليًا (is_approved=true)
+                  // مرتبط به، بدل إجباره على تعبئة شاليه جديد ليعود مالكًا.
+                  if (!isHost && _hasApprovedChalet) ...[
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _becomeOwnerAgain,
+                        icon: const Icon(Icons.dashboard_rounded),
+                        label: const Text(
+                          'العودة إلى لوحة المالك',
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.primary),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 14),
 
                   _sectionTitle('إعدادات الحساب'),
@@ -206,7 +314,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     iconColor: AppColors.primary,
                     label: 'حجوزاتي',
                     trailingText: null,
-                    onTap: () => context.go('/home', extra: 3),
+                    onTap: () => goToMainTab(context, 3),
                   ),
                   const SizedBox(height: 10),
                   _menuRow(
@@ -215,7 +323,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     iconColor: AppColors.error,
                     label: 'المفضلة',
                     trailingText: null,
-                    onTap: () => context.go('/home', extra: 2),
+                    onTap: () => goToMainTab(context, 2),
                   ),
                   const SizedBox(height: 10),
                   _menuRow(
@@ -223,11 +331,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     iconBg: const Color(0xFF2ECC71).withOpacity(0.15),
                     iconColor: const Color(0xFF2ECC71),
                     label: 'التنبيهات',
-                    trailingText: '2',
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const NotificationsScreen())),
+                    trailingText:
+                        _unreadNotifications > 0 ? '$_unreadNotifications' : null,
+                    onTap: () async {
+                      await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const NotificationsScreen()));
+                      try {
+                        final c =
+                            await NotificationService.instance.getUnreadCount();
+                        if (mounted) setState(() => _unreadNotifications = c);
+                      } catch (_) {}
+                    },
                   ),
 
                   const SizedBox(height: 16),

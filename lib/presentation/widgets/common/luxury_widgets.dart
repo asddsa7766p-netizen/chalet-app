@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../../../core/constants/app_colors.dart';
 
@@ -6,6 +7,7 @@ class LuxurySearchBar extends StatelessWidget {
   final TextEditingController? controller;
   final String hintText;
   final Function(String)? onChanged;
+  final Function(String)? onSubmitted;
   final VoidCallback? onClear;
 
   const LuxurySearchBar({
@@ -13,6 +15,7 @@ class LuxurySearchBar extends StatelessWidget {
     this.controller,
     this.hintText = 'بحث',
     this.onChanged,
+    this.onSubmitted,
     this.onClear,
   });
 
@@ -23,6 +26,8 @@ class LuxurySearchBar extends StatelessWidget {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
+        onSubmitted: onSubmitted,
+        textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: const TextStyle(
@@ -110,11 +115,15 @@ class LuxuryShimmerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: AppColors.border,
-        borderRadius: BorderRadius.circular(18),
+    return Shimmer.fromColors(
+      baseColor: AppColors.sand,
+      highlightColor: Colors.white,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
       ),
     );
   }

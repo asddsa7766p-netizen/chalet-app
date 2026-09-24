@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/app_colors.dart';
+
 /// شاشة الترحيب الوحيدة بالتطبيق — تفتح أول ما يشتغل التطبيق،
 /// وتبقى معروضة لحد ما يضغط المستخدم على أحد الأزرار (بدون أي
 /// انتقال تلقائي أو تايمر).
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
 
-  static const Color _darkGreen = Color(0xFF3D5228);
+  // موحّد مع AppColors المركزي بدل تعريف لون منفصل هون.
+  static const Color _darkGreen = AppColors.primaryDark;
   static const Color _cream = Color(0xFFF6EFE3);
 
   @override
@@ -175,7 +178,7 @@ class _OutlinedNavButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Color(0xFFD9D2C2)),
+          side: const BorderSide(color: AppColors.border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
@@ -183,13 +186,22 @@ class _OutlinedNavButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF3D3D3D),
+            // ✅ إصلاح: تأكدت بتشغيل التطبيق فعلياً على عرض 360px (هواتف
+            // صغيرة) أن هذا الصف يفيض أفقياً بمقدار ~7 بكسل
+            // ("RIGHT OVERFLOWED BY 6.9 PIXELS") لأن النص كان بعرضه
+            // الطبيعي غير المقيّد داخل زر نصفه العرض. Flexible+ellipsis
+            // يقيّده بعرض الزر المتاح فعلياً دون تغيير شكله بالعروض العادية.
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF3D3D3D),
+                ),
               ),
             ),
             const SizedBox(width: 8),

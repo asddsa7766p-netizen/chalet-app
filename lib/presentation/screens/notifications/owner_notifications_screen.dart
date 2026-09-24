@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/models/notification_model.dart';
@@ -44,10 +45,25 @@ class _OwnerNotificationsScreenState extends State<OwnerNotificationsScreen> {
     }
   }
 
+  // ✅ إصلاح: كانت هذه الدالة تكتفي بتعليم الإشعار كمقروء وإعادة تحميل
+  // القائمة (وهذا بالضبط الـ"loading" اللي يظهر ثم يرجع المستخدم بدون
+  // أي فتح فعلي) — بلا أي navigation إطلاقًا.
+  //
+  // جدول notifications بالإنتاج لا يحتوي عمود booking_id/related_id (ولا
+  // يوجد أصلًا حقل كهذا يُملأ من trigger إنشاء الإشعار handle_booking_
+  // notifications())، فما في طريقة موثوقة لفتح تفاصيل حجز معيّن بعينه من
+  // الإشعار. لا يوجد أيضًا شاشة "تفاصيل حجز" منفصلة بالتطبيق أصلًا —
+  // القائمة الموجودة لحجوزات المالك هي /owner-bookings. لذلك، وبأقل
+  // تعديل ممكن وبدون تغيير قاعدة البيانات، إشعارات الحجز (جديد/تأكيد)
+  // تفتح شاشة حجوزات المالك الموجودة فعلاً، بدل ما ترجع بلا أي فعل.
   Future<void> _onTapItem(NotificationModel item) async {
     if (!item.isRead) {
       await NotificationService.instance.markAsRead(item.id);
       _load();
+    }
+    if (!mounted) return;
+    if (item.type == 'booking' || item.type == 'booking_confirmed') {
+      context.push('/owner-bookings');
     }
   }
 

@@ -15,6 +15,21 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   List<NotificationModel> _notifications = [];
   bool _loading = true;
+  // ✅ إصلاح: فشل التحميل كان يظهر كـ "لا توجد إشعارات" (مضلّل).
+  bool _loadError = false;
+  // 0 = الكل، 1 = غير المقروءة، 2 = العروض (كانت أزراراً شكلية بلا وظيفة).
+  int _filter = 0;
+
+  List<NotificationModel> get _visible {
+    switch (_filter) {
+      case 1:
+        return _notifications.where((n) => !n.isRead).toList();
+      case 2:
+        return _notifications.where((n) => n.type == 'offer').toList();
+      default:
+        return _notifications;
+    }
+  }
 
   @override
   void initState() {
@@ -23,7 +38,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = false;
+    });
     try {
       final notifs = await NotificationsService.instance.getNotifications();
       if (!mounted) return;
@@ -33,8 +51,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _loadError = true;
+      });
     }
+  }
+
+  Future<void> _runAndReload(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذر تحديث الإشعارات، يرجى المحاولة مرة أخرى',
+              style: TextStyle(fontFamily: 'Cairo')),
+        ));
+      }
+    }
+    if (mounted) await _load();
   }
 
   @override
@@ -60,10 +95,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Padding(
               padding: const EdgeInsets.only(left: 12, right: 12),
               child: TextButton(
-                onPressed: () async {
-                  await NotificationsService.instance.markAllAsRead();
-                  await _load();
-                },
+                onPressed: () => _runAndReload(
+                    () => NotificationsService.instance.markAllAsRead()),
                 child: Text(
                   AppStrings.markAllRead,
                   style: TextStyle(
@@ -81,7 +114,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
-          : _notifications.isEmpty
+          : _loadError
+              ? _buildLoadError()
+              : _notifications.isEmpty
               ? _buildEmpty()
               : SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -91,14 +126,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       const SizedBox(height: 14),
                       _buildDividerDecor(),
                       const SizedBox(height: 14),
-                      ..._notifications
+                      if (_visible.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Text('لا توجد إشعارات في هذا التصنيف',
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary)),
+                        ),
+                      ..._visible
                           .map((n) => _NotificationCard(
                                 notification: n,
                                 onTap: () async {
                                   if (n.isRead) return;
-                                  await NotificationsService.instance
-                                      .markAsRead(n.id);
-                                  await _load();
+                                  await _runAndReload(() =>
+                                      NotificationsService.instance
+                                          .markAsRead(n.id));
                                 },
                               ))
                           .toList(),
@@ -122,7 +166,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           const SizedBox(height: 14),
           Text(
-            'لا توجد إشعارات قديمة أخرى',
+            'لا توجد إشعارات',
             style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 14,
@@ -135,23 +179,61 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
+  Widget _buildLoadError() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline_rounded,
+              size: 48, color: AppColors.error),
+          const SizedBox(height: 12),
+          const Text('تعذر تحميل الإشعارات',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('إعادة المحاولة',
+                style: TextStyle(fontFamily: 'Cairo')),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTabSwitcher() {
-    // UI only (no filtering logic)
     return Row(
       textDirection: TextDirection.rtl,
       children: [
-        _pill(text: 'الكل', selected: true),
+        _pill(text: 'الكل', selected: _filter == 0, onTap: () => _setFilter(0)),
         const SizedBox(width: 10),
-        _pill(text: 'غير المقروءة', selected: false),
+        _pill(
+            text: 'غير المقروءة',
+            selected: _filter == 1,
+            onTap: () => _setFilter(1)),
         const SizedBox(width: 10),
-        _pill(text: 'العروض', selected: false),
+        _pill(
+            text: 'العروض', selected: _filter == 2, onTap: () => _setFilter(2)),
       ],
     );
   }
 
-  Widget _pill({required String text, required bool selected}) {
+  void _setFilter(int f) => setState(() => _filter = f);
+
+  Widget _pill(
+      {required String text, required bool selected, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: _pillBody(text: text, selected: selected),
+    );
+  }
+
+  Widget _pillBody({required String text, required bool selected}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: selected
             ? AppColors.primary

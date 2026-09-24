@@ -25,6 +25,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConfirm = true;
   bool _acceptedTerms = false; // ✅ موافقة على الشروط والأحكام
   bool _sent = false; // ✅ حالة نجاح كاملة الشاشة بدل AlertDialog
+  // ✅ إصلاح: رسالة "أكّد بريدك" كانت تظهر دائماً رغم أن المشروع يفعّل
+  // التأكيد التلقائي (المستخدم يصير مسجّل دخول فوراً). الآن تظهر فقط لو
+  // لم تُرجع الخدمة جلسة فعلية (أي لو فُعِّل تأكيد البريد لاحقاً).
+  bool _needsEmailConfirmation = false;
 
   @override
   void dispose() {
@@ -52,7 +56,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _loading = true);
     try {
-      await AuthService.instance.signUp(
+      final response = await AuthService.instance.signUp(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
         fullName: _nameCtrl.text.trim(),
@@ -61,7 +65,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       // ✅ إصلاح UX: حالة نجاح كاملة الشاشة موحّدة مع أسلوب ForgotPasswordScreen
       // بدل AlertDialog صغير غير متسق بصرياً.
-      setState(() => _sent = true);
+      setState(() {
+        _needsEmailConfirmation = response.session == null;
+        _sent = true;
+      });
     } catch (e) {
       if (mounted) {
         // ✅ إصلاح: رسالة خطأ مفصّلة حسب نوع المشكلة بدل رسالة عامة ثابتة.
@@ -95,7 +102,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AuthHeader(onBack: () => context.pop()),
+          AuthHeader(
+              onBack: () =>
+                  context.canPop() ? context.pop() : context.go('/auth/login')),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
             child: Form(
@@ -296,13 +305,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 color: Colors.green.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.mark_email_read_rounded,
-                  size: 40, color: Colors.green),
+              child: Icon(
+                  _needsEmailConfirmation
+                      ? Icons.mark_email_read_rounded
+                      : Icons.celebration_rounded,
+                  size: 40,
+                  color: Colors.green),
             ),
           ),
           const SizedBox(height: 24),
-          const Text(
-            'تم إنشاء الحساب! ✅',
+          Text(
+            _needsEmailConfirmation
+                ? 'تم إنشاء الحساب! ✅'
+                : 'أهلاً بك في مكان! 🎉',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontFamily: 'Cairo',
@@ -311,8 +326,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 color: AppColors.textPrimary),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'يرجى تأكيد بريدك الإلكتروني عبر الرابط المرسل إليك، ثم تسجيل الدخول.',
+          Text(
+            _needsEmailConfirmation
+                ? 'يرجى تأكيد بريدك الإلكتروني عبر الرابط المرسل إليك، ثم تسجيل الدخول.'
+                : 'تم إنشاء حسابك وتسجيل دخولك. يمكنك الآن استكشاف أجمل الشاليهات في فلسطين وحجز إقامتك.',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontFamily: 'Cairo',
@@ -321,10 +338,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           const SizedBox(height: 32),
           AuthGradientButton(
-            label: 'الذهاب لتسجيل الدخول',
+            label: _needsEmailConfirmation
+                ? 'الذهاب لتسجيل الدخول'
+                : 'ابدأ الاستكشاف',
             loading: false,
-            icon: Icons.login_rounded,
-            onTap: () => context.go('/auth/login'),
+            icon: _needsEmailConfirmation
+                ? Icons.login_rounded
+                : Icons.explore_rounded,
+            onTap: () => context.go(
+                _needsEmailConfirmation ? '/auth/login' : '/home'),
           ),
         ],
       ),

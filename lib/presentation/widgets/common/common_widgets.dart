@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/models/chalet_model.dart';
@@ -195,12 +196,16 @@ class ShimmerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: AppColors.border,
-        borderRadius: borderRadius ?? BorderRadius.circular(16),
+    return Shimmer.fromColors(
+      baseColor: AppColors.sand,
+      highlightColor: Colors.white,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: borderRadius ?? BorderRadius.circular(16),
+        ),
       ),
     );
   }

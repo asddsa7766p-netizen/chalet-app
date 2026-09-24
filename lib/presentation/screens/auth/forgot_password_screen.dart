@@ -30,9 +30,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   int _remainingCooldown = 0;
   Timer? _cooldownTimer;
 
+  // ✅ إصلاح (Forgot Password كامل): التطبيق لا يملك deep link مُعدّ، فبدل
+  // انتظار ضغط رابط بالبريد (ما إلو أي مكان يفتحه بالتطبيق)، نطلب من
+  // المستخدم إدخال رمز التحقق (OTP) المُرسَل بنفس البريد + كلمة المرور
+  // الجديدة مباشرة بهاي الشاشة.
+  final _resetFormKey = GlobalKey<FormState>();
+  final _codeCtrl = TextEditingController();
+  final _newPasswordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController();
+  bool _verifying = false;
+
   @override
   void dispose() {
     _emailCtrl.dispose();
+    _codeCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
     _cooldownTimer?.cancel();
     super.dispose();
   }
@@ -77,6 +90,40 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
+  Future<void> _confirmReset() async {
+    if (!(_resetFormKey.currentState?.validate() ?? false)) return;
+    if (_verifying) return;
+    setState(() => _verifying = true);
+    try {
+      await AuthService.instance.verifyPasswordRecoveryOtp(
+        email: _emailCtrl.text.trim(),
+        token: _codeCtrl.text.trim(),
+      );
+      await AuthService.instance.updatePassword(_newPasswordCtrl.text);
+      // نسجّل الخروج من جلسة الاسترداد المؤقتة حتى يدخل المستخدم بكلمة
+      // المرور الجديدة بشكل صريح وواضح.
+      await AuthService.instance.signOut();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('تم تغيير كلمة المرور بنجاح، يرجى تسجيل الدخول',
+            style: TextStyle(fontFamily: 'Cairo')),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ));
+      context.go('/auth/login');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(friendlyAuthError(e),
+            style: const TextStyle(fontFamily: 'Cairo')),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -100,7 +147,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       body: SafeArea(
         child: Directionality(
           textDirection: TextDirection.rtl,
-          child: Padding(
+          // ✅ إصلاح: خطوة رمز التحقق + كلمة المرور الجديدة زادت طول
+          // محتوى شاشة النجاح، فلفّيناها بـ SingleChildScrollView حتى ما
+          // تفيض (overflow) بالشاشات الصغيرة أو مع ظهور الكيبورد.
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: _sent ? _buildSuccessState() : _buildFormState(),
           ),
@@ -219,16 +269,58 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'تحقق من بريدك الإلكتروني واضغط على الرابط الموجود فيه.',
+          'أدخل رمز التحقق المكوّن من 6 أرقام الموجود بالرسالة، مع كلمة المرور الجديدة.',
           textAlign: TextAlign.center,
           style: TextStyle(
               fontFamily: 'Cairo', fontSize: 12, color: AppColors.textMuted),
         ),
-        const SizedBox(height: 32),
-        AppButton(
-          label: 'العودة لتسجيل الدخول',
-          icon: Icons.login_rounded,
-          onPressed: () => context.go('/auth/login'),
+        const SizedBox(height: 24),
+        Form(
+          key: _resetFormKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CustomTextField(
+                controller: _codeCtrl,
+                label: 'رمز التحقق',
+                hint: '123456',
+                prefixIcon: Icons.pin_outlined,
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  final value = v?.trim() ?? '';
+                  if (value.isEmpty) return 'أدخل رمز التحقق';
+                  if (value.length < 6) return 'الرمز مكوّن من 6 أرقام';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              CustomTextField(
+                controller: _newPasswordCtrl,
+                label: 'كلمة المرور الجديدة',
+                hint: '••••••••',
+                prefixIcon: Icons.lock_outline,
+                obscureText: true,
+                validator: Validators.password,
+              ),
+              const SizedBox(height: 16),
+              CustomTextField(
+                controller: _confirmPasswordCtrl,
+                label: 'تأكيد كلمة المرور الجديدة',
+                hint: '••••••••',
+                prefixIcon: Icons.lock_outline,
+                obscureText: true,
+                validator: (v) =>
+                    Validators.confirmPassword(v, _newPasswordCtrl.text),
+              ),
+              const SizedBox(height: 20),
+              AppButton(
+                label: _verifying ? 'جارٍ التأكيد...' : 'تأكيد وتغيير كلمة المرور',
+                loading: _verifying,
+                icon: Icons.check_circle_outline,
+                onPressed: _verifying ? null : _confirmReset,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         // ✅ إصلاح: زر إعادة المحاولة معطّل خلال فترة التبريد + عدّاد تنازلي مرئي.
@@ -236,12 +328,23 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           onPressed: canResend ? _submit : null,
           child: Text(
             canResend
-                ? 'لم يصلني الإيميل — إعادة المحاولة'
+                ? 'لم يصلني الرمز — إعادة الإرسال'
                 : 'يمكنك إعادة المحاولة بعد $_remainingCooldown ث',
             style: TextStyle(
                 fontFamily: 'Cairo',
                 color:
                     canResend ? AppColors.textSecondary : AppColors.textMuted,
+                fontSize: 12),
+          ),
+        ),
+        TextButton(
+          onPressed: () => context.go('/auth/login'),
+          child: const Text(
+            'العودة لتسجيل الدخول',
+            style: TextStyle(
+                fontFamily: 'Cairo',
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
                 fontSize: 12),
           ),
         ),

@@ -1,0 +1,41 @@
+### lib/presentation/screens/owner/owner_bookings_screen.dart (697 سطر)
+
+- **الوظيفة:** الشاشة الرئيسية لإدارة الحجوزات الواردة للمالك — عرض كل حجوزات شاليهاته (منصّة + يدوية) بجميع الحالات، مع قبول/رفض الحجوزات المعلّقة وإلغاء الحجوزات اليدوية، وإضافة حجز يدوي جديد.
+
+- **الشرح التفصيلي:**
+  - `_load()`: يحمّل الحجوزات (`BookingService.getIncomingBookings`) وعدد الإشعارات غير المقروءة (`NotificationService.getUnreadCount`) معاً عبر `Future.wait`.
+  - `_onConfirm(bookingId)`: يحرس بـ`if (_actionLoading) return;` ثم **يضبط `_actionLoading = true` قبل** استدعاء `confirmBookingFlow` (من [owner_booking_actions.dart](owner_booking_actions.md))، فيُعطَّل الزر طوال مدة الطلب فعلياً.
+  - `_onReject(bookingId)`: يحرس بنفس الشرط، لكنه **يستدعي `rejectBookingFlow` أولاً (حوار تأكيد + طلب الشبكة الفعلي) ثم يضبط `_actionLoading = true` بعد ذلك فقط** — انظر الخطر أدناه.
+  - `_cancelManualBooking`/`_addManualBooking`: يستدعيان `confirmAndCancelManualBooking`/`openManualBookingSheet` من [manual_booking_actions.dart](manual_booking_actions.md)/[manual_booking_sheet.dart](manual_booking_sheet.md) على التوالي، ثم `_load()` عند النجاح.
+  - `_bookingCard`: بطاقة تعرض الشاليه، تاريخ الوصول/المغادرة، السعر الإجمالي، قسم بيانات الضيف (`_buildGuestSection` — يميّز بين ضيف حقيقي من المنصة وضيف حجز يدوي عبر `b.manualGuest`/`b.isManual` من [manual_booking.dart](../../../data/models/manual_booking.md))، تفاصيل عمولة عرضية فقط للحجوزات غير اليدوية (`_buildOwnerPriceBreakdown`، تعليق صريح "DISPLAY-ONLY... لا تُخصم فعليًا"، متوافق مع commit فعلي بتاريخ المشروع)، وأزرار قبول/رفض أو حالة+زر إلغاء حسب حالة الحجز.
+  - إزالة موثَّقة بالتعليق لزر "التواصل مع الضيف" (كان سيكون معطَّلاً دائماً لعدم وجود رسائل داخل التطبيق) — قرار صادق بدل ترك زر مضلِّل.
+
+- **الاعتماديات:** `app_colors.dart`, `pricing_constants.dart`, `currency_formatter.dart`, `manual_booking.dart`, `models.dart`, `services.dart`, `notification_service.dart`, `manual_booking_actions.dart`, `manual_booking_sheet.dart`, `owner_booking_actions.dart`, `owner_bottom_nav.dart`. **من يستخدمه:** [app_router.dart](../../../core/router/app_router.md) (مسار `/owner-bookings`).
+
+- **التعامل مع Supabase:**
+  - `BookingService.getIncomingBookings()`: **مؤكَّد بقراءة الكود الفعلي** — استعلام مباشر على `bookings` بـ`.select('*, chalets!inner(...), profiles(...)').eq('chalets.owner_id', userId).order('created_at', ascending: false)` **بلا `.limit()` إطلاقاً** (انظر الخطر أدناه). يجلب كل الحالات معاً (لا فلترة بـ`status`) — متّسق مع كون الشاشة تعرض كل الحالات.
+  - `NotificationService.getUnreadCount()`، `confirmBookingFlow`/`rejectBookingFlow` (راجع [owner_booking_actions.md](owner_booking_actions.md))، `confirmAndCancelManualBooking` (RPC `cancel_external_booking`).
+
+- **نقاط القوة:**
+  - إعادة استخدام حقيقية لكل وحدات الحجز اليدوي والتأكيد/الرفض (تركيب نظيف بدل تكرار منطق).
+  - حالات فارغة/خطأ/تحميل مغطاة بالكامل، وحتى حالة الخطأ قابلة للسحب لإعادة التحميل (`ListView` بدل `Center` مباشرة، بتعليق صريح يشرح السبب).
+  - قرار صادق وموثَّق بإزالة زر "تواصل مع الضيف" بدل تركه معطَّلاً — يطابق نمط owner_bottom_nav.dart الإيجابي بإصلاح/إزالة أزرار وهمية بدل تركها.
+  - تفصيل العمولة للمالك مُعلَّم صراحة كعرض فقط ولا يمسّ `total_price` الفعلي — نفس فلسفة الاعتماد على سعر السيرفر الموثَّقة بـbooking_screen.dart.
+  - `manualGuest`/`isManual` (من [manual_booking.dart](../../../data/models/manual_booking.md)) مصمَّمان بأمان NULL جيد: `manualGuest` getter لا يُرجع null أبداً (فقط حقوله الداخلية قد تكون null)، فاستخدام `manualGuest!` هنا (مضمون فقط عند `isManual == true`، بنفس الشرط) **آمن فعلياً بعد التحقق المباشر من الكود** وليس خطأ رغم ظهوره كـ`!` للوهلة الأولى.
+  - تنقّل متّسق عبر GoRouter (`context.push`/`pop`/`go`) مع فحص `canPop()` قبل القرار.
+
+- **الأخطاء والمخاطر المحتملة:**
+  - 🟠 **متوسطة (سطر 57-60) — نفس عطل اقتران `Future.wait` الموثَّق بـ[owner_chalets_screen.dart](owner_chalets_screen.md) (دفعة 10)، مؤكَّد للمرة الثانية بملف مختلف:** فشل `NotificationService.getUnreadCount()` وحده (خطأ شبكة مؤقت مثلاً) يُسقط `Future.wait` بأكمله، فتُعرَض شاشة خطأ كاملة ("تعذر تحميل الحجوزات") رغم أن `getIncomingBookings()` قد ينجح فعلياً. **تكرار هذا النمط بملفين مختلفين يرفعه لمشكلة نظامية تستحق إصلاحاً موحَّداً** لا إصلاحاً موضعياً لكل شاشة.
+  - 🟠 **متوسطة (سطر 88-98) — عدم تناظر حماية الضغط المزدوج بين القبول والرفض:** `_onConfirm` يضبط `_actionLoading = true` **قبل** استدعاء `confirmBookingFlow` فيُعطِّل الأزرار طوال تنفيذ الطلب فعلياً. أما `_onReject` فيضبط `_actionLoading = true` **فقط بعد عودة `rejectBookingFlow`** (أي بعد ظهور حوار التأكيد **وبعد** تنفيذ طلب الشبكة الفعلي لرفض الحجز) — ما يعني أن زر "رفض" (وأزرار البطاقات الأخرى) **يبقى مفعَّلاً طوال مدة طلب الشبكة الفعلي للرفض**. مستخدم على اتصال بطيء يضغط "رفض" مرة أخرى (على نفس البطاقة أو بطاقة أخرى) أثناء ذلك يمكنه إطلاق طلب رفض/قبول ثانٍ متزامن قبل أن تنعكس نتيجة الأول — نفس فئة "الضغط المزدوج/race condition" التي طلب المستخدم فحصها صراحة.
+  - 🟡 **بسيطة (مؤكَّدة بقراءة services.dart، سطر 740-755) — استعلام `getIncomingBookings` بلا أي `.limit()`:** يجلب كل حجوزات كل شاليهات المالك منذ إنشاء الحساب دفعة واحدة وفي كل مرة تُفتح الشاشة. لا أثر فوري عند الإطلاق، لكنه ينمو بلا حدود مع تراكم تاريخ الحجوزات لاحقاً (بلا ترقيم صفحات/تحميل تدريجي).
+  - 🟡 **بسيطة (سطر 190-199) — خطر Overflow محتمل بسبب `GridView` بنسبة عرض-لارتفاع ثابتة لمحتوى متغيّر الارتفاع:** البطاقات تُعرض بـ`GridView.builder`/`childAspectRatio: 1.35` ثابت، بينما محتوى البطاقة الفعلي متغيّر (قسم تفاصيل العمولة يظهر فقط للحجوزات غير اليدوية؛ زر "إلغاء الحجز" يظهر فقط بشرط `canCancelManualBooking`؛ اسم الشاليه/الضيف قد يلتف لأكثر من سطر). بخلاف `ListView.builder` (يتمدد حسب المحتوى)، `GridView` بنسبة ثابتة يفرض ارتفاعاً موحَّداً لكل البطاقات — أي بطاقة يتجاوز محتواها هذا الارتفاع (خصوصاً بحجم خط كبير لإمكانية الوصول، أو اسم شاليه طويل) قد تُظهر تحذير Overflow المعروف بفلاتر (خطوط صفراء/سوداء بأسفل البطاقة). يحتاج تأكيداً بصرياً فعلياً (تشغيل التطبيق بحجم خط كبير وبيانات طويلة) لتحديد إن كان يحدث عملياً.
+  - 🟡 **بسيطة (سطر 341) — عرض مدى التاريخ يفترض ضمناً أن الوصول والمغادرة بنفس الشهر:** `'${b.checkIn.day} - ${b.checkOut.day} ${_monthName(b.checkIn.month)}'` يعرض اسم شهر `checkIn` فقط. لحجز يعبر حدود شهر (مثال: وصول 30 يناير، مغادرة 2 فبراير) يظهر النص "30 - 2 يناير" — مضلِّل (اليوم "2" يظهر تحت اسم شهر يناير رغم أنه فعلياً بفبراير). لا يظهر أي سنة أيضاً بهذا العنصر تحديداً، فحجوزات تعبر نهاية العام تحمل نفس الغموض النسبي.
+  - 🟡 **بسيطة (توثيقية، سطر 590 وpricing_constants.dart) — `kPlatformCommissionPercentage` (8%) ثابت مبرمَج بالتطبيق وليس مجلوباً من السيرفر:** إن تغيّرت نسبة العمولة الفعلية (تعاقدياً أو ترويجياً لمالك معيّن) بدون تحديث هذا الثابت بالتطبيق، فسيُعرَض للمالك "مبلغ مستحق" متوقَع غير مطابق للواقع — علماً أن الرقم عرضي بحت ولا يؤثر على `total_price` المخزَّن فعلياً (موثَّق ومقروء أصلاً بمراجعة [pricing_constants.dart](../../../core/constants/pricing_constants.md)).
+  - 🟡 **بسيطة:** `.withOpacity()` مهجورة بعدة مواضع (أسطر 291, 292, 358, 421, 507, 519, 571) — نفس الملاحظة العامة المتكررة بالمشروع.
+
+- **اقتراح الإصلاح:**
+  - **يوجد إصلاح جاهز لنفس النمطين بالضبط بنفس المشروع، بملف [owner_calendar_screen.dart](owner_calendar_screen.md) (دفعة 11):** `_init()` هناك يحمّل القائمة الأساسية أولاً ثم يستدعي كل طلب ثانوي بـ`.catchError` مستقل (حل عطل اقتران Future.wait)، و`_blockDays`/`_unblockDays` هناك يضبطان علم "مشغول" قبل الـ`await` مباشرة (حل عطل عدم تناظر حماية الضغط المزدوج). يُنصَح نسخ نفس الأسلوبين حرفياً هنا.
+  - فصل تحميل `getUnreadCount()` عن `Future.wait` الأساسي (مثلاً `unawaited`/معالجة مستقلة بـ`.catchError` تُبقي `_unreadCount = 0` عند الفشل دون إسقاط تحميل الحجوزات نفسها) — نفس الإصلاح المقترَح بـ[owner_chalets_screen.md](owner_chalets_screen.md)، ويُفضَّل تطبيقه كدالة مساعدة مشتركة تُستخدَم بكلا الملفين.
+  - بـ`_onReject`: نقل `setState(() => _actionLoading = true)` إلى **قبل** استدعاء `rejectBookingFlow` مباشرة (بنفس ترتيب `_onConfirm`)، مع التأكد أن `rejectBookingFlow` لا يزال يعرض حوار التأكيد أولاً كما هو.
+  - استبدال `GridView`/`childAspectRatio` الثابت بـ`ListView.builder` مع `SizedBox(height: ...)`/بطاقة تتمدد حسب محتواها، لتفادي أي Overflow محتمل بمحتوى متغيّر الطول.
+  - تضمين الشهر/السنة لكل من `checkIn` و`checkOut` عند اختلافهما: مثال `'${b.checkIn.day} ${_monthName(b.checkIn.month)} - ${b.checkOut.day} ${_monthName(b.checkOut.month)}'`.

@@ -17,6 +17,7 @@ import '../../presentation/screens/reviews/reviews_screen.dart';
 import '../../presentation/screens/owner/owner_dashboard_screen.dart';
 import '../../presentation/screens/owner/owner_chalets_screen.dart';
 import '../../presentation/screens/owner/owner_bookings_screen.dart';
+import '../../presentation/screens/owner/owner_calendar_screen.dart';
 import '../../presentation/screens/owner/owner_external_screen.dart';
 import '../../presentation/screens/owner/owner_profile_screen.dart';
 import '../../presentation/screens/map/palestine_chalets_map_screen.dart';
@@ -31,6 +32,10 @@ import '../../presentation/screens/owner/owner_reports_screen.dart';
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
+  /// ⛔ الدفع الإلكتروني معطّل مؤقتاً لحين اختيار بوابة دفع حقيقية وربطها
+  /// (MockPaymentGateway الحالي لا ينشئ حجزاً فعلياً بقاعدة البيانات).
+  static const bool onlinePaymentEnabled = false;
 
   /// Routes that are public (no login required).
   static bool isPublicRoute(String location) {
@@ -139,10 +144,40 @@ class AppRouter {
       ),
       GoRoute(
         path: '/search',
-        builder: (_, __) => const SearchScreen(),
+        // ✅ إصلاح: كانت query params مثل ?city=... و?type=pool القادمة من
+        // الرئيسية (أقسام المدن/الفئات) تُبنى بالرابط لكن تُهمل هنا بالكامل
+        // (SearchScreen() بدون أي معطيات) — الآن تُمرَّر فعليًا كفلتر أولي.
+        builder: (_, state) {
+          final q = state.uri.queryParameters;
+          return SearchScreen(
+            initialCity: q['city'],
+            initialHasPool: q['type'] == 'pool',
+            initialHasWifi: q['type'] == 'wifi',
+            initialQuery: q['q'],
+          );
+        },
       ),
       GoRoute(
         path: '/payment',
+        // ⛔ الدفع الإلكتروني معطّل مؤقتاً لحين اختيار بوابة دفع حقيقية:
+        // MockPaymentGateway الحالي لا ينشئ حجزاً فعلياً بقاعدة البيانات،
+        // فأي وصول لهذا الـ route (حتى لو مباشر) يُعاد لـ /home. أزل هذا
+        // الشرط فقط بعد ربط بوابة دفع حقيقية بمسار الدفع.
+        // ✅ إصلاح: state.extra كان يُفترض دايمًا أنه Map صحيح، فأي وصول
+        // مباشر لـ /payment بدون extra (رابط عميق، تحديث المتصفح على الويب،
+        // Hot Restart) كان يرمي TypeError ويكسر التطبيق. نتحقق الآن من
+        // الشكل والنوع قبل الدخول للشاشة، ولو ناقص/غلط نرجّع لـ /home
+        // بدل ما نكسر. تدفق الدفع الصحيح (لما تجي extra سليمة) ما تغيّر.
+        redirect: (context, state) {
+          if (!onlinePaymentEnabled) return '/home';
+          final extra = state.extra;
+          if (extra is! Map<String, dynamic>) return '/home';
+          if (extra['chalet'] is! ChaletModel) return '/home';
+          if (extra['checkIn'] is! DateTime) return '/home';
+          if (extra['checkOut'] is! DateTime) return '/home';
+          if (extra['guestsCount'] is! int) return '/home';
+          return null;
+        },
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>;
           return buildPaymentFlow(
@@ -212,6 +247,10 @@ class AppRouter {
       GoRoute(
         path: '/owner-chalets',
         builder: (context, state) => const OwnerChaletsScreen(),
+      ),
+      GoRoute(
+        path: '/owner-calendar',
+        builder: (context, state) => const OwnerCalendarScreen(),
       ),
       GoRoute(
         path: '/owner-bookings',

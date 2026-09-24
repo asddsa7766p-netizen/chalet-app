@@ -148,6 +148,21 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     });
   }
 
+  // ✅ إعادة تصميم: معرض صور غامر بشاشة كاملة (خلفية سوداء + تكبير
+  // بالقرص لكل صورة + عدّاد) يُفتح بالضغط على أي صورة — بدل الاكتفاء
+  // بكاروسيل صغير أعلى الصفحة فقط. يبدأ من الصورة المعروضة حالياً.
+  void _openFullScreenGallery(List<String> images) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _FullScreenGallery(
+          images: images,
+          initialIndex: _currentImage,
+        ),
+      ),
+    );
+  }
+
   /// مشاركة رابط/تفاصيل الشاليه.
   /// ⚠️ هاي نسخة مبسطة عبر واتساب (نفس الأسلوب المستخدم بشاشة الحجز)
   /// حتى ما نضيف اعتمادية جديدة (share_plus). إذا عندكم الحزمة مضافة
@@ -385,22 +400,25 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       // Flutter بتتعارض فيها إيماءات السحب الأفقي مع
                       // إيماءات InteractiveViewer، فيصير التنقل بين
                       // الصور متردد/غير سلس. شلت InteractiveViewer من
-                      // هون؛ التكبير بالقرص ميزة إضافية ممكن تُبنى
-                      // كـ viewer منفصل بشاشة كاملة عند الضغط على الصورة
-                      // بدل ما تكون مفعّلة فوق الكاروسيل نفسه.
+                      // هون؛ التكبير بالقرص مبني كـ viewer منفصل بشاشة
+                      // كاملة (_FullScreenGallery) يُفتح بالضغط على الصورة
+                      // بدل ما يكون مفعّلاً فوق الكاروسيل نفسه.
                       PageView.builder(
                         controller: _pageController,
                         itemCount: images.length,
                         onPageChanged: (i) => setState(() => _currentImage = i),
-                        itemBuilder: (_, i) => CachedNetworkImage(
-                          imageUrl: images[i],
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) =>
-                              Container(color: AppColors.sand),
-                          errorWidget: (_, __, ___) => Container(
-                            color: AppColors.sand,
-                            child: const Icon(Icons.home_work_rounded,
-                                size: 60, color: AppColors.textHint),
+                        itemBuilder: (_, i) => GestureDetector(
+                          onTap: () => _openFullScreenGallery(images),
+                          child: CachedNetworkImage(
+                            imageUrl: images[i],
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) =>
+                                Container(color: AppColors.sand),
+                            errorWidget: (_, __, ___) => Container(
+                              color: AppColors.sand,
+                              child: const Icon(Icons.home_work_rounded,
+                                  size: 60, color: AppColors.textHint),
+                            ),
                           ),
                         ),
                       ),
@@ -487,8 +505,6 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeaderCard(chalet),
-                      const SizedBox(height: 14),
-                      _buildStatsRow(chalet),
                       const SizedBox(height: 14),
                       _buildDescription(chalet),
                       const SizedBox(height: 14),
@@ -649,8 +665,11 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     );
   }
 
-  // بطاقة رأس الصفحة — عنوان + شارة "مميز" + تقييم + موقع
-  // مطابقة لتصميم الصورة المرجعية
+  // ✅ إعادة تصميم: كانت بطاقة العنوان/التقييم وصف الإحصائيات (غرف/حمامات/
+  // ضيوف) بطاقتين منفصلتين متلاصقتين بنفس الظل والزوايا — تكرار بصري بلا
+  // فائدة أول ما يراه المستخدم بعد المعرض. الآن بطاقة واحدة متماسكة:
+  // الشارة/التقييم، الاسم، الموقع، ثم فاصل خفيف، ثم صف الإحصائيات — نظرة
+  // واحدة سريعة تلخّص الشاليه بدل تكديس بطاقات متطابقة الشكل.
   Widget _buildHeaderCard(ChaletModel chalet) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -712,6 +731,8 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
           ),
           const SizedBox(height: 10),
           Text(chalet.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 21,
@@ -725,40 +746,29 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
               const SizedBox(width: 4),
               Expanded(
                   child: Text('${chalet.city}، ${chalet.location}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 13,
                           color: AppColors.textSecondary))),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  // صف الإحصائيات السريعة (غرف/حمامات/ضيوف) — أعمدة داخل بطاقة موحّدة
-  // ملاحظة: الموديل الحالي لا يحوي حقل مساحة (م²) أو نوع عقار كما بالصورة
-  // المرجعية، فتم الاكتفاء بالحقول المتوفرة فعلياً بقاعدة البيانات.
-  Widget _buildStatsRow(ChaletModel chalet) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4)),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _stat(Icons.bed_rounded, '${chalet.bedrooms}', 'غرف نوم'),
-          _divider(),
-          _stat(Icons.bathroom_rounded, '${chalet.bathrooms}', 'حمامات'),
-          _divider(),
-          _stat(Icons.people_alt_rounded, '${chalet.maxGuests}', 'ضيف'),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.divider),
+          const SizedBox(height: 14),
+          // ملاحظة: الموديل الحالي لا يحوي حقل مساحة (م²) أو نوع عقار،
+          // فتم الاكتفاء بالحقول المتوفرة فعلياً بقاعدة البيانات.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _stat(Icons.bed_rounded, '${chalet.bedrooms}', 'غرف نوم'),
+              _divider(),
+              _stat(Icons.bathroom_rounded, '${chalet.bathrooms}', 'حمامات'),
+              _divider(),
+              _stat(Icons.people_alt_rounded, '${chalet.maxGuests}', 'ضيف'),
+            ],
+          ),
         ],
       ),
     );
@@ -929,10 +939,12 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   }
 
   // وصف قابل للتوسيع "عرض المزيد" — زي الصورة المرجعية بالضبط
+  // ✅ إصلاح: كان يُعرض نص تسويقي عام مختلق عندما لا يكتب المالك وصفاً
+  // فعلياً — يظهر كأنه وصف حقيقي للشاليه رغم أنه نفس النص لأي شاليه بلا
+  // وصف. الآن القسم بأكمله يختفي بصدق بدل اختراع محتوى غير حقيقي.
   Widget _buildDescription(ChaletModel chalet) {
-    final text = chalet.description.isNotEmpty
-        ? chalet.description
-        : 'شاليه فاخر بإطلالة خلابة على الطبيعة، يوفر لك الراحة والخصوصية التامة بعيداً عن صخب المدينة. مجهز بالكامل بكل ما تحتاجه لقضاء إجازة مثالية مع عائلتك وأصدقائك.';
+    final text = chalet.description.trim();
+    if (text.isEmpty) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -1004,12 +1016,6 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
         'label': 'موقف سيارات',
         'available': chalet.hasParking
       },
-      {'icon': Icons.kitchen_rounded, 'label': 'مطبخ مجهز', 'available': true},
-      {
-        'icon': Icons.ac_unit_rounded,
-        'label': 'تكييف مركزي',
-        'available': true
-      },
       {
         'icon': Icons.outdoor_grill_rounded,
         'label': 'أدوات شواء',
@@ -1037,49 +1043,55 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: AppColors.charcoal)),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          // ✅ إعادة تصميم: شبكة أيقونة-فوق-تسمية بـ3 أعمدة كانت مصمّمة
+          // أصلاً لـ6 عناصر (اثنان منها وهميان تم حذفهما — مطبخ/تكييف
+          // بلا حقل حقيقي بقاعدة البيانات). مع 4 مرافق حقيقية فقط، شكل
+          // "شريحة أفقية" بعمودين يعطي توازناً بصرياً أفضل من عمود ثالث
+          // فيه عنصر واحد معلّق وحيد.
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: amenities.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              childAspectRatio: 0.9,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 16,
+              crossAxisCount: 2,
+              childAspectRatio: 2.6,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
             ),
             itemBuilder: (_, i) {
               final a = amenities[i];
               final available = a['available'] as bool;
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: available ? AppColors.primaryPale : AppColors.sand,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(a['icon'] as IconData,
-                        size: 22,
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: available ? AppColors.primaryPale : AppColors.sand,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(a['icon'] as IconData,
+                        size: 20,
                         color:
                             available ? AppColors.primary : AppColors.textHint),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(a['label'] as String,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: available
-                              ? AppColors.charcoal
-                              : AppColors.textHint,
-                          fontWeight: FontWeight.w600,
-                          decoration:
-                              available ? null : TextDecoration.lineThrough)),
-                ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(a['label'] as String,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 12,
+                              color: available
+                                  ? AppColors.charcoal
+                                  : AppColors.textHint,
+                              fontWeight: FontWeight.w600,
+                              decoration: available
+                                  ? null
+                                  : TextDecoration.lineThrough)),
+                    ),
+                  ],
+                ),
               );
             },
           ),
@@ -1325,7 +1337,8 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     );
   }
 
-  // الشريط السفلي — زر الحجز الأساسي + زر ثانوي "تواصل مع المضيف" زي الصورة
+  // الشريط السفلي الثابت — السعر + زر "احجز الآن" هو الإجراء الرئيسي
+  // الوحيد بالصفحة، بلا أزرار ثانوية تنافسه على الانتباه.
   Widget _buildBottomBar(ChaletModel chalet) {
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -1339,79 +1352,53 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
               offset: const Offset(0, -4))
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      // ✅ إصلاح: زر "تواصل مع المضيف" أُزيل هنا — كان onTap يحمل TODO فاضٍ
+      // فعلياً (لا ينفّذ شيئاً)، ولا يوجد بالـbackend حالياً أي طريقة آمنة
+      // لعرض رقم/بيانات تواصل المالك لعميل لم يحجز بعد (لا حقل owner
+      // phone على ChaletModel، ولا RPC عام لذلك — الاستعلام الوحيد الذي
+      // يُرجع هاتف عبر profiles هو getIncomingBookings، وهو خاص بالمالك
+      // نفسه على حجوزاته). عرض الزر فعّالاً بلا وظيفة كان مضلّلاً؛
+      // حذفه أفضل من زر معطّل دائم حتى تقرروا شكل ميزة التواصل المطلوبة.
+      child: Row(
         children: [
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('السعر لليلة',
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: AppColors.textSecondary)),
-                  Text(AppCurrency.formatPrice(chalet.pricePerNight),
-                      style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primary)),
-                ],
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (!requireAuth(
-                        context,
-                        PendingAuthAction(
-                            'open_booking', {'chaletId': chalet.id}))) return;
-                    context
-                        .push('/home/booking', extra: {'chaletId': chalet.id});
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: const Text(AppStrings.bookNow,
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700)),
-                ),
-              ),
+              const Text('السعر لليلة',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      color: AppColors.textSecondary)),
+              Text(AppCurrency.formatPrice(chalet.pricePerNight),
+                  style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.primary)),
             ],
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
+          const SizedBox(width: 16),
+          Expanded(
+            child: ElevatedButton(
               onPressed: () {
                 if (!requireAuth(
                     context,
                     PendingAuthAction(
-                        'open_chat', {'ownerId': chalet.ownerId}))) return;
-                // TODO: اربطها بمسار الرسائل/التواصل مع المضيف عندك
-                // مثال: context.push('/home/chat', extra: chalet.ownerId);
+                        'open_booking', {'chaletId': chalet.id}))) return;
+                context.push('/home/booking', extra: {'chaletId': chalet.id});
               },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary),
-                minimumSize: const Size(double.infinity, 46),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 52),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
               ),
-              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-              label: const Text('تواصل مع المضيف',
+              child: const Text(AppStrings.bookNow,
                   style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700)),
             ),
           ),
@@ -1504,5 +1491,112 @@ class _ReviewItem extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+}
+
+// ✅ إعادة تصميم: معرض صور بشاشة كاملة — خلفية سوداء غامرة، تكبير/تصغير
+// بالقرص لكل صورة (InteractiveViewer) مع سحب أفقي للتنقل بين الصور
+// (PageView)، وعدّاد أعلى الشاشة. مستقل تماماً عن كاروسيل الصفحة
+// الرئيسية فما في أي تعارض إيماءات مع بقية الصفحة القابلة للتمرير.
+class _FullScreenGallery extends StatefulWidget {
+  final List<String> images;
+  final int initialIndex;
+
+  const _FullScreenGallery({
+    required this.images,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<_FullScreenGallery> {
+  late final PageController _controller =
+      PageController(initialPage: widget.initialIndex);
+  late int _index = widget.initialIndex;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: widget.images.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (_, i) => InteractiveViewer(
+              minScale: 1,
+              maxScale: 4,
+              child: Center(
+                child: CachedNetworkImage(
+                  imageUrl: widget.images[i],
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => const Icon(
+                    Icons.home_work_rounded,
+                    size: 60,
+                    color: Colors.white38,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Material(
+                      color: Colors.black45,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Icon(Icons.close_rounded,
+                              color: Colors.white, size: 22),
+                        ),
+                      ),
+                    ),
+                    if (widget.images.length > 1)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black45,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          '${_index + 1}/${widget.images.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

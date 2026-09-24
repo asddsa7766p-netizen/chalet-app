@@ -1,17 +1,31 @@
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_strings.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_colors.dart';
 import '../home/home_tab.dart';
 import '../favorites/favorites_screen.dart';
 import '../profile/profile_screen.dart';
 import '../reels/reels_screen.dart';
 import '../map/palestine_chalets_map_screen.dart';
-import '../favorites/favorites_screen.dart';
 import '../../widgets/common/login_prompt.dart';
 import '../../../data/services/services.dart';
+
+/// ✅ إصلاح: الانتقال لتبويب معيّن عبر context.go('/home', extra: N) كان
+/// يعمل مرة واحدة فقط — لأن MainScreen لا تكتشف إلا "تغيّر" قيمة
+/// initialIndex، فأي طلب ثانٍ لنفس التبويب (مثلاً "عرض حجوزاتي" بعد حجز
+/// ثانٍ، أو صف "حجوزاتي" بصفحة حسابي بعد الرجوع لتبويب حسابي) كان يُتجاهل
+/// ويبقى المستخدم بمكانه. هذا المساعد يرسل طلب تبويب صريحاً في كل مرة.
+void goToMainTab(BuildContext context, int index) {
+  MainScreen.tabRequest.value = index;
+  context.go('/home', extra: index);
+}
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;
   const MainScreen({super.key, this.initialIndex = 0});
+
+  /// طلب تبديل تبويب من خارج MainScreen (يُستهلك ويُصفَّر فور تطبيقه).
+  static final ValueNotifier<int?> tabRequest = ValueNotifier<int?>(null);
+
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
@@ -19,19 +33,49 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
 
+  // مفتاح يتغيّر عند فتح تبويب الحجوزات ليُعاد تحميل القائمة: MyBookingsScreen
+  // كانت تُحمَّل مرة واحدة فقط (لحظة بناء IndexedStack، غالباً قبل تسجيل
+  // الدخول أو قبل إنشاء الحجز)، فالحجز الجديد لا يظهر، ولا توجد طريقة
+  // للتحديث بالسحب لأن حالة "لا يوجد حجوزات" لا تحتوي RefreshIndicator.
+  Key _bookingsKey = UniqueKey();
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    final pending = MainScreen.tabRequest.value;
+    if (pending != null) {
+      _currentIndex = pending;
+      MainScreen.tabRequest.value = null;
+    }
+    MainScreen.tabRequest.addListener(_onTabRequest);
+  }
+
+  @override
+  void dispose() {
+    MainScreen.tabRequest.removeListener(_onTabRequest);
+    super.dispose();
+  }
+
+  void _onTabRequest() {
+    final i = MainScreen.tabRequest.value;
+    if (i == null) return;
+    MainScreen.tabRequest.value = null;
+    if (mounted) _selectTab(i);
+  }
+
+  void _selectTab(int i) {
+    setState(() {
+      if (i == 3) _bookingsKey = UniqueKey();
+      _currentIndex = i;
+    });
   }
 
   @override
   void didUpdateWidget(covariant MainScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.initialIndex != oldWidget.initialIndex) {
-      setState(() {
-        _currentIndex = widget.initialIndex;
-      });
+      _selectTab(widget.initialIndex);
     }
   }
 
@@ -43,7 +87,7 @@ class _MainScreenState extends State<MainScreen> {
       const HomeTab(),
       const PalestineChaletsMapScreen(),
       const FavoritesScreen(),
-      const MyBookingsScreen(),
+      MyBookingsScreen(key: _bookingsKey),
       const ReelsScreen(),
       const ProfileScreen(),
     ];
@@ -69,12 +113,12 @@ class _MainScreenState extends State<MainScreen> {
             requireAuth(context, PendingAuthAction('open_tab', {'index': i}));
             return;
           }
-          setState(() => _currentIndex = i);
+          _selectTab(i);
         },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFF1A73E8),
-        unselectedItemColor: const Color(0xFF9E9E9E),
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textHint,
         selectedLabelStyle: const TextStyle(
           fontFamily: 'Cairo',
           fontSize: 11,

@@ -8,6 +8,7 @@ import '../../../data/models/chalet_model.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
+import '../../../data/services/pricing_service.dart' show ChaletStayType;
 import '../../../core/utils/currency_formatter.dart';
 import '../../widgets/common/common_widgets.dart';
 
@@ -24,10 +25,16 @@ class FavoritesScreen extends ConsumerStatefulWidget {
 class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
   List<ChaletModel> _favorites = [];
   bool _loading = true;
+  // ✅ إصلاح: فشل التحميل كان يُبلع ويُعرض كأنه "لا توجد مفضلة" (رسالة
+  // مضلّلة لمن عنده مفضلة فعلاً). الآن حالة خطأ صريحة مع إعادة محاولة.
+  bool _loadError = false;
   Set<String>? _lastIds;
 
   Future<void> _loadChalets(Set<String> ids) async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = false;
+    });
     try {
       final favs = await FavoritesService.instance.getFavorites();
       if (mounted) {
@@ -39,15 +46,51 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
     } catch (e, st) {
       debugPrint('❌ خطأ تحميل المفضلة: $e');
       debugPrint('$st');
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = true;
+        });
+      }
     }
   }
 
   Future<void> _remove(String chaletId) async {
-    await ref.read(favoritesProvider.notifier).toggleFavorite(
-          _favorites.firstWhere((c) => c.id == chaletId),
-        );
+    // firstWhere كان يرمي StateError لو لم يعد العنصر بالقائمة (ضغطتان سريعتان).
+    final matches = _favorites.where((c) => c.id == chaletId);
+    if (matches.isEmpty) return;
+    await ref.read(favoritesProvider.notifier).toggleFavorite(matches.first);
   }
+
+  Widget _buildLoadError() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  size: 48, color: AppColors.error),
+              const SizedBox(height: 12),
+              const Text('تعذر تحميل المفضلة',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              const Text('تحقق من اتصالك بالإنترنت وحاول مجدداً',
+                  style: TextStyle(
+                      fontFamily: 'Cairo', color: AppColors.textSecondary)),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => _loadChalets(_lastIds ?? {}),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('إعادة المحاولة',
+                    style: TextStyle(fontFamily: 'Cairo')),
+              ),
+            ],
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +141,9 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
-          : _favorites.isEmpty
+          : _loadError
+              ? _buildLoadError()
+              : _favorites.isEmpty
               ? _buildEmpty()
               : RefreshIndicator(
                   onRefresh: () => _loadChalets(_lastIds ?? {}),
@@ -190,7 +235,13 @@ class MyBookingsScreen extends StatefulWidget {
 class _MyBookingsScreenState extends State<MyBookingsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _tabs = ['الحالية', 'القادمة', 'السابقة', 'الملغاة'];
+  // ✅ إصلاح: كانت التسميات "الحالية"/"القادمة" لا تطابق ما تعرضه فعلياً —
+  // "الحالية" كانت تعرض حجوزات confirmed بغض النظر عن التاريخ (حجز مؤكد
+  // بعد 3 أشهر كان يظهر كأنه "حالي")، و"القادمة" كانت تعرض pending (حجز
+  // لم يوافق عليه المالك بعد، وليس بالضرورة "قادم" — قد يُرفض). التسميات
+  // الآن تصف الحالة الفعلية التي يفلتر عليها كل تبويب، بدون أي تغيير على
+  // منطق الفلترة نفسه.
+  final _tabs = ['مؤكدة', 'قيد الانتظار', 'سابقة', 'ملغاة'];
   final _statuses = [
     ['confirmed'],
     ['pending'],
@@ -199,6 +250,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   ];
   Map<int, List<BookingModel>> _bookingsMap = {};
   bool _loading = true;
+  // ✅ إصلاح: فشل التحميل كان يُعرض كأنه "لا يوجد حجوزات" بكل التبويبات.
+  bool _loadError = false;
+  bool _cancelling = false;
 
   @override
   void initState() {
@@ -214,7 +268,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = false;
+    });
     try {
       final all = await BookingService.instance.getMyBookings();
       final map = <int, List<BookingModel>>{};
@@ -229,11 +286,17 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = true;
+        });
+      }
     }
   }
 
   Future<void> _cancel(String bookingId, int tabIdx) async {
+    if (_cancelling) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -255,8 +318,22 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       ),
     );
     if (confirm == true) {
-      await BookingService.instance.cancelBooking(bookingId);
-      _load();
+      // ✅ إصلاح: فشل الإلغاء كان استثناءً غير معالَج (لا رسالة للمستخدم).
+      _cancelling = true;
+      try {
+        await BookingService.instance.cancelBooking(bookingId);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('تعذر إلغاء الحجز، يرجى المحاولة مرة أخرى',
+                style: TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: AppColors.error,
+          ));
+        }
+      } finally {
+        _cancelling = false;
+      }
+      if (mounted) _load();
     }
   }
 
@@ -288,25 +365,69 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
+          : _loadError
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline_rounded,
+                        size: 48, color: AppColors.error),
+                    const SizedBox(height: 12),
+                    const Text('تعذر تحميل حجوزاتك',
+                        style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    const Text('تحقق من اتصالك بالإنترنت وحاول مجدداً',
+                        style: TextStyle(
+                            fontFamily: 'Cairo',
+                            color: AppColors.textSecondary)),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('إعادة المحاولة',
+                          style: TextStyle(fontFamily: 'Cairo')),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : TabBarView(
               controller: _tabController,
               children: List.generate(_tabs.length, (i) {
                 final bookings = _bookingsMap[i] ?? [];
                 if (bookings.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  // قابلة للسحب للتحديث حتى وهي فارغة (كانت Center ثابتة
+                  // بلا أي طريقة لإعادة التحميل).
+                  return RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       children: [
-                        const Icon(Icons.calendar_month_rounded,
-                            size: 60, color: AppColors.sand),
-                        const SizedBox(height: 14),
-                        Text(
-                          'لا يوجد ${_tabs[i]}',
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textSecondary,
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.5,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.calendar_month_rounded,
+                                    size: 60, color: AppColors.sand),
+                                const SizedBox(height: 14),
+                                Text(
+                                  'لا يوجد ${_tabs[i]}',
+                                  style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -354,10 +475,24 @@ class _BookingCard extends StatelessWidget {
     }
   }
 
+  // ✅ إصلاح: كان booking.id.substring(0,8) يرمي RangeError لو كان الـid
+  // أقصر من 8 أحرف. نفس الحماية المطبّقة أصلاً بـbooking_screen.dart
+  // (_bookingCode)، هون فقط لم تكن مطبّقة.
+  String get _shortId =>
+      booking.id.length >= 8 ? booking.id.substring(0, 8) : booking.id;
+
   @override
   Widget build(BuildContext context) {
     final bg = AppColors.card;
-    return Container(
+    // ✅ إصلاح: البطاقة كانت لا تُظهر نوع الإقامة رغم توفره فعلياً
+    // بـBookingModel.stayType، ولا يوجد أي طريقة للانتقال منها لصفحة
+    // الشاليه (لا تفاعل عند الضغط إطلاقاً).
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => context.push(
+        '/home/chalet/${booking.chaletId}',
+      ),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: bg,
@@ -377,7 +512,7 @@ class _BookingCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'حجز #${booking.id.substring(0, 8)}',
+                  'حجز #$_shortId',
                   style: const TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12,
@@ -488,11 +623,37 @@ class _BookingCard extends StatelessWidget {
               children: [
                 const Divider(height: 1),
                 const SizedBox(height: 10),
+                // ✅ إضافة: نوع الإقامة الفعلي لهذا الحجز، فقط عندما يكون
+                // ذا معنى (غير 'default' — السلوك القديم بلا أنواع إقامة).
+                // بيانات حقيقية موجودة أصلاً بـBookingModel.stayType.
+                if (booking.stayType != 'default') ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryPale,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        ChaletStayType.fromDb(booking.stayType).shortLabel,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${booking.nightsCount} ليالٍ · ${booking.guestsCount} ضيف',
+                      '${booking.nightsCount == 1 ? 'ليلة واحدة' : '${booking.nightsCount} ليالٍ'} · ${booking.guestsCount} ضيف',
                       style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 12,
@@ -541,6 +702,7 @@ class _BookingCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -561,6 +723,7 @@ class ReviewsScreen extends StatefulWidget {
 class _ReviewsScreenState extends State<ReviewsScreen> {
   List<ReviewModel> _reviews = [];
   bool _loading = true;
+  bool _loadError = false;
   int _myRating = 0;
   final _commentCtrl = TextEditingController();
   bool _submitting = false;
@@ -578,7 +741,10 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = false;
+    });
     try {
       final reviews =
           await ReviewsService.instance.getChaletReviews(widget.chaletId);
@@ -589,19 +755,27 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = true;
+        });
+      }
     }
   }
 
   Future<void> _submit() async {
-    if (_myRating == 0) return;
+    if (_myRating == 0 || _submitting) return;
     setState(() => _submitting = true);
     try {
       await ReviewsService.instance.addReview(
         chaletId: widget.chaletId,
         rating: _myRating,
-        comment: _commentCtrl.text.isEmpty ? null : _commentCtrl.text,
+        comment: _commentCtrl.text.trim().isEmpty
+            ? null
+            : _commentCtrl.text.trim(),
       );
+      if (!mounted) return;
       _commentCtrl.clear();
       setState(() {
         _myRating = 0;
@@ -612,7 +786,12 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       if (mounted) {
         setState(() => _submitting = false);
         final msg = _ is Exception ? _.toString() : 'error';
-        if (msg.contains('not_eligible_review')) {
+        if (msg.contains('already_reviewed')) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('لقد قمت بتقييم إقامتك السابقة في هذا الشاليه'),
+            backgroundColor: AppColors.primary,
+          ));
+        } else if (msg.contains('not_eligible_review')) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: const Text('لا يمكنك إضافة تقييم قبل إكمال حجز'),
             backgroundColor: AppColors.primary,
@@ -717,11 +896,38 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                 _buildAddReview(),
                 const Divider(height: 1),
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _reviews.length,
-                    itemBuilder: (_, i) => _ReviewTile(review: _reviews[i]),
-                  ),
+                  child: _loadError
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('تعذر تحميل التقييمات',
+                                  style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                onPressed: _load,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('إعادة المحاولة',
+                                    style: TextStyle(fontFamily: 'Cairo')),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _reviews.isEmpty
+                          ? const Center(
+                              child: Text('لا توجد تقييمات بعد',
+                                  style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      color: AppColors.textHint)),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _reviews.length,
+                              itemBuilder: (_, i) =>
+                                  _ReviewTile(review: _reviews[i]),
+                            ),
                 ),
               ],
             ),
@@ -793,7 +999,13 @@ class _ReviewTile extends StatelessWidget {
                 ? NetworkImage(review.userAvatar!)
                 : null,
             child: review.userAvatar == null
-                ? Text((review.userName ?? 'م').characters.first,
+                ? Text(
+                    // ✅ إصلاح: characters.first كان يرمي StateError لو الاسم
+                    // نصاً فاضياً '' (نفس الحماية الموجودة أصلاً بصفحة الشاليه).
+                    (review.userName != null &&
+                            review.userName!.trim().isNotEmpty)
+                        ? review.userName!.trim().characters.first
+                        : 'م',
                     style: const TextStyle(
                         fontFamily: 'Cairo',
                         color: AppColors.primary,

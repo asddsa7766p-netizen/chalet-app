@@ -544,9 +544,14 @@ class ChaletPricingService {
     };
 
     final result = <DateTime, DayPriceInfo>{};
+    // ✅ إصلاح: كان d.add(Duration(days: 1)) يضيف 24 ساعة بالضبط، فبعد
+    // انتهاء التوقيت الصيفي (أواخر أكتوبر بتوقيت القدس) يصير المفتاح
+    // 23:00 لليوم السابق بدل منتصف الليل — فلا يجد التقويم أسعار الأيام
+    // الأخيرة من الشهر (تأكدت بتشغيل تجربة: 6 مفاتيح خاطئة بأكتوبر 2026 ويوم
+    // 31 مفقود). بناء التاريخ بمكوّناته يتجاوز المشكلة تماماً.
     for (var d = firstDay;
         !d.isAfter(lastDay);
-        d = d.add(const Duration(days: 1))) {
+        d = DateTime(d.year, d.month, d.day + 1)) {
       final key = dayKey(d);
       final ourWeekday = d.weekday % 7;
 

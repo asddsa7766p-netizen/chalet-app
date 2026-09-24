@@ -4,8 +4,14 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/pricing_constants.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
+import '../../../data/services/notification_service.dart';
+import 'manual_booking_actions.dart';
+import 'manual_booking_sheet.dart';
+import 'owner_booking_actions.dart';
+import 'owner_bottom_nav.dart';
 
 class OwnerBookingsScreen extends StatefulWidget {
   const OwnerBookingsScreen({super.key});
@@ -19,10 +25,26 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
   bool _actionLoading = false;
   String? _error;
   List<BookingModel> _bookings = [];
+  // ✅ إصلاح: نفس نمط تحميل unreadCount المستخدم في owner_dashboard_screen.dart
+  // (Problem #2)، حتى تعرض شارة الإشعارات في OwnerBottomNav هنا العدد
+  // الحقيقي بدل الاعتماد على القيمة الافتراضية صفر.
+  int _unreadCount = 0;
+
+  Future<void> _cancelManualBooking(BookingModel b) async {
+    final cancelled = await confirmAndCancelManualBooking(context, b);
+    if (mounted && cancelled) _load();
+  }
 
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  Future<void> _addManualBooking() async {
+    final saved = await openManualBookingSheet(context);
+    if (!mounted || !saved) return;
+    _showSnack('تم حجز التواريخ');
     _load();
   }
 
@@ -32,10 +54,14 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
       _error = null;
     });
     try {
-      final incoming = await BookingService.instance.getIncomingBookings();
+      final results = await Future.wait([
+        BookingService.instance.getIncomingBookings(),
+        NotificationService.instance.getUnreadCount(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _bookings = incoming;
+        _bookings = results[0] as List<BookingModel>;
+        _unreadCount = results[1] as int;
         _loading = false;
       });
     } catch (e) {
@@ -52,13 +78,8 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
     if (_actionLoading) return;
     setState(() => _actionLoading = true);
     try {
-      await BookingService.instance.confirmIncomingBooking(bookingId);
-      await _load();
-      if (!mounted) return;
-      _showSnack('تم تأكيد الحجز بنجاح');
-    } catch (_) {
-      if (!mounted) return;
-      _showSnack('تعذر تأكيد الحجز، يرجى المحاولة لاحقاً', isError: true);
+      final ok = await confirmBookingFlow(context, bookingId);
+      if (ok) await _load();
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -66,43 +87,11 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
 
   Future<void> _onReject(String bookingId) async {
     if (_actionLoading) return;
-
-    // إضافة تأكيد قبل الرفض، تجنبًا لرفض حجز بالخطأ بضغطة واحدة (لم يكن
-    // موجودًا في النسخة السابقة).
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('رفض الحجز',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
-        content: const Text(
-          'هل أنت متأكد من رفض هذا الحجز؟ لا يمكن التراجع عن هذا الإجراء.',
-          style: TextStyle(fontFamily: 'Cairo'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('رفض الحجز',
-                style: TextStyle(fontFamily: 'Cairo', color: AppColors.error)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
+    final ok = await rejectBookingFlow(context, bookingId);
+    if (!ok || !mounted) return;
     setState(() => _actionLoading = true);
     try {
-      await BookingService.instance.rejectIncomingBooking(bookingId);
       await _load();
-      if (!mounted) return;
-      _showSnack('تم رفض الحجز');
-    } catch (_) {
-      if (!mounted) return;
-      _showSnack('تعذر رفض الحجز، يرجى المحاولة لاحقاً', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -171,6 +160,21 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.primary,
         elevation: 0,
+        actions: [
+          IconButton(
+            onPressed: () => context.push('/owner-external'),
+            icon: const Icon(Icons.edit_calendar_rounded),
+            tooltip: 'الحجوزات اليدوية',
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addManualBooking,
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('حجز يدوي',
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
       ),
       body: _loading
           ? const Center(
@@ -197,6 +201,13 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                               _bookingCard(_bookings[i]),
                         ),
             ),
+      // ✅ إصلاح: إضافة نفس الشريط السفلي المستخدم بلوحة التحكم و
+      // "شاليهاتي"، بدل إجبار المالك على العودة للوحة التحكم أولًا
+      // للانتقال منها إلى قسم آخر.
+      bottomNavigationBar: OwnerBottomNav(
+        currentRoute: '/owner-bookings',
+        unreadCount: _unreadCount,
+      ),
     );
   }
 
@@ -254,6 +265,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
   Widget _bookingCard(BookingModel b) {
     final isPending = b.status == BookingStatus.pending;
     final statusColor = _statusColor(b.status);
+    final isManual = b.isManual;
 
     return Container(
       decoration: BoxDecoration(
@@ -362,15 +374,17 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
 
                 // ✅ بيانات الضيف (الاسم / الهاتف / الصورة) — مطلوبة على كل
                 // بطاقة حجز ليتمكن المالك من رؤية كامل بيانات الضيف فورًا.
-                _buildGuestSection(b),
+                _buildGuestSection(b, isManual: isManual),
 
                 const SizedBox(height: 12),
 
                 // ✅ عرض فقط (DISPLAY-ONLY): تفاصيل عمولة المنصة للمالك —
                 // لا تُخصم فعليًا من أي مبلغ ولا تغير bookings.total_price.
-                _buildOwnerPriceBreakdown(b),
-
-                const SizedBox(height: 12),
+                // مخفية للحجز اليدوي: نسبة العمولة لا تنطبق على حجز خارج المنصة.
+                if (!isManual) ...[
+                  _buildOwnerPriceBreakdown(b),
+                  const SizedBox(height: 12),
+                ],
                 if (isPending)
                   Row(
                     children: [
@@ -449,6 +463,20 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                           ),
                         ],
                       ),
+                      if (canCancelManualBooking(b))
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: TextButton.icon(
+                            onPressed: () => _cancelManualBooking(b),
+                            icon: const Icon(Icons.event_busy_rounded,
+                                size: 16, color: AppColors.error),
+                            label: const Text('إلغاء الحجز',
+                                style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    color: AppColors.error)),
+                          ),
+                        ),
                       // زر "التواصل مع الضيف" غير مُفعّل بعد (لا توجد آلية
                       // تواصل/رسائل داخل التطبيق حاليًا)، فتمت إزالته من
                       // الواجهة بدل تركه ظاهرًا ومعطّلاً بشكل مضلل للمالك.
@@ -462,9 +490,15 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
     );
   }
 
-  Widget _buildGuestSection(BookingModel b) {
-    final hasName = (b.guestName ?? '').isNotEmpty;
-    final hasPhone = (b.guestPhone ?? '').isNotEmpty;
+  Widget _buildGuestSection(BookingModel b, {required bool isManual}) {
+    // الحجز اليدوي: صاحب الحساب هو المالك نفسه، فبيانات الضيف الحقيقية
+    // تُستخرج من الملاحظات (انظر manual_booking.dart).
+    final manualGuest = isManual ? b.manualGuest : null;
+    final guestName = isManual ? manualGuest!.name : b.guestName;
+    final guestPhone = isManual ? manualGuest!.phone : b.guestPhone;
+    final guestAvatar = isManual ? null : b.guestAvatar;
+    final hasName = (guestName ?? '').isNotEmpty;
+    final hasPhone = (guestPhone ?? '').isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -483,14 +517,14 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: AppColors.primary.withOpacity(0.1),
-              image: b.guestAvatar != null && b.guestAvatar!.isNotEmpty
+              image: guestAvatar != null && guestAvatar.isNotEmpty
                   ? DecorationImage(
-                      image: NetworkImage(b.guestAvatar!),
+                      image: NetworkImage(guestAvatar),
                       fit: BoxFit.cover,
                     )
                   : null,
             ),
-            child: b.guestAvatar == null || b.guestAvatar!.isEmpty
+            child: guestAvatar == null || guestAvatar.isEmpty
                 ? const Icon(Icons.person_rounded,
                     color: AppColors.primary, size: 22)
                 : null,
@@ -501,7 +535,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  hasName ? b.guestName! : 'ضيف',
+                  hasName ? guestName! : 'ضيف',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -514,7 +548,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                 if (hasPhone) ...[
                   const SizedBox(height: 2),
                   Text(
-                    b.guestPhone!,
+                    guestPhone!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textDirection: TextDirection.ltr,
@@ -529,9 +563,24 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
               ],
             ),
           ),
-          // أيقونة توضيحية
-          Icon(Icons.person_outline_rounded,
-              size: 18, color: AppColors.textMuted),
+          // شارة "حجز يدوي" للحجز الذي أدخله المالك بنفسه، وإلا أيقونة توضيحية
+          if (isManual)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Text('حجز يدوي',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.charcoal)),
+            )
+          else
+            Icon(Icons.person_outline_rounded,
+                size: 18, color: AppColors.textMuted),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -12,17 +13,19 @@ import '../../../data/models/models.dart';
 import '../../../data/models/chalet_model.dart';
 
 import '../../widgets/common/common_widgets.dart';
+import '../profile/profile_provider.dart';
 
-class OwnerAddChaletScreen extends StatefulWidget {
+class OwnerAddChaletScreen extends ConsumerStatefulWidget {
   final ChaletModel? chalet;
 
   const OwnerAddChaletScreen({super.key, this.chalet});
 
   @override
-  State<OwnerAddChaletScreen> createState() => _OwnerAddChaletScreenState();
+  ConsumerState<OwnerAddChaletScreen> createState() =>
+      _OwnerAddChaletScreenState();
 }
 
-class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
+class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
   static const Color _darkGreen = Color(0xFF3D5228);
   static const Color _gold = Color(0xFFC9A24B);
 
@@ -37,8 +40,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
   final _cityCtrl = TextEditingController(text: 'نابلس');
   final _locationCtrl = TextEditingController();
   final _pricePerNightCtrl = TextEditingController(text: '0');
-  final _depositCtrl = TextEditingController(text: '0');
-  final _minNightsCtrl = TextEditingController(text: '1');
   final _videoUrlCtrl = TextEditingController();
 
   String _bookingType = 'يومي';
@@ -106,8 +107,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
     _cityCtrl.dispose();
     _locationCtrl.dispose();
     _pricePerNightCtrl.dispose();
-    _depositCtrl.dispose();
-    _minNightsCtrl.dispose();
     _videoUrlCtrl.dispose();
     super.dispose();
   }
@@ -368,8 +367,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
       'has_wifi': _wifi,
       'has_bbq': _bbq,
       'has_parking': _parking,
-      'deposit_amount': double.tryParse(_depositCtrl.text.trim()) ?? 0,
-      'min_nights': int.tryParse(_minNightsCtrl.text.trim()) ?? 1,
       'booking_type': _bookingType,
       'video_url':
           _videoUrlCtrl.text.trim().isEmpty ? null : _videoUrlCtrl.text.trim(),
@@ -423,13 +420,35 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
         existingImageUrls: _existingImageUrls,
       );
 
-      await AuthService.instance.becomeOwner();
+      // ✅ إصلاح: القيمة المرجعة كانت تُهمَل بالكامل. شرط become_owner()
+      // ببكند (شاليه واحد على الأقل is_approved=true) لا يتحقق عادةً
+      // لأن أي شاليه جديد يُدرَج دائمًا بـ is_approved=false (بانتظار
+      // مراجعة الإدارة) — فكانت الواجهة تعرض "نجاح" وتنتقل لـ
+      // /owner-dashboard رغم أن الدور لم يتغيّر فعليًا، فيُعاد طرد
+      // المستخدم فورًا من حارس الراوتر (isHost=false) وكأن كل شيء اختفى.
+      final becameOwner = await AuthService.instance.becomeOwner();
 
       if (!mounted) return;
-      _showSnack('تم حفظ الشاليه بنجاح ✅');
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (!mounted) return;
-      context.go('/owner-dashboard');
+
+      if (becameOwner) {
+        // ✅ يزامن حالة الحساب في Riverpod مع Supabase فورًا (بدل بقاء
+        // profileProvider يعرض role=customer القديم لحد إعادة بناء
+        // لاحقة من مكان آخر).
+        ref.invalidate(profileProvider);
+        _showSnack('تم حفظ الشاليه بنجاح ✅');
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (!mounted) return;
+        context.go('/owner-dashboard');
+      } else {
+        // الشاليه انحفظ فعليًا بنجاح بقاعدة البيانات — هذا ليس فشلًا
+        // بالحفظ، فقط وضع المالك لسا غير مفعّل لحد ما الإدارة توافق.
+        _showSnack(
+          'تم حفظ الشاليه بنجاح، وبانتظار موافقة الإدارة لتفعيل حساب المالك.',
+        );
+        await Future.delayed(const Duration(milliseconds: 1200));
+        if (!mounted) return;
+        context.go('/home');
+      }
     } catch (_) {
       if (mounted) {
         _showSnack('حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً', isError: true);
@@ -537,7 +556,7 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
           const SizedBox(height: 14),
           CustomTextField(
             controller: _locationCtrl,
-            label: 'العنوان',
+            label: 'المنطقة/الحي',
             hint: 'مثال: قرب مدخل بيتا',
             prefixIcon: Icons.location_on_outlined,
           ),
@@ -627,6 +646,14 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
+                // ✅ إصلاح: outlinedButtonTheme العام يفرض
+                // minimumSize: Size(double.infinity, 52)، وهذا الزر طفل
+                // غير مرن (بدون Expanded) داخل Row — التركيبة تسبب
+                // "BoxConstraints forces an infinite width". تجاوز
+                // minimumSize محليًا لـSize.zero يجعل الزر يأخذ عرضًا
+                // مناسبًا لمحتواه الفعلي (النص المتغيّر أو مؤشر التحميل)
+                // بدل عرض لانهائي، دون تغيير توزيع بقية الـRow.
+                minimumSize: Size.zero,
               ),
               child: _fetchingLocation
                   ? const SizedBox(
@@ -815,32 +842,6 @@ class _OwnerAddChaletScreenState extends State<OwnerAddChaletScreen> {
             validator: (v) {
               final val = double.tryParse(v?.trim() ?? '');
               if (val == null || val <= 0) return 'أدخل رقم أكبر من صفر';
-              return null;
-            },
-          ),
-          const SizedBox(height: 14),
-          CustomTextField(
-            controller: _depositCtrl,
-            label: 'مبلغ الوديعة',
-            hint: 'مثال: 100',
-            prefixIcon: Icons.account_balance_wallet_outlined,
-            keyboardType: TextInputType.number,
-            validator: (v) {
-              final val = double.tryParse(v?.trim() ?? '');
-              if (val == null || val < 0) return 'أدخل رقم صحيح';
-              return null;
-            },
-          ),
-          const SizedBox(height: 14),
-          CustomTextField(
-            controller: _minNightsCtrl,
-            label: 'الحد الأدنى للليالي',
-            hint: 'مثال: 1',
-            prefixIcon: Icons.nights_stay_outlined,
-            keyboardType: TextInputType.number,
-            validator: (v) {
-              final val = int.tryParse(v?.trim() ?? '');
-              if (val == null || val <= 0) return 'أدخل رقم صحيح';
               return null;
             },
           ),

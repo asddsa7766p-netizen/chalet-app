@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 
-/// ملاحظة: هاي الألوان مأخوذة من تصميم شاشات الدفع.
-/// إذا عندك ملف theme/colors مركزي بالمشروع (AppColors)، استبدل هاي القيم
-/// بالقيم يلي عندك حتى تضمن التطابق مع باقي الشاشات.
+import '../../../core/constants/app_colors.dart';
+
+/// موحّدة الآن مع AppColors المركزي بدل تعريف تدرّج ألوان مستقل لشاشات
+/// الدفع فقط — كانت سابقاً قيماً منفصلة تماماً (أخضر زيتوني مختلف عن
+/// AppColors.primary) وهو ما كان يخلي شاشات الدفع تبدو كتطبيق مختلف عن
+/// باقي Makan.
 class PaymentColors {
-  static const Color primaryDark =
-      Color(0xFF3E4A2E); // أخضر زيتوني غامق (الأزرار الرئيسية)
-  static const Color primaryDarker =
-      Color(0xFF2E3722); // أخضر أغمق (شاشة النجاح)
-  static const Color background = Color(0xFFFAF8F3); // خلفية كريمية فاتحة
-  static const Color cardBackground = Color(0xFFFFFFFF);
-  static const Color borderLight = Color(0xFFE5E2D9);
-  static const Color textPrimary = Color(0xFF1F241A);
-  static const Color textSecondary = Color(0xFF6B7060);
-  static const Color success = Color(0xFF3E4A2E);
-  static const Color error = Color(0xFFE05B5B);
+  static const Color primaryDark = AppColors.primary;
+  static const Color primaryDarker = AppColors.primaryDark;
+  static const Color background = AppColors.background;
+  static const Color cardBackground = AppColors.card;
+  static const Color borderLight = AppColors.border;
+  static const Color textPrimary = AppColors.textPrimary;
+  static const Color textSecondary = AppColors.textSecondary;
+  static const Color success = AppColors.success;
+  static const Color error = AppColors.error;
   static const Color errorBackground = Color(0xFFFCEAEA);
-  static const Color goldAccent = Color(0xFFC9A24B);
+  static const Color goldAccent = AppColors.accentMuted;
 }
 
 class PaymentTextStyles {

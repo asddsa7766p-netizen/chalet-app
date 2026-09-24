@@ -6,11 +6,12 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/constants/pricing_constants.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/models/models.dart';
+import '../../../data/services/chalet_slot_availability.dart';
 import '../../../data/services/services.dart';
 import '../../widgets/common/common_widgets.dart';
+import '../home/main_screen.dart' show goToMainTab;
 import '../../../core/utils/currency_formatter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -25,6 +26,11 @@ class BookingScreen extends StatefulWidget {
 
 class _BookingScreenState extends State<BookingScreen> {
   static const Color _darkGreen = Color(0xFF3D5228);
+
+  // تعارض إدراج حقيقي (23505/exclusion) على مستوى الفترة، وليس يوماً محجوباً
+  // (unavailableDatesMessage الأعم تغطي المحجوب أعلاه).
+  static const _slotJustBookedMessage =
+      'تم حجز هذه الفترة للتو، يرجى اختيار فترة أخرى';
 
   DateTime? _checkIn;
   DateTime? _checkOut;
@@ -41,6 +47,12 @@ class _BookingScreenState extends State<BookingScreen> {
   int get _guests => _adults + _children;
 
   String _paymentMethod = 'cash';
+
+  // ⛔ الدفع الإلكتروني معطّل مؤقتاً لحين اختيار بوابة دفع حقيقية وربطها.
+  // حالياً MockPaymentGateway لا ينشئ حجزاً فعلياً بقاعدة البيانات، فمنع
+  // اختياره من الواجهة هنا يمنع أي وهم بأن الحجز تم فعلاً. لا تفعّل هذا
+  // قبل ربط بوابة دفع حقيقية بمسار /payment.
+  static const bool _onlinePaymentEnabled = false;
   bool _loading = false;
   bool _showCalendar = false;
   bool _selectingCheckIn = true;
@@ -51,13 +63,21 @@ class _BookingScreenState extends State<BookingScreen> {
   String? _availabilityError;
   bool _serverCalculated = false;
 
-  Set<DateTime> _bookedDates = {};
+  // توفر الفترات (صباحية/مسائية) لكل يوم، من دالة القاعدة الموحّدة
+  // get_chalet_slot_availability — الشاليه يقبل حجزاً صباحياً وآخر مسائياً
+  // بنفس اليوم، فلم يعد كافياً تمثيل التوفر كمجموعة ليالٍ.
+  Map<DateTime, ChaletDaySlot> _daySlots = {};
 
   bool _stayTypesLoading = true;
   List<ChaletStayTypeConfig> _enabledStayTypes = [];
   String _selectedStayType = BookingService.defaultStayType;
 
   DateTime _visibleMonth = DateTime(DateTime.now().year, DateTime.now().month);
+
+  // ✅ إصلاح: كانت getMonthPricing تُستدعى وتُنتظر (5 طلبات متوازية أحياناً)
+  // ثم تُرمى نتيجتها بالكامل بدون استخدام — تقويم بلا أي سعر يومي رغم أن
+  // البيانات الحقيقية جاهزة أصلاً. الآن تُخزَّن لعرضها تحت كل يوم بالتقويم.
+  Map<DateTime, DayPriceInfo> _monthPricing = {};
 
   int _monthPricingRequestId = 0;
 
@@ -134,6 +154,7 @@ class _BookingScreenState extends State<BookingScreen> {
         chaletId: _chaletId,
         checkIn: _checkIn!,
         checkOut: _checkOut!,
+        stayType: _selectedStayType,
       );
 
       if (!mounted) return;
@@ -225,15 +246,21 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Future<void> _onStayTypeSelected(String stayType) async {
     if (stayType == _selectedStayType) return;
+    // ✅ إصلاح: رقم الطلب لم يكن يتغيّر إلا بعد انتظار تسعير الشهر، فطلب
+    // سعر قديم (لنوع الإقامة السابق) كان يستطيع الردّ في هذه الفجوة ويُظهر
+    // سعراً قديماً على نوع الإقامة الجديد. نُبطله فوراً ونبدأ الحساب مباشرة.
+    _priceRequestId++;
     setState(() {
       _selectedStayType = stayType;
       _serverCalculated = false;
       _serverTotalPrice = null;
+      _priceLoading = _checkIn != null && _checkOut != null && _nights > 0;
     });
-    await _loadMonthPricing(_visibleMonth);
+    final monthFuture = _loadMonthPricing(_visibleMonth);
     if (_checkIn != null && _checkOut != null && _nights > 0) {
       await _fetchServerPrice();
     }
+    await monthFuture;
   }
 
   Future<void> _loadMonthPricing(DateTime month) async {
@@ -241,7 +268,7 @@ class _BookingScreenState extends State<BookingScreen> {
     final stayTypeForThisRequest = _selectedStayType;
 
     try {
-      await ChaletPricingService.instance.getMonthPricing(
+      final pricing = await ChaletPricingService.instance.getMonthPricing(
         chaletId: _chaletId,
         year: month.year,
         month: month.month,
@@ -253,6 +280,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
       setState(() {
         _visibleMonth = month;
+        _monthPricing = pricing;
       });
     } catch (_) {}
   }
@@ -272,7 +300,7 @@ class _BookingScreenState extends State<BookingScreen> {
     }
     // ✅ إصلاح: كان استدعاء _fetchBookedDates() يحصل فقط بالمسار اللي
     // بيوصل فيه widget.chalet جاهز مباشرة (else branch)، فإذا الشاشة
-    // فُتحت بـ chaletId فقط، تبقى _bookedDates فاضية للأبد، وبالتالي
+    // فُتحت بـ chaletId فقط، تبقى _unavailableNights فاضية للأبد، وبالتالي
     // enabledDayPredicate ما بيعطّل أي تاريخ محجوز بالتقويم. نقلتها هون
     // عشان تشتغل دايماً بمجرد ما نعرف الـ chaletId، بغض النظر عن المصدر.
     _fetchBookedDates();
@@ -362,6 +390,13 @@ class _BookingScreenState extends State<BookingScreen> {
     // If user chose online payment, route to PaymentScreen (mock processing)
     if (_paymentMethod == 'online') {
       setState(() => _loading = false);
+      // ⛔ حارس أمان إضافي: حتى لو وصلت الحالة هون بأي طريقة، امنع
+      // الدخول لمسار الدفع الإلكتروني المعطّل مؤقتاً (لا ينشئ حجزاً فعلياً).
+      if (!_onlinePaymentEnabled) {
+        _showSnack(
+            'الدفع الإلكتروني غير متاح حالياً، يرجى اختيار الدفع النقدي');
+        return;
+      }
       if (_chaletModel == null) {
         _showSnack('تعذر فتح بوابة الدفع الآن');
         return;
@@ -396,17 +431,43 @@ class _BookingScreenState extends State<BookingScreen> {
     } catch (e) {
       debugPrint('Booking error: $e');
       final msg = e.toString();
-      final isConflict = msg.contains('23505') ||
+      // ✅ إصلاح: تأكدت فعلياً بتشغيل التطبيق أن createBooking تمرّر الخطأ
+      // عبر _translateSupabaseError أولاً (services.dart) قبل وصوله هنا —
+      // فيصبح نصاً عربياً مترجَماً، لا يحتوي أبداً على '23505'/'23P01'/
+      // 'Booking conflict' الأصلية (كانت هذه الشروط ميتة عملياً، تفشل
+      // دائماً بصمت وتُظهر رسالة الخطأ العامة حتى بحالة تعارض حقيقي).
+      // الفحص الآن على نفس النص العربي الفعلي الذي تُرجعه الترجمة.
+      // أيام غير متاحة (محجوبة) رفضها الـ trigger: رسالة محايدة لا تدّعي أن
+      // اليوم حُجز للتو من أحد.
+      final isUnavailable = msg.contains(unavailableDatesMessage);
+      final isConflict = isUnavailable ||
+          msg.contains('محجوز') ||
+          msg.contains('23505') ||
           msg.contains('23P01') ||
           msg.contains('Booking conflict');
 
-      _showSnack(isConflict
-          ? 'عذراً، هذا التاريخ أصبح محجوزاً للتو من مستخدم آخر. يرجى اختيار تواريخ أخرى'
-          : 'حدث خطأ أثناء الحجز، يرجى المحاولة مجدداً');
+      _showSnack(isUnavailable
+          ? unavailableDatesMessage
+          : isConflict
+              ? _slotJustBookedMessage
+              : 'حدث خطأ أثناء الحجز، يرجى المحاولة مجدداً');
 
       if (isConflict) {
         await _fetchBookedDates();
-        await _fetchServerPrice();
+        // التواريخ المختارة التي صارت غير متاحة تُفرَّغ ليعيد الضيف الاختيار.
+        if (_rangeHasUnavailableDay()) {
+          if (mounted) {
+            setState(() {
+              _checkIn = null;
+              _checkOut = null;
+              _selectingCheckIn = true;
+              _serverCalculated = false;
+              _serverTotalPrice = null;
+            });
+          }
+        } else {
+          await _fetchServerPrice();
+        }
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -416,21 +477,29 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _fetchBookedDates() async {
     if (_chaletId.isEmpty) return;
     try {
-      final dates = await BookingService.instance.getBookedDates(
-        _chaletId,
-      );
+      final slots = await BookingService.instance.getDaySlots(_chaletId);
       if (!mounted) return;
       setState(() {
-        _bookedDates =
-            dates.map((d) => DateTime(d.year, d.month, d.day)).toSet();
+        _daySlots = slots;
       });
     } catch (_) {}
   }
 
-  bool _isDateBooked(DateTime day) {
-    final d = DateTime(day.year, day.month, day.day);
-    return _bookedDates.contains(d);
-  }
+  bool _rangeHasUnavailableDay() => rangeHasUnavailableDayForStayType(
+        _checkIn,
+        _checkOut,
+        stayType: _selectedStayType,
+        slots: _daySlots,
+      );
+
+  /// قاعدة التفعيل الوحيدة للتقويم، حسب نوع الإقامة المختار حالياً.
+  bool _isDayEnabled(DateTime day) => !isDayDisabledForStaySlot(
+        day,
+        slots: _daySlots,
+        stayType: _selectedStayType,
+        checkIn: _checkIn,
+        selectingEnd: !_selectingCheckIn && _checkIn != null,
+      );
 
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -494,7 +563,14 @@ class _BookingScreenState extends State<BookingScreen> {
                     size: 58, color: _darkGreen),
               ),
               const SizedBox(height: 16),
-              const Text('تم حجزك بنجاح 🎉',
+              // ✅ إصلاح: النص كان يقول "تم تأكيد طلبك" رغم أن كل حجز
+              // يُنشأ دائماً بحالة 'pending' (createBooking بـservices.dart
+              // يضع status:'pending' دون استثناء — التأكيد الفعلي إجراء
+              // منفصل لاحق من المالك). كان يدّعي أيضاً "إرسال التفاصيل
+              // لهاتفك" رغم عدم وجود أي إرسال SMS/إشعار فعلي بالكود. الآن
+              // النص يعكس الحالة الحقيقية فقط ويوجّه لمصدر الحقيقة الفعلي
+              // (صفحة حجوزاتي) بدل الادّعاء بتواصل غير موجود.
+              const Text('تم إرسال طلب حجزك ✅',
                   style: TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 24,
@@ -502,7 +578,8 @@ class _BookingScreenState extends State<BookingScreen> {
                       color: _darkGreen),
                   textAlign: TextAlign.center),
               const SizedBox(height: 8),
-              const Text('تم تأكيد طلبك وإرسال التفاصيل لهاتفك',
+              const Text(
+                  'طلبك الآن قيد انتظار موافقة المالك. يمكنك متابعة حالة حجزك في أي وقت من صفحة حجوزاتي',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontFamily: 'Cairo',
@@ -538,7 +615,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     context.pop();
-                    context.go('/home', extra: 3);
+                    goToMainTab(context, 3);
                   },
                   icon: const Icon(Icons.description_rounded),
                   style: ElevatedButton.styleFrom(
@@ -548,7 +625,11 @@ class _BookingScreenState extends State<BookingScreen> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
-                  label: const Text('عرض تفاصيل الحجز',
+                  // ✅ إصلاح: النص كان "عرض تفاصيل الحجز" لكنه فعلياً
+                  // يفتح قائمة "حجوزاتي" الكاملة (لا توجد شاشة تفاصيل حجز
+                  // منفصلة) — لم أُضِف مساراً جديداً، فقط صححت التسمية
+                  // لتطابق الوجهة الفعلية.
+                  label: const Text('عرض حجوزاتي',
                       style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 15,
@@ -624,7 +705,11 @@ class _BookingScreenState extends State<BookingScreen> {
                   const SizedBox(height: 22),
                   _buildNotesSection(),
                   const SizedBox(height: 22),
-                  if (_nights > 0) _buildPriceSummary(),
+                  if (_nights > 0) ...[
+                    _buildPriceSummary(),
+                    const SizedBox(height: 16),
+                    _buildBookingStatusNotice(),
+                  ],
                 ],
               ),
             ),
@@ -749,23 +834,24 @@ class _BookingScreenState extends State<BookingScreen> {
               // ⚠️ عداد الصور "1/25" ثابت هون كمثال. إذا عندك قائمة صور
               // فعلية بـ chalet.images (List<String>) بدّل الرقم الثابت
               // بـ _chaletModel?.images.length وفعّل كاروسيل حقيقي.
-              Positioned(
-                bottom: 10,
-                left: 10,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.45),
-                    borderRadius: BorderRadius.circular(20),
+              if ((_chaletModel?.images.length ?? 0) > 1)
+                Positioned(
+                  bottom: 10,
+                  left: 10,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.45),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('${_chaletModel?.images.length ?? 0} صور',
+                        style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                            color: Colors.white)),
                   ),
-                  child: const Text('1 / 25',
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: Colors.white)),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -826,14 +912,27 @@ class _BookingScreenState extends State<BookingScreen> {
           // ⚠️ أيقونات المرافق ثابتة (مسبح/جلسات خارجية/موقف خاص) كمثال
           // مطابق للصورة. إذا عندك قائمة amenities ديناميكية بالموديل،
           // بدّل هاد الـ Row بـ loop على _chaletModel?.amenities.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _amenityIcon(Icons.pool_rounded, 'مسبح'),
-              _amenityIcon(Icons.deck_outlined, 'جلسات خارجية'),
-              _amenityIcon(Icons.local_parking_outlined, 'موقف خاص'),
-            ],
-          ),
+          // ✅ إصلاح: كانت الأيقونات (مسبح/جلسات خارجية/موقف خاص) ثابتة لكل
+          // الشاليهات بغض النظر عن مرافقها الفعلية — تضليل للمستخدم. الآن من
+          // بيانات الشاليه نفسها.
+          if (_chaletModel != null &&
+              (_chaletModel!.hasPool ||
+                  _chaletModel!.hasWifi ||
+                  _chaletModel!.hasParking ||
+                  _chaletModel!.hasBbq))
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                if (_chaletModel!.hasPool)
+                  _amenityIcon(Icons.pool_rounded, 'مسبح'),
+                if (_chaletModel!.hasWifi)
+                  _amenityIcon(Icons.wifi_rounded, 'واي فاي'),
+                if (_chaletModel!.hasParking)
+                  _amenityIcon(Icons.local_parking_outlined, 'موقف خاص'),
+                if (_chaletModel!.hasBbq)
+                  _amenityIcon(Icons.outdoor_grill_rounded, 'شواء'),
+              ],
+            ),
         ],
       ),
     );
@@ -957,10 +1056,14 @@ class _BookingScreenState extends State<BookingScreen> {
               border: Border.all(color: AppColors.sand),
             ),
             child: TableCalendar(
+              // ✅ إصلاح: بدون هذا كان اسم الشهر وأيام الأسبوع يظهران
+              // بالإنجليزية دائماً (مؤكَّد بتشغيل التطبيق فعلياً) رغم أن
+              // التقويم داخل شاشة عربية بالكامل.
+              locale: 'ar',
               firstDay: DateTime.now(),
               lastDay: DateTime.now().add(const Duration(days: 365)),
               focusedDay: _checkIn ?? DateTime.now(),
-              enabledDayPredicate: (day) => !_isDateBooked(day),
+              enabledDayPredicate: _isDayEnabled,
               selectedDayPredicate: (day) {
                 if (_selectingCheckIn) return isSameDay(_checkIn, day);
                 return isSameDay(_checkOut, day);
@@ -968,8 +1071,23 @@ class _BookingScreenState extends State<BookingScreen> {
               rangeStartDay: _checkIn,
               rangeEndDay: _checkOut,
               calendarFormat: CalendarFormat.month,
-              rowHeight: 52,
+              rowHeight: 58,
               rangeSelectionMode: RangeSelectionMode.toggledOn,
+              // ✅ إصلاح: هذه البيانات (سعر كل يوم) كانت تُجلب فعلياً
+              // بـ_loadMonthPricing وتُرمى بدون استخدام. الآن تُعرض تحت كل
+              // يوم — بيانات حقيقية من نفس المصدر المعتمد بحساب السعر
+              // النهائي، وليست قيمة مُخترعة.
+              calendarBuilders: CalendarBuilders(
+                defaultBuilder: (context, day, focusedDay) =>
+                    _dayCell(day, false),
+                todayBuilder: (context, day, focusedDay) =>
+                    _dayCell(day, false, isToday: true),
+                // اليوم غير المتاح يظهر مشطوباً بهدوء بلا ذكر السبب (محجوز
+                // أم محجوب)، والمعطَّل لسبب آخر (ماضٍ أو فترة تعبر يوماً غير
+                // متاح) رمادي فقط.
+                disabledBuilder: (context, day, focusedDay) =>
+                    _disabledCell(day),
+              ),
               onPageChanged: (focusedDay) {
                 final newMonth = DateTime(focusedDay.year, focusedDay.month);
                 if (newMonth.year != _visibleMonth.year ||
@@ -984,10 +1102,27 @@ class _BookingScreenState extends State<BookingScreen> {
                     _checkOut = null;
                     _selectingCheckIn = false;
                     _serverCalculated = false;
+                  } else if (_checkIn == null) {
+                    // ✅ إصلاح: تأكدت بتشغيل التطبيق فعلياً أن الضغط على مربّع
+                    // "تاريخ المغادرة" أولاً (قبل اختيار أي تاريخ وصول) كان
+                    // يسجّل التاريخ المضغوط كـ"مغادرة" مباشرة (لأن
+                    // `_checkIn ?? DateTime.now()` تجعل أي تاريخ مستقبلي
+                    // "بعد" القيمة الافتراضية) ويُغلق التقويم فوراً — فيبقى
+                    // "تاريخ الوصول" فارغاً للأبد بلا أي رسالة، والمستخدم لا
+                    // يفهم لماذا لا يظهر السعر أو لماذا زر الحجز معطّل.
+                    // بدون تاريخ وصول، أول تاريخ يُضغط دائماً هو تاريخ الوصول.
+                    _checkIn = selected;
+                    _checkOut = null;
+                    _selectingCheckIn = false;
                   } else {
-                    if (selected.isAfter(_checkIn ?? DateTime.now())) {
+                    if (selected.isAfter(_checkIn!)) {
                       _checkOut = selected;
                       _showCalendar = false;
+                    } else if (isSameDay(selected, _checkIn)) {
+                      // الحجز بالليالي (قاعدة البيانات تشترط مغادرة بعد الوصول):
+                      // بدل تجاهل الضغطة بصمت، نوضّح للمستخدم السبب.
+                      _showSnack(
+                          'يجب أن يكون تاريخ المغادرة بعد تاريخ الوصول بيوم على الأقل');
                     } else {
                       _checkIn = selected;
                       _checkOut = null;
@@ -1072,6 +1207,121 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
+  // نص قصير يوضّح أي فترة حرة ليوم "جزئي" (فترة واحدة محجوزة والثانية حرة).
+  // مستقل عن نوع الإقامة المختار حالياً — يعتمد فقط على حالة الفترتين الخام.
+  String? _partialSlotNote(DateTime day) {
+    final slot = _daySlots[DateTime(day.year, day.month, day.day)];
+    if (slot == null || !slot.isPartiallyBooked) return null;
+    return slot.morningBooked ? 'مسائي فقط' : 'صباحي فقط';
+  }
+
+  Widget _disabledCell(DateTime day) {
+    final slot = _daySlots[DateTime(day.year, day.month, day.day)];
+    final unavailable = slot?.isFullyUnavailable ?? false;
+    final note = _partialSlotNote(day);
+    return Container(
+      margin: const EdgeInsets.all(2),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${day.day}',
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textHint.withOpacity(0.7),
+              decoration: unavailable ? TextDecoration.lineThrough : null,
+            ),
+          ),
+          // يوم جزئي معطّل لنوع الإقامة المختار حالياً (مثلاً "صباحية" وهذا
+          // اليوم صباحه محجوز): نوضّح أي فترة تبقى متاحة فعلاً.
+          if (note != null)
+            Text(
+              note,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 8,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textHint.withOpacity(0.7),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ إضافة: خلية يوم بالتقويم تعرض السعر الفعلي (من _monthPricing —
+  // نفس البيانات الحقيقية المستخدمة أصلاً بحساب السعر، وليست قيمة
+  // مُخترعة) تحت رقم اليوم، بدل يوم بلا أي معلومة سعر قبل اختياره.
+  //
+  // ✅ يوم "جزئي" (فترة واحدة فقط محجوزة) يظهر بلون مميّز مع نص قصير
+  // يوضّح أي فترة ما زالت متاحة، بدل السعر، حتى قبل اختيار نوع الإقامة.
+  Widget _dayCell(DateTime day, bool _, {bool isToday = false}) {
+    final key = DateTime(day.year, day.month, day.day);
+    final info = _monthPricing[key];
+    final note = _partialSlotNote(day);
+
+    return Container(
+      margin: const EdgeInsets.all(2),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: isToday
+                ? const BoxDecoration(
+                    color: AppColors.accent, shape: BoxShape.circle)
+                : note != null
+                    ? BoxDecoration(
+                        color: const Color(0xFFE0A63C).withOpacity(0.15),
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: const Color(0xFFE0A63C)),
+                      )
+                    : null,
+            child: Text(
+              '${day.day}',
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                color: isToday ? Colors.white : AppColors.charcoal,
+              ),
+            ),
+          ),
+          if (note != null)
+            Text(
+              note,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFE0A63C),
+              ),
+            )
+          else if (info != null)
+            Text(
+              info.finalPrice.toStringAsFixed(0),
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color:
+                    info.isSpecialOffer ? AppColors.error : AppColors.textHint,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ===================== STAY TYPE =====================
   Widget _buildStayTypeSection() {
     return Column(
@@ -1114,18 +1364,29 @@ class _BookingScreenState extends State<BookingScreen> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
+            // ✅ إصلاح: بطاقة نوع الإقامة كانت تفيض أفقياً فعلياً على
+            // شاشة موبايل حقيقية (390px) — "OVERFLOWED BY 28 PIXELS" —
+            // لأن تسمية النوع (مثل "يوم كامل - صباحي") ونطاق الوقت لم
+            // يكونا مقيَّدين بعرض البطاقة الثلاثية الأعمدة. تأكدت من هذا
+            // بتشغيل التطبيق فعلياً على عرض هاتف حقيقي، وليس افتراضاً.
             Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(config.type.label,
-                        style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color:
-                                selected ? Colors.white : AppColors.charcoal)),
+                    Flexible(
+                      child: Text(config.type.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: selected
+                                  ? Colors.white
+                                  : AppColors.charcoal)),
+                    ),
                     const SizedBox(width: 4),
                     Icon(config.type.icon,
                         size: 15,
@@ -1136,6 +1397,9 @@ class _BookingScreenState extends State<BookingScreen> {
                 const SizedBox(height: 6),
                 Text(
                   '${config.checkinTime.format(context)} - ${config.checkoutTime.format(context)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 10,
@@ -1163,60 +1427,88 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  Widget _payOption(String value, IconData icon, String title, String sub) {
-    final selected = _paymentMethod == value;
-    return GestureDetector(
-      onTap: () => setState(() => _paymentMethod = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: selected ? _darkGreen.withOpacity(0.06) : AppColors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? _darkGreen : AppColors.sand,
-            width: selected ? 1.5 : 1,
+  Widget _payOption(String value, IconData icon, String title, String sub,
+      {bool enabled = true}) {
+    final selected = enabled && _paymentMethod == value;
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: GestureDetector(
+        onTap: enabled ? () => setState(() => _paymentMethod = value) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: selected ? _darkGreen.withOpacity(0.06) : AppColors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? _darkGreen : AppColors.sand,
+              width: selected ? 1.5 : 1,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: selected ? _darkGreen : const Color(0xFFF1EEE6),
-                borderRadius: BorderRadius.circular(10),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: selected ? _darkGreen : const Color(0xFFF1EEE6),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon,
+                    color: selected ? Colors.white : AppColors.textHint,
+                    size: 20),
               ),
-              child: Icon(icon,
-                  color: selected ? Colors.white : AppColors.textHint,
-                  size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: selected ? _darkGreen : AppColors.charcoal)),
-                  Text(sub,
-                      style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: AppColors.textSecondary)),
-                ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(title,
+                            style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: selected
+                                    ? _darkGreen
+                                    : AppColors.charcoal)),
+                        if (!enabled) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.sand,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('قريباً',
+                                style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textSecondary)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    Text(enabled ? sub : 'غير متاح حالياً',
+                        style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                            color: AppColors.textSecondary)),
+                  ],
+                ),
               ),
-            ),
-            Radio<String>(
-              value: value,
-              groupValue: _paymentMethod,
-              onChanged: (v) => setState(() => _paymentMethod = v!),
-              activeColor: _darkGreen,
-            ),
-          ],
+              Radio<String>(
+                value: value,
+                groupValue: _paymentMethod,
+                onChanged:
+                    enabled ? (v) => setState(() => _paymentMethod = v!) : null,
+                activeColor: _darkGreen,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1408,7 +1700,8 @@ class _BookingScreenState extends State<BookingScreen> {
             'ادفع نقداً عند وصولك للشاليه'),
         const SizedBox(height: 8),
         _payOption('online', Icons.credit_card_rounded,
-            AppStrings.onlinePayment, 'ادفع إلكترونياً بأمان عبر التطبيق'),
+            AppStrings.onlinePayment, 'ادفع إلكترونياً بأمان عبر التطبيق',
+            enabled: _onlinePaymentEnabled),
       ],
     );
   }
@@ -1473,13 +1766,15 @@ class _BookingScreenState extends State<BookingScreen> {
       return const SizedBox.shrink();
     }
 
-    final base = _total!;
-    final serviceFee = base * kServiceFeePercentage;
-    // ⚠️ "رسوم المنصة" بالتصميم غير موجودة كثابت واضح بـ pricing_constants.dart
-    // يلي عندي. حطيت نسبة مؤقتة placeholder، بدّلها بالثابت الفعلي عندك
-    // (مثلاً kPlatformFeePercentage) إذا موجود، أو احذف السطر لو مش مطلوب.
-    final platformFee = base * 0.03; // TODO: استبدل بالثابت الحقيقي
-    final grandTotal = base + serviceFee + platformFee;
+    // ✅ إصلاح (قرار عمل): كانت هذه البطاقة تضيف "ضريبة الخدمة 3%" و"رسوم
+    // المنصة 3%" (قيمة placeholder غير مرتبطة بأي ثابت حقيقي أصلاً) فوق
+    // السعر الأساسي، فيظهر للعميل "مجموع كلي" أكبر بـ6% مما يُحفظ ويُحجز
+    // فعلياً بقاعدة البيانات (bookings.total_price = السعر الأساسي فقط،
+    // تحقق من ذلك فعلياً عبر RPC calculate_chalet_stay_price وقراءة صف
+    // الحجز بعد إنشائه). بقرار صريح: العمولة/الرسوم لا تُعرض للعميل
+    // إطلاقاً، والمجموع المعروض هنا يطابق بالضبط ما سيُحفظ وما يظهر على
+    // زر التأكيد بالأسفل — رقم واحد فقط، مصدر واحد (_serverTotalPrice).
+    final total = _total!;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1500,22 +1795,51 @@ class _BookingScreenState extends State<BookingScreen> {
           ),
           child: Column(
             children: [
-              _priceRow('السعر الأساسي (يومي)', AppCurrency.formatPrice(base)),
-              const SizedBox(height: 10),
               _priceRow(
-                  'ضريبة الخدمة (${(kServiceFeePercentage * 100).toStringAsFixed(0)}%)',
-                  AppCurrency.formatPrice(serviceFee)),
-              const SizedBox(height: 10),
-              _priceRow('رسوم المنصة', AppCurrency.formatPrice(platformFee)),
+                  'السعر الأساسي (يومي)', AppCurrency.formatPrice(total)),
               const SizedBox(height: 12),
               const Divider(),
               const SizedBox(height: 4),
-              _priceRow('المجموع الكلي', AppCurrency.formatPrice(grandTotal),
+              _priceRow('المجموع الكلي', AppCurrency.formatPrice(total),
                   total: true),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  // ✅ إضافة: قبل التأكيد، كان المستخدم لا يعرف أبداً ما ستكون عليه حالة
+  // حجزه بعد الضغط على "تأكيد الحجز" — createBooking ينشئ الحجز دائماً
+  // بحالة 'pending' بانتظار موافقة المالك (services.dart)، لكن لا شيء
+  // بالشاشة كان يوضّح ذلك قبل الإرسال. ملاحظة صغيرة صادقة بدل تفاجؤ
+  // المستخدم لاحقاً.
+  Widget _buildBookingStatusNotice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.primaryPale.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              size: 18, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'بعد التأكيد، سيُرسل طلبك للمالك للموافقة عليه. يمكنك متابعة حالة الحجز في أي وقت من صفحة حجوزاتي.',
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                height: 1.6,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

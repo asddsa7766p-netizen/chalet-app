@@ -10,6 +10,11 @@ import 'core/theme/app_state_providers.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'dart:async';
+import 'data/providers/favorites_provider.dart';
+import 'data/services/services.dart' show AuthService;
+import 'presentation/screens/profile/profile_provider.dart';
 
 const _sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
 
@@ -66,6 +71,12 @@ Future<void> main() async {
   // Ensure SharedPreferences is ready before any Supabase local storage init.
   // لا تزال مطلوبة لأنها تُستخدم بأماكن أخرى بالتطبيق (اللغة/الثيم/onboarding).
   await SharedPreferences.getInstance();
+
+  // ✅ إصلاح: بدون تهيئة بيانات intl العربية، كانت مكوّنات مثل تقويم شاشة
+  // الحجز (TableCalendar) تعرض اسم الشهر وأيام الأسبوع بالإنجليزية
+  // ("September 2026"، "Sat Fri Thu...") رغم أن كل التطبيق عربي —
+  // تأكدت من هذا فعلياً بتشغيل التطبيق، وليس افتراضاً.
+  await initializeDateFormatting('ar');
 
   // Load environment variables (.env)
   await _loadEnv();
@@ -135,10 +146,25 @@ class FriendsChaletsApp extends ConsumerStatefulWidget {
 
 class _FriendsChaletsAppState extends ConsumerState<FriendsChaletsApp> {
   bool _loadedPrefs = false;
+  StreamSubscription<AuthState>? _authSub;
 
   @override
   void initState() {
     super.initState();
+
+    // ✅ إصلاح: favoritesProvider/profileProvider تُبنى مرة واحدة (غالباً كضيف:
+    // قائمة مفضلة فارغة وبروفايل null) ولا تُحدَّث عند تسجيل الدخول — فبعد
+    // "ضيف ← تسجيل دخول" تبقى القلوب/المفضلة/حسابي (زر لوحة المالك) بحالة
+    // الضيف القديمة. الاستماع لتغيّر الجلسة يعيد جلبها عند الدخول/الخروج.
+    _authSub = AuthService.instance.authStateChanges.listen((state) {
+      if (state.event == AuthChangeEvent.signedIn ||
+          state.event == AuthChangeEvent.signedOut ||
+          state.event == AuthChangeEvent.userUpdated) {
+        AuthService.instance.clearAdminCache();
+        ref.invalidate(favoritesProvider);
+        ref.invalidate(profileProvider);
+      }
+    });
 
     // Load preferences once. When notifiers load, they call notifyListeners(),
     // which triggers rebuild of MaterialApp thanks to ref.watch(...).
@@ -152,6 +178,12 @@ class _FriendsChaletsAppState extends ConsumerState<FriendsChaletsApp> {
       await themeNotifier.loadFromPrefs();
       await localeNotifier.loadFromPrefs();
     });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   @override

@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/chalet_model.dart';
 import '../models/models.dart';
+import 'chalet_slot_availability.dart';
+import 'unavailable_nights.dart';
 
 // ============================================
 // SUPABASE CLIENT
@@ -11,13 +14,38 @@ import '../models/models.dart';
 final supabase = Supabase.instance.client;
 
 /// ترجمة رسائل أخطاء قاعدة البيانات (PostgreSQL/Supabase) لرسائل واضحة ومفهومة للمستخدم
+/// رسالة اليوم الذي يرفضه الـ trigger لأنه غير متاح للحجز (محجوب). محايدة
+/// عمداً: لا تذكر أن المالك حجبه، وتصلح للضيف وللمالك في الحجز اليدوي.
+const unavailableDatesMessage =
+    'بعض الأيام المختارة غير متاحة للحجز. اختر تواريخ أخرى.';
+
+@visibleForTesting
+String translateSupabaseError(dynamic error) => _translateSupabaseError(error);
+
 String _translateSupabaseError(dynamic error) {
   final msg = error.toString();
   final normalized = msg.toLowerCase();
 
+  // يجب أن يسبق فرع "booking conflict" العام أدناه: رسالة الـ trigger
+  // "Booking conflict: availability unavailable" تحتويه، وكانت ستُعرض
+  // "هذا التاريخ محجوز" بينما اليوم محجوب لا محجوز.
+  if (normalized.contains('availability unavailable')) {
+    return unavailableDatesMessage;
+  }
+
+  // ✅ إصلاح: تأكدت فعلياً بتشغيل التطبيق أن تعارض حجز حقيقي (نفس التواريخ
+  // على نفس الشاليه) يرمي PostgrestException برمز 23P01 ورسالة تقنية خام
+  // ("conflicting key value violates exclusion constraint
+  // \"bookings_no_overlap\"") — لم تكن هذه الحالة معروفة هنا، فكانت تمر
+  // من الشرط أدناه (PostgrestException) وتُعرض كما هي حرفياً للمستخدم
+  // (رسالة تقنية غير مفهومة)، بدل رسالة "هذا التاريخ محجوز" الجاهزة أصلاً.
   if (normalized.contains('booking conflict: overlapping dates') ||
       normalized.contains('overlapping dates') ||
-      normalized.contains('booking conflict')) {
+      normalized.contains('booking conflict') ||
+      normalized.contains('bookings_no_overlap') ||
+      normalized.contains('exclusion constraint') ||
+      normalized.contains('23p01') ||
+      normalized.contains('23505')) {
     return 'هذا التاريخ محجوز، جرب تواريخ تانية';
   }
 
@@ -75,13 +103,20 @@ class AuthService {
         data: {'full_name': fullName, 'phone': phone},
       );
 
-      if (response.user != null) {
-        await supabase.from('profiles').upsert({
-          'id': response.user!.id,
-          'full_name': fullName,
-          'phone': phone,
-          'email': email,
-        });
+      // ✅ إصلاح: عند تفعيل تأكيد البريد لا توجد جلسة بعد التسجيل، فيرفض
+      // RLS (profiles_insert_own: id = auth.uid()) الـ upsert ويُعرض للمستخدم
+      // خطأ رغم أن الحساب أُنشئ فعلاً (والبروفايل ينشئه trigger
+      // handle_new_user). نحدّث البروفايل فقط عند وجود جلسة، ولا نُفشل
+      // التسجيل بسبب هذه الخطوة الثانوية.
+      if (response.user != null && response.session != null) {
+        try {
+          await supabase.from('profiles').upsert({
+            'id': response.user!.id,
+            'full_name': fullName,
+            'phone': phone,
+            'email': email,
+          });
+        } catch (_) {}
       }
 
       return response;
@@ -111,10 +146,27 @@ class AuthService {
       await supabase.auth.signOut();
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
+    } finally {
+      // ✅ إصلاح: بدون هذا، لو مستخدم admin سجّل خروج ودخل مستخدم آخر
+      // بنفس جلسة التطبيق (بدون إعادة تشغيل كاملة)، isAdmin() كانت ترجّع
+      // القيمة المخزّنة القديمة بدل التحقق من جديد.
+      clearAdminCache();
     }
   }
 
   /// Reset password
+  ///
+  /// ملاحظة مهمة: هذا التطبيق موبايل بدون deep link/app link مُعدّ حالياً
+  /// (لا scheme ولا intent-filter)، فرابط "Reset Password" الافتراضي من
+  /// Supabase (المخصص لتطبيقات الويب) لن يفتح التطبيق. لهذا نعتمد بدلاً
+  /// منه على رمز التحقق (OTP) المكوّن من 6 أرقام الذي يرسله Supabase مع
+  /// نفس بريد "Reset Password" ضمن المتغيّر {{ .Token }}. راجع
+  /// [verifyPasswordRecoveryOtp] و [updatePassword] بالأسفل.
+  ///
+  /// ⚠️ إعداد خارجي مطلوب يدويًا في Supabase Dashboard (لا يمكن ضبطه من
+  /// الكود): Authentication → Email Templates → Reset Password، تأكد أن
+  /// نص الرسالة يتضمن {{ .Token }} (رمز الاسترداد المكوّن من 6 أرقام) —
+  /// القالب الافتراضي أحياناً يحتوي فقط على {{ .ConfirmationURL }}.
   Future<void> resetPassword(String email) async {
     try {
       await supabase.auth.resetPasswordForEmail(email);
@@ -122,6 +174,27 @@ class AuthService {
       throw Exception(_translateSupabaseError(e));
     }
   }
+
+  /// يتحقق من رمز استرداد كلمة المرور (OTP المكوّن من 6 أرقام المُرسَل
+  /// بالبريد بعد [resetPassword])، وينشئ جلسة "recovery" مؤقتة تسمح
+  /// بعدها فقط بمناداة [updatePassword] لتعيين كلمة مرور جديدة.
+  Future<void> verifyPasswordRecoveryOtp({
+    required String email,
+    required String token,
+  }) async {
+    try {
+      await supabase.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: OtpType.recovery,
+      );
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  // ملاحظة: بعد التحقق من رمز الاسترداد أعلاه، استخدم updatePassword()
+  // الموجودة بالأسفل بنفس هذا الكلاس لتعيين كلمة المرور الجديدة.
 
   /// Update password
   Future<UserResponse> updatePassword(String newPassword) async {
@@ -247,12 +320,18 @@ class ChaletService {
   ChaletService._();
 
   /// Get all chalets with optional filters
+  // ✅ إصلاح: has_bbq/has_parking أعمدة حقيقية موجودة أصلاً بجدول chalets
+  // (ومقروءة أصلاً في ChaletModel)، لكنها لم تكن مدعومة كفلتر بحث إطلاقاً.
+  // إضافتهما هنا استعلام Dart عادي على عمود موجود فعلياً — بلا أي تعديل
+  // على الـschema أو الـRLS أو أي RPC.
   Future<List<ChaletModel>> getChalets({
     String? city,
     double? minPrice,
     double? maxPrice,
     bool? hasPool,
     bool? hasWifi,
+    bool? hasBbq,
+    bool? hasParking,
     int? minGuests,
     String? searchQuery,
     int limit = 20,
@@ -272,10 +351,16 @@ class ChaletService {
       if (maxPrice != null) query = query.lte('price_per_night', maxPrice);
       if (hasPool == true) query = query.eq('has_pool', true);
       if (hasWifi == true) query = query.eq('has_wifi', true);
+      if (hasBbq == true) query = query.eq('has_bbq', true);
+      if (hasParking == true) query = query.eq('has_parking', true);
       if (minGuests != null) query = query.gte('max_guests', minGuests);
 
       if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+        // ✅ إصلاح: رموز صيغة فلتر PostgREST (الأقواس/الفاصلة/% ...) داخل
+        // نص البحث كانت تكسر الطلب كله (مثلاً البحث عن "شاليه (جديد)" يفشل
+        // بخطأ عام). نزيلها من الكلمات قبل بناء شرط or().
         final words = searchQuery
+            .replaceAll(RegExp(r'[(),%*\\:"]'), ' ')
             .trim()
             .split(RegExp(r'\s+'))
             .where((w) => w.isNotEmpty)
@@ -331,22 +416,33 @@ class ChaletService {
     }
   }
 
-  /// Check availability
+  /// Check availability.
+  ///
+  /// ✅ إصلاح: كانت تستعلم bookings مباشرة عن أي تداخل بتواريخ check_in/
+  /// check_out بغض النظر عن نوع الإقامة — بعد أن صار الشاليه يقبل حجزاً
+  /// صباحياً وآخر مسائياً بنفس اليوم، تداخل تواريخ خام لم يعد يعني عدم توفر
+  /// فعلي (حجز صباحي موجود لا يمنع حجزاً مسائياً بنفس اليوم). الآن تستدعي
+  /// دالة القاعدة الموحّدة is_chalet_available التي تفحص تعارض الفترات
+  /// الفعلية (occupied_slots) حسب p_stay_type، مطابقة تماماً لما يتحقق منه
+  /// الإدراج الفعلي بجدول bookings.
   Future<bool> isAvailable({
     required String chaletId,
     required DateTime checkIn,
     required DateTime checkOut,
+    String stayType = BookingService.defaultStayType,
   }) async {
     try {
-      final data = await supabase
-          .from('bookings')
-          .select()
-          .eq('chalet_id', chaletId)
-          .inFilter('status', ['pending', 'confirmed'])
-          .lt('check_in', checkOut.toIso8601String().split('T').first)
-          .gt('check_out', checkIn.toIso8601String().split('T').first);
+      final result = await supabase.rpc(
+        'is_chalet_available',
+        params: {
+          'p_chalet_id': chaletId,
+          'p_check_in': checkIn.toIso8601String().split('T').first,
+          'p_check_out': checkOut.toIso8601String().split('T').first,
+          'p_stay_type': stayType,
+        },
+      );
 
-      return (data as List).isEmpty;
+      return result as bool;
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }
@@ -497,26 +593,10 @@ class ChaletService {
       final data = await supabase
           .from('chalets')
           .select(
-            'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count',
+            'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count, max_guests',
           )
           .eq('owner_id', ownerId)
           .order('created_at', ascending: false);
-
-      return (data as List).cast<Map<String, dynamic>>();
-    } catch (e) {
-      throw Exception(_translateSupabaseError(e));
-    }
-  }
-
-  /// Get external-type chalets owned by the current owner.
-  Future<List<Map<String, dynamic>>> getOwnerExternalChalets(
-      String ownerId) async {
-    try {
-      final data = await supabase
-          .from('chalets')
-          .select('id, name')
-          .eq('owner_id', ownerId)
-          .eq('booking_type', 'خارجي');
 
       return (data as List).cast<Map<String, dynamic>>();
     } catch (e) {
@@ -611,25 +691,41 @@ class BookingService {
     }
   }
 
-  /// Get booked dates for a chalet (for calendar display)
-  Future<List<DateTime>> getBookedDates(String chaletId) async {
+  /// الليالي غير المتاحة (محجوزة أو محجوبة) لشاليه، من [from] (افتراضياً
+  /// اليوم) لمدى تقويم الضيف. تمرّ عبر دالة القاعدة لأن الضيف لا يقرأ حجوزات
+  /// غيره، وتعيد ليالٍ فقط بلا أي بيانات عن الضيف.
+  Future<List<DateTime>> getUnavailableNights(
+    String chaletId, {
+    DateTime? from,
+    @visibleForTesting RpcCaller? rpc,
+  }) async {
     try {
-      final data = await supabase
-          .from('bookings')
-          .select('check_in, check_out')
-          .eq('chalet_id', chaletId)
-          .inFilter('status', ['pending', 'confirmed']);
+      final nights = await UnavailableNights.load(
+        chaletId,
+        from: from ?? DateTime.now(),
+        rpc: rpc,
+      );
+      return nights.toList()..sort();
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
 
-      final List<DateTime> dates = [];
-      for (final row in data as List) {
-        DateTime current = DateTime.parse(row['check_in'] as String);
-        final end = DateTime.parse(row['check_out'] as String);
-        while (current.isBefore(end)) {
-          dates.add(DateTime(current.year, current.month, current.day));
-          current = current.add(const Duration(days: 1));
-        }
-      }
-      return dates;
+  /// توفر الفترات (صباحية/مسائية) لكل يوم لشاليه، من [from] (افتراضياً
+  /// اليوم) لمدى تقويم الضيف. المصدر الوحيد الذي يميّز حجز الفترتين معاً —
+  /// يستخدمه تقويم شاشة حجز الضيف بدل getUnavailableNights القديمة بعد أن
+  /// صار الشاليه يقبل حجزاً صباحياً وآخر مسائياً بنفس اليوم.
+  Future<Map<DateTime, ChaletDaySlot>> getDaySlots(
+    String chaletId, {
+    DateTime? from,
+    @visibleForTesting RpcCaller? rpc,
+  }) async {
+    try {
+      return await ChaletSlotAvailability.load(
+        chaletId,
+        from: from ?? DateTime.now(),
+        rpc: rpc,
+      );
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }
@@ -717,39 +813,26 @@ class BookingService {
     }
   }
 
-  /// Get external bookings for a list of chalet IDs owned by this user.
-  Future<List<Map<String, dynamic>>> getOwnerExternalBookings(
-      List<String> chaletIds) async {
-    if (chaletIds.isEmpty) return const [];
-
+  /// Cancel a manual (owner-entered) booking through cancel_external_booking.
+  ///
+  /// الدالة ترفض (برسائل عربية) إن لم يكن المستدعي مالك الشاليه، أو لم يكن
+  /// الحجز يدوياً، أو كان ملغى مسبقاً. الإلغاء يحرّر التواريخ.
+  Future<void> cancelExternalBooking(String bookingId) async {
     try {
-      final data = await supabase
-          .from('bookings')
-          .select(
-            'id, chalet_id, check_in, check_out, total_price, status, notes, '
-            'chalets!inner(name)',
-          )
-          .inFilter('chalet_id', chaletIds)
-          .order('check_in', ascending: false)
-          .limit(100);
-
-      return (data as List).cast<Map<String, dynamic>>();
+      await supabase.rpc(
+        'cancel_external_booking',
+        params: {'p_booking_id': bookingId},
+      );
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }
   }
 
-  /// Delete an external booking record by id.
-  Future<void> deleteBookingRecord(String bookingId) async {
-    try {
-      await supabase.from('bookings').delete().eq('id', bookingId);
-    } catch (e) {
-      throw Exception(_translateSupabaseError(e));
-    }
-  }
-
-  /// Create an external booking using the same RPC and parameters currently used
-  /// in the owner external booking flow.
+  /// Create a manual (owner-entered) booking through create_external_booking.
+  ///
+  /// [totalPrice] هو السعر المتفق عليه مع الضيف ويُستخدم كما هو (السيرفر
+  /// يرفض ≤ 0، ولو أُرسل null يرجع لسعر التقويم). لا عمولة على الحجز اليدوي.
+  /// نوع الإقامة الافتراضي 'default' لأن bookings_stay_type_check يرفض 'خارجي'.
   Future<void> createExternalBooking({
     required String chaletId,
     required DateTime checkIn,
@@ -759,7 +842,7 @@ class BookingService {
     required String guestName,
     required String guestPhone,
     String? notes,
-    String stayType = 'خارجي',
+    String stayType = defaultStayType,
   }) async {
     try {
       await supabase.rpc(
@@ -912,11 +995,45 @@ class ReviewsService {
       throw Exception('not_eligible_review');
     }
 
+    // ✅ إصلاح: سياسة RLS على reviews (reviews_insert_completed_booking_own)
+    // تشترط أن يطابق booking_id حجزاً مكتملاً للمستخدم نفسه، وقيد
+    // unique_review_per_booking يمنع أكثر من تقييم لنفس الحجز. التطبيق كان
+    // يرسل booking_id = null دائماً ⇒ كل محاولة تقييم تُرفض من السيرفر (رسالة
+    // "حدث خطأ" للمستخدم). نختار الآن أول حجز مكتمل لهذا الشاليه لم يُقيَّم بعد.
+    var effectiveBookingId = bookingId;
+    if (effectiveBookingId == null) {
+      try {
+        final completed = await supabase
+            .from('bookings')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('chalet_id', chaletId)
+            .eq('status', 'completed')
+            .order('check_out', ascending: false);
+        final ids = (completed as List).map((r) => r['id'] as String).toList();
+        final reviewed = ids.isEmpty
+            ? <String>{}
+            : ((await supabase
+                    .from('reviews')
+                    .select('booking_id')
+                    .eq('user_id', userId)
+                    .inFilter('booking_id', ids)) as List)
+                .map((r) => r['booking_id'] as String)
+                .toSet();
+        final free = ids.where((id) => !reviewed.contains(id));
+        if (free.isEmpty) throw Exception('already_reviewed');
+        effectiveBookingId = free.first;
+      } catch (e) {
+        if (e.toString().contains('already_reviewed')) rethrow;
+        throw Exception(_translateSupabaseError(e));
+      }
+    }
+
     try {
       await supabase.from('reviews').insert({
         'chalet_id': chaletId,
         'user_id': userId,
-        'booking_id': bookingId,
+        'booking_id': effectiveBookingId,
         'rating': rating,
         'comment': comment,
       });

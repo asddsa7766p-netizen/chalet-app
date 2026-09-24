@@ -67,6 +67,15 @@ class BookingModel {
   /// بنفس نوع الإقامة الذي اختاره الضيف وقت الحجز.
   final String stayType;
 
+  /// مصدر الحجز: 'app' (من الزبون عبر التطبيق) أو 'external' (حجز يدوي أدخله
+  /// المالك). العمود محمي بـ trigger بقاعدة البيانات ولا يُرسل من التطبيق أبداً.
+  final String source;
+
+  /// اسم وهاتف ضيف الحجز اليدوي (أعمدة bookings.guest_name / guest_phone).
+  /// منفصلان عن [guestName]/[guestPhone] أعلاه (بيانات ملف صاحب الحساب).
+  final String? externalGuestName;
+  final String? externalGuestPhone;
+
   const BookingModel({
     required this.id,
     required this.chaletId,
@@ -86,9 +95,17 @@ class BookingModel {
     this.guestPhone,
     this.guestAvatar,
     this.stayType = 'default',
+    this.source = 'app',
+    this.externalGuestName,
+    this.externalGuestPhone,
   });
 
-  int get nightsCount => checkOut.difference(checkIn).inDays;
+  // ✅ إصلاح: الفرق بين تاريخين محليين يتأثر بتغيير التوقيت الصيفي (ليلة
+  // 23 ساعة ⇒ inDays أقل بواحد؛ مثال: 25→27 مارس 2027 كانت تُعرض "ليلة
+  // واحدة"). الحساب بالتواريخ UTC يعطي عدد الليالي الفعلي دائماً.
+  int get nightsCount => DateTime.utc(checkOut.year, checkOut.month, checkOut.day)
+      .difference(DateTime.utc(checkIn.year, checkIn.month, checkIn.day))
+      .inDays;
 
   factory BookingModel.fromJson(Map<String, dynamic> json) {
     return BookingModel(
@@ -113,6 +130,9 @@ class BookingModel {
       guestPhone: json['profiles']?['phone'] as String?,
       guestAvatar: json['profiles']?['avatar_url'] as String?,
       stayType: json['stay_type'] as String? ?? 'default',
+      source: json['source'] as String? ?? 'app',
+      externalGuestName: json['guest_name'] as String?,
+      externalGuestPhone: json['guest_phone'] as String?,
     );
   }
 

@@ -1,32 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/dashboard_service.dart';
-import '../../../data/services/services.dart' show AuthService;
+import '../../../data/services/services.dart'
+    show AuthService, BookingService, ChaletService;
 import '../../../data/services/notification_service.dart';
+import '../profile/profile_provider.dart';
+import 'manual_booking_sheet.dart';
+import 'owner_bottom_nav.dart';
 
-/// لوحة تحكم المالك — تصميم جديد بالكامل (كروت خضراء/كريمية، ترحيب مع
-/// أفاتار، بانر إكمال الإعداد، حجوزات قادمة، إجراءات سريعة، أداء
-/// الشاليهات).
+/// لوحة تحكم المالك — كروت إحصائيات، ترحيب مع أفاتار، بانر إكمال
+/// الإعداد (مشروط ببيانات حقيقية)، حجوزات قادمة حقيقية، إجراءات
+/// سريعة، أداء الشاليهات.
 ///
-/// ⚠️ ملاحظة مهمة: بعض عناصر التصميم المطلوب تحتاج بيانات غير متوفرة
-/// حاليًا في [OwnerDashboardStats] أو [DashboardService] (مثل: عدد
-/// مشاهدات الشاليه، التقييمات، معدل الإشغال، قائمة تفصيلية بالحجوزات
-/// القادمة). تم الإبقاء على هذه العناصر بصريًا بالتصميم لكن بقيم "—"
-/// أو حالة فارغة بدل اختلاق أرقام، مع تعليق ⚠️ TODO في كل موضع. لتفعيلها
-/// فعليًا، يلزم توسيع DashboardService لإرجاع هذه البيانات.
-class OwnerDashboardScreen extends StatefulWidget {
+/// ⚠️ ملاحظة: بعض المقاييس ما زالت غير متوفرة من الـ backend (مشاهدات
+/// الشاليه، معدل الإشغال، التقييمات) وتُعرض بقيمة "—" بدل اختلاق أرقام.
+class OwnerDashboardScreen extends ConsumerStatefulWidget {
   const OwnerDashboardScreen({super.key});
 
   @override
-  State<OwnerDashboardScreen> createState() => _OwnerDashboardScreenState();
+  ConsumerState<OwnerDashboardScreen> createState() =>
+      _OwnerDashboardScreenState();
 }
 
-class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
-  static const Color _darkGreen = Color(0xFF3D5228);
-  static const Color _cream = Color(0xFFF6F2E7);
+class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
   int _unreadCount = 0;
 
   OwnerDashboardRange _range = OwnerDashboardRange.today;
@@ -34,11 +34,14 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   bool _loading = true;
   String? _error;
   OwnerDashboardStats? _stats;
+  List<BookingModel> _upcomingBookings = [];
+  int _pendingCount = 0;
 
-  // بانر "أكمل الإعداد" — قابل للإخفاء يدويًا من المستخدم لهذه الجلسة.
-  // ⚠️ TODO: الأصح أن يُبنى هذا الشرط على بيانات حقيقية (مثلاً: عدد
-  // الشاليهات الناقصة الحقول)، وليس فقط قابلاً للإخفاء يدويًا.
+  // بانر "أكمل الإعداد" — قابل للإخفاء يدويًا من المستخدم لهذه الجلسة،
+  // ويظهر فقط إذا كان المالك لا يملك أي شاليه بعد فعليًا (_hasChalets).
+  // ✅ إصلاح: سابقًا كان يظهر دائمًا بغض النظر عن وجود شاليهات فعلية.
   bool _showSetupBanner = true;
+  bool _hasChalets = true;
 
   @override
   void initState() {
@@ -51,16 +54,42 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       _loading = true;
       _error = null;
     });
+    final ownerId = AuthService.instance.currentUser?.id ?? '';
     try {
-      final profile = await AuthService.instance.getCurrentProfile();
-      final stats =
-          await DashboardService.instance.getOwnerDashboardStats(range: _range);
-      final unread = await NotificationService.instance.getUnreadCount();
+      // ✅ تحميل متوازٍ (Future.wait) بدل استدعاءات متسلسلة — كل استدعاء
+      // مستقل عن الآخر فلا داعي لانتظار كل واحد على حدة قبل بدء التالي.
+      final results = await Future.wait([
+        AuthService.instance.getCurrentProfile(),
+        DashboardService.instance.getOwnerDashboardStats(range: _range),
+        NotificationService.instance.getUnreadCount(),
+        BookingService.instance.getIncomingBookings(),
+        ChaletService.instance.getOwnerChalets(ownerId),
+      ]);
       if (!mounted) return;
+
+      final allBookings = results[3] as List<BookingModel>;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      // ✅ "الحجوزات القادمة" الحقيقية: قيد الانتظار أو مؤكدة، بتاريخ
+      // وصول اليوم أو لاحقًا، مرتبة بالأقرب أولًا — بدل بطاقة CTA ثابتة.
+      final upcoming = allBookings
+          .where((b) =>
+              (b.status == BookingStatus.pending ||
+                  b.status == BookingStatus.confirmed) &&
+              !b.checkIn.isBefore(today))
+          .toList()
+        ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
+      final pendingCount =
+          allBookings.where((b) => b.status == BookingStatus.pending).length;
+      final chalets = results[4] as List<Map<String, dynamic>>;
+
       setState(() {
-        _profile = profile;
-        _stats = stats;
-        _unreadCount = unread;
+        _profile = results[0] as UserProfile?;
+        _stats = results[1] as OwnerDashboardStats;
+        _unreadCount = results[2] as int;
+        _upcomingBookings = upcoming.take(3).toList();
+        _pendingCount = pendingCount;
+        _hasChalets = chalets.isNotEmpty;
         _loading = false;
       });
     } catch (e) {
@@ -72,6 +101,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     }
   }
 
+  // ✅ إصلاح (Problem #3): تحديث مقتصر فقط على عدّاد الإشعارات غير المقروءة
+  // بعد الرجوع من شاشة الإشعارات، بدل استدعاء _load() الكامل الذي كان
+  // يُعيد تحميل البروفايل/الإحصائيات/الحجوزات/الشاليهات ويصفّر موضع
+  // التمرير وحالة loading بلا أي داعٍ فعلي (كل ما تغيّر هو حالة القراءة).
+  Future<void> _refreshUnreadCount() async {
+    final count = await NotificationService.instance.getUnreadCount();
+    if (!mounted) return;
+    setState(() => _unreadCount = count);
+  }
+
   Future<void> _confirmBackToCustomer() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -80,8 +119,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         title: const Text('العودة كمستخدم؟',
             style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
         content: const Text(
-          'ستفقد صفة "مالك شاليه" ولن تتمكن من الوصول للوحة التحكم إلا بعد '
-          'إضافة شاليه جديد. هل تريد المتابعة؟',
+          'ستفقد صفة "مالك شاليه" مؤقتًا ولن تتمكن من الوصول للوحة التحكم، '
+          'لكن يمكنك العودة إليها لاحقًا من صفحة "حسابي" دون فقدان أي '
+          'بيانات. هل تريد المتابعة؟',
           style: TextStyle(fontFamily: 'Cairo'),
         ),
         actions: [
@@ -100,9 +140,21 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     if (confirmed != true) return;
 
     try {
-      await AuthService.instance.becomeCustomer();
+      final success = await AuthService.instance.becomeCustomer();
       if (!mounted) return;
-      context.go('/home');
+      if (success) {
+        // ✅ إصلاح: بدون هذا، Riverpod يبقى يعرض profileProvider القديم
+        // (role=owner) لحد ما يُعاد بناؤه من مكان آخر — فتضل شاشة
+        // "حسابي" (وأي شاشة تراقب profileProvider) خارج التزامن مع
+        // Supabase فعليًا بعد التبديل مباشرة.
+        ref.invalidate(profileProvider);
+        context.go('/home');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('تعذر تنفيذ العملية، يرجى المحاولة لاحقاً')),
+        );
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -116,11 +168,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: _cream,
+        backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
-          color: _darkGreen,
+          color: AppColors.primary,
           onPressed: () {
             if (Navigator.of(context).canPop()) {
               context.pop();
@@ -129,17 +181,35 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             }
           },
         ),
+        // ✅ إصلاح: _confirmBackToCustomer() كانت دالة كاملة (حوار تأكيد +
+        // استدعاء becomeCustomer()) لكن غير مربوطة بأي زر بالواجهة إطلاقًا
+        // — ميزة موجودة بالكود لكن المالك لا يقدر يصل لها من أي مكان.
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded, color: AppColors.primary),
+            onSelected: (value) {
+              if (value == 'become_customer') _confirmBackToCustomer();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'become_customer',
+                child: Text('العودة كمستخدم',
+                    style: TextStyle(fontFamily: 'Cairo', fontSize: 13)),
+              ),
+            ],
+          ),
+        ],
       ),
-      backgroundColor: _cream,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Directionality(
           textDirection: TextDirection.rtl,
           child: _loading
               ? const Center(
-                  child: CircularProgressIndicator(color: _darkGreen))
+                  child: CircularProgressIndicator(color: AppColors.primary))
               : RefreshIndicator(
                   onRefresh: _load,
-                  color: _darkGreen,
+                  color: AppColors.primary,
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
@@ -159,7 +229,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       children: [
         _buildHeader(),
         const SizedBox(height: 16),
-        if (_showSetupBanner) ...[
+        if (_showSetupBanner && !_hasChalets) ...[
           _buildSetupBanner(),
           const SizedBox(height: 18),
         ],
@@ -190,7 +260,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             GestureDetector(
               onTap: () async {
                 await context.push('/owner-notifications');
-                _load();
+                _refreshUnreadCount();
               },
               child: Container(
                 width: 40,
@@ -248,7 +318,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 width: 14,
                 height: 14,
                 decoration: BoxDecoration(
-                  color: _darkGreen,
+                  color: AppColors.primary,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                 ),
@@ -276,7 +346,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: _darkGreen,
+                color: AppColors.primary,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Text('متابعة الإعداد',
@@ -308,7 +378,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ),
           ),
           const SizedBox(width: 6),
-          const Icon(Icons.trending_up_rounded, color: _darkGreen, size: 20),
+          const Icon(Icons.trending_up_rounded, color: AppColors.primary, size: 20),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: () => setState(() => _showSetupBanner = false),
@@ -339,7 +409,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           TextButton(
             onPressed: _load,
             child: const Text('إعادة المحاولة',
-                style: TextStyle(fontFamily: 'Cairo', color: _darkGreen)),
+                style: TextStyle(fontFamily: 'Cairo', color: AppColors.primary)),
           ),
         ],
       ),
@@ -367,30 +437,42 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       mainAxisSpacing: 12,
       childAspectRatio: 1.35,
       children: [
+        // ✅ إصلاح: العنوان كان "الأرباح هذا الشهر" رغم أن _range (أعلى هذا
+        // الملف) ثابت على OwnerDashboardRange.today ولا توجد واجهة لتغييره،
+        // فكانت البطاقة تعرض بيانات "اليوم" بعنوان "الشهر" — بيانات مالية
+        // مضلِّلة. لا يوجد نطاق "الشهر الحالي" جاهز بـ DashboardService
+        // (lastMonth يعني الشهر الماضي الكامل، ليس الحالي)، فتم تصحيح
+        // النص ليطابق البيانات الفعلية المعروضة (اليوم) بدل تغيير النطاق.
         _statCard(
           icon: Icons.account_balance_wallet_outlined,
-          iconColor: _darkGreen,
-          title: 'الأرباح هذا الشهر',
+          iconColor: AppColors.primary,
+          title: 'أرباح اليوم',
           value: '₪${(s?.totalRevenue ?? 0).toStringAsFixed(0)}',
-          footer: null, // ⚠️ TODO: نسبة التغير عن الشهر الماضي غير متوفرة بعد
+          footer: null,
         ),
+        // ✅ إصلاح: نفس المشكلة — الرقم محسوب من _stats بنطاق اليوم فقط
+        // (عبر _range=today)، فتمت إضافة "اليوم" للعنوان بدل ترك "حجوزات
+        // مؤكدة" بلا نطاق زمني (كان يُفهم منها أنها إجمالي كل الحجوزات).
         _statCard(
           icon: Icons.calendar_today_outlined,
           iconColor: const Color(0xFFC9A24B),
-          title: 'حجوزات مؤكدة',
+          title: 'حجوزات مؤكدة اليوم',
           value: '$confirmed',
           footer: 'حجز',
         ),
+        // ✅ إصلاح: قيمة حقيقية محسوبة من getIncomingBookings() (status ==
+        // pending) بدل "—" ثابتة. قابلة للضغط لأنها تحتاج فعل من المالك.
         _statCard(
           icon: Icons.access_time_rounded,
           iconColor: const Color(0xFFC9A24B),
           title: 'طلبات قيد الانتظار',
-          value: '—', // ⚠️ TODO: غير متوفر بـ OwnerDashboardStats الحالي
+          value: '$_pendingCount',
           footer: 'طلب',
+          onTap: _pendingCount > 0 ? () => context.go('/owner-bookings') : null,
         ),
         _statCard(
           icon: Icons.visibility_outlined,
-          iconColor: _darkGreen,
+          iconColor: AppColors.primary,
           title: 'مشاهدات الشاليه',
           value: '—', // ⚠️ TODO: تحتاج تتبّع مشاهدات فعلي من الـ backend
           footer: 'هذا الشهر',
@@ -405,13 +487,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     required String title,
     required String value,
     String? footer,
+    VoidCallback? onTap,
   }) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.sand),
+        border: Border.all(
+          color: onTap != null
+              ? AppColors.primary.withOpacity(0.35)
+              : AppColors.sand,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -439,70 +526,221 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     fontFamily: 'Cairo',
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: _darkGreen)),
+                    color: AppColors.primary)),
           ],
         ],
       ),
     );
+    if (onTap == null) return card;
+    return GestureDetector(onTap: onTap, child: card);
   }
 
   // ─── الحجوزات القادمة ────────────────────────────────────
-  // ⚠️ TODO: هذا القسم يحتاج قائمة حجوزات فعلية (تاريخ، سعر، عدد ضيوف،
-  // صورة، حالة) لصاحب الشاليه. DashboardService الحالي يوفر إحصائيات
-  // مجمّعة فقط (byChaletRevenue) وليس قائمة حجوزات فردية. لتفعيل هذا
-  // القسم فعليًا، أضف دالة مثل:
-  //   Future<List<BookingModel>> getOwnerUpcomingBookings()
-  // وبعدها استبدل القائمة الفارغة تحت بنتائجها الحقيقية.
-  // ─── الحجوزات القادمة ────────────────────────────────────
+  // ✅ إصلاح: كانت بطاقة CTA ثابتة لا تعرض أي حجز فعلي. الآن تعرض حتى 3
+  // حجوزات قادمة حقيقية (من نفس getIncomingBookings() المستخدمة أصلًا
+  // بشاشة "إدارة الحجوزات")، مع حالة فارغة صادقة إن لم توجد.
   Widget _buildUpcomingBookings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('الحجوزات القادمة',
-            style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.charcoal)),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: () => context.go('/owner-bookings'),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.sand),
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.event_note_outlined,
-                    size: 32, color: AppColors.textHint),
-                const SizedBox(height: 8),
-                const Text('اعرض حجوزاتك القادمة بالتفصيل',
-                    style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        color: AppColors.textSecondary)),
-                const SizedBox(height: 4),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (_upcomingBookings.isNotEmpty)
+              GestureDetector(
+                onTap: () => context.go('/owner-bookings'),
+                child: const Row(
                   children: [
-                    Text('فتح صفحة الحجوزات',
+                    Text('عرض الكل',
                         style: TextStyle(
                             fontFamily: 'Cairo',
-                            color: _darkGreen,
+                            fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            fontSize: 13)),
-                    Icon(Icons.chevron_left, size: 18, color: _darkGreen),
+                            color: AppColors.primary)),
+                    Icon(Icons.chevron_left,
+                        size: 16, color: AppColors.primary),
                   ],
+                ),
+              )
+            else
+              const SizedBox.shrink(),
+            const Text('الحجوزات القادمة',
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.charcoal)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_upcomingBookings.isEmpty)
+          GestureDetector(
+            onTap: () => context.go('/owner-bookings'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.sand),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.event_note_outlined,
+                      size: 32, color: AppColors.textHint),
+                  SizedBox(height: 8),
+                  Text('لا توجد حجوزات قادمة حالياً',
+                      style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          color: AppColors.textSecondary)),
+                  SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('عرض سجل الحجوزات',
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13)),
+                      Icon(Icons.chevron_left,
+                          size: 18, color: AppColors.primary),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Column(
+            children: [
+              for (final b in _upcomingBookings) ...[
+                _upcomingBookingTile(b),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+
+  Color _statusColor(BookingStatus status) {
+    switch (status) {
+      case BookingStatus.pending:
+        return AppColors.pending;
+      case BookingStatus.confirmed:
+        return AppColors.confirmed;
+      case BookingStatus.cancelled:
+        return AppColors.cancelled;
+      case BookingStatus.rejected:
+        return AppColors.error;
+      case BookingStatus.completed:
+        return AppColors.completed;
+    }
+  }
+
+  Widget _upcomingBookingTile(BookingModel b) {
+    final statusColor = _statusColor(b.status);
+    return GestureDetector(
+      onTap: () => context.go('/owner-bookings'),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.sand),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: AppColors.primary.withOpacity(0.08),
+                image: (b.chaletImage != null && b.chaletImage!.isNotEmpty)
+                    ? DecorationImage(
+                        image: NetworkImage(b.chaletImage!),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+              ),
+              child: (b.chaletImage == null || b.chaletImage!.isEmpty)
+                  ? const Icon(Icons.home_work_rounded,
+                      color: AppColors.primary, size: 20)
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    b.chaletName ?? 'شاليه',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.charcoal),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${b.guestName?.isNotEmpty == true ? b.guestName : 'ضيف'} · ${b.checkIn.day}/${b.checkIn.month} - ${b.checkOut.day}/${b.checkOut.month}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('₪${b.totalPrice.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.primary)),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(b.status.arabicLabel,
+                      style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: statusColor)),
                 ),
               ],
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
+  }
+
+  Future<void> _addManualBooking() async {
+    final saved = await openManualBookingSheet(context);
+    if (!mounted || !saved) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تم حجز التواريخ', style: TextStyle(fontFamily: 'Cairo')),
+        backgroundColor: AppColors.primary,
+      ),
+    );
+    _load();
   }
 
   // ─── إجراءات سريعة ───────────────────────────────────────
@@ -511,11 +749,26 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     // بـ app_router.dart الحالي عندك (فيه chalet_pricing_screen.dart
     // كملف لكن بلا route مسجّل بالراوتر يلي شفناه). اربطهم بالراوت
     // الصحيح إذا كان مختلف عن يلي حطيته هون.
-    final items = [
-      (Icons.add_rounded, 'إضافة شاليه جديد', '/owner-add-chalet'),
-      (Icons.calendar_month_rounded, 'التقويم', '/owner-bookings'),
-      (Icons.home_work_outlined, 'شاليهاتي', '/owner-chalets'),
-      (Icons.person_outline_rounded, 'حسابي', '/owner-profile'),
+    final items = <(IconData, String, VoidCallback)>[
+      // "حجز يدوي" أولاً لأنه الأكثر استخداماً: يفتح ورقة الإدخال مباشرة
+      // (قائمة الحجوزات اليدوية متاحة من شاشة الحجوزات).
+      (Icons.edit_calendar_rounded, 'حجز يدوي', _addManualBooking),
+      (
+        Icons.add_rounded,
+        'إضافة شاليه جديد',
+        () => context.go('/owner-add-chalet')
+      ),
+      (
+        Icons.calendar_month_rounded,
+        'التقويم',
+        () => context.go('/owner-calendar')
+      ),
+      (Icons.home_work_outlined, 'شاليهاتي', () => context.go('/owner-chalets')),
+      (
+        Icons.person_outline_rounded,
+        'حسابي',
+        () => context.go('/owner-profile')
+      ),
     ];
 
     return Column(
@@ -537,7 +790,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           childAspectRatio: 1.5,
           children: items
               .map((item) => GestureDetector(
-                    onTap: () => context.go(item.$3),
+                    onTap: item.$3,
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -547,7 +800,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(item.$1, color: _darkGreen, size: 24),
+                          Icon(item.$1, color: AppColors.primary, size: 24),
                           const SizedBox(height: 8),
                           Text(item.$2,
                               style: const TextStyle(
@@ -691,100 +944,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 
   // ─── Bottom Navigation ────────────────────────────────────
-  // ⚠️ ملاحظة: التصميم الجديد يعرض تبويبات مختلفة عن التصميم القديم
-  // (المزيد / الرسائل / إضافة (زر مرتفع بالنص) / التقويم / الرئيسية)
-  // بدل (الرئيسية / الشاليهات / الحجوزات / خارجي / حسابي). أبقيت نفس
-  // الراوتات الموجودة فعليًا بالراوتر (owner-dashboard, owner-bookings,
-  // owner-add-chalet) وربطت "المزيد" بصفحة الشاليهات مؤقتًا، و"الرسائل"
-  // بدون راوت فعلي بعد (⚠️ TODO: أضف شاشة رسائل حقيقية إذا بدك تفعيلها).
+  // ✅ إصلاح: الشريط أصبح widget مشترك (OwnerBottomNav) تستخدمه أيضًا
+  // شاشتا "شاليهاتي" و"الحجوزات"، بدل بقائه محصورًا هنا فقط. كما
+  // استُبدل زر "الرسائل" الميت بـ"الإشعارات" الحقيقية.
   Widget _buildBottomNav() {
     final location = GoRouterState.of(context).uri.toString();
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 16,
-              offset: const Offset(0, -3),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _navItem(
-              icon: Icons.home_work_outlined,
-              label: 'شاليهاتي',
-              active: false,
-              onTap: () => context.go('/owner-chalets'),
-            ),
-            _navItem(
-              icon: Icons.chat_bubble_outline_rounded,
-              label: 'الرسائل',
-              active: false,
-              onTap: () {
-                // ⚠️ TODO: لا توجد شاشة رسائل بعد بالراوتر.
-              },
-            ),
-            GestureDetector(
-              onTap: () => context.go('/owner-add-chalet'),
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: const BoxDecoration(
-                  color: _darkGreen,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.add_rounded,
-                    color: Colors.white, size: 26),
-              ),
-            ),
-            _navItem(
-              icon: Icons.calendar_month_outlined,
-              label: 'التقويم',
-              active: false,
-              onTap: () => context.go('/owner-bookings'),
-            ),
-            _navItem(
-              icon: Icons.home_outlined,
-              label: 'الرئيسية',
-              active: location.startsWith('/owner-dashboard'),
-              onTap: () => context.go('/owner-dashboard'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _navItem({
-    required IconData icon,
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-  }) {
-    final color = active ? _darkGreen : AppColors.textHint;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 3),
-          Text(label,
-              style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 10,
-                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                  color: color)),
-        ],
-      ),
-    );
+    return OwnerBottomNav(currentRoute: location, unreadCount: _unreadCount);
   }
 }

@@ -3,8 +3,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/services/services.dart';
+import '../../../data/services/notification_service.dart';
 import 'owner_add_chalet_screen.dart';
+import 'owner_edit_chalet_screen.dart';
 import 'chalet_pricing_screen.dart';
+import 'owner_bottom_nav.dart';
 
 /// شاشة "شاليهاتي".
 ///
@@ -16,14 +19,9 @@ import 'chalet_pricing_screen.dart';
 ///    `Expanded`/عرض محدد) كان يتسبب بانهيار الشاشة بالكامل عند العرض
 ///    (BoxConstraints forces an infinite width).
 ///
-/// زر "تعديل" حاليًا يعرض رسالة "قريبًا" بدل فتح شاشة تعديل فعلية، لأن
-/// ChaletModel لا يحتوي بعد على كل الحقول اللازمة لتعديل شاليه موجود بأمان
-/// (deposit_amount, min_nights, video_url, booking_type, قائمة الصور
-/// الكاملة). هذا قرار مؤقت ومقصود إلى أن يتم إصلاح الموديل.
-///
-/// ✅ جديد: زر "الأسعار" يفتح ChaletPricingScreen لإدارة تسعير الشاليه
-/// (سعر يوم الأسبوع + سعر تاريخ محدد)، بدون أي تغيير على منطق التعديل
-/// العام للشاليه.
+/// زر "تعديل" يفتح OwnerEditChaletScreen (شاشة تعديل مستقلة تتحقق من ملكية
+/// الشاليه بنفسها). زر "الأسعار" يفتح ChaletPricingScreen لإدارة تسعير
+/// الشاليه (سعر يوم الأسبوع + سعر تاريخ محدد).
 class OwnerChaletsScreen extends StatefulWidget {
   const OwnerChaletsScreen({super.key});
 
@@ -37,6 +35,10 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _chalets = [];
+  // ✅ إصلاح: نفس نمط تحميل unreadCount المستخدم في owner_dashboard_screen.dart
+  // (Problem #2)، حتى تعرض شارة الإشعارات في OwnerBottomNav هنا العدد
+  // الحقيقي بدل الاعتماد على القيمة الافتراضية صفر.
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -60,11 +62,15 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
     }
 
     try {
-      final data = await ChaletService.instance.getOwnerChalets(ownerId);
+      final results = await Future.wait([
+        ChaletService.instance.getOwnerChalets(ownerId),
+        NotificationService.instance.getUnreadCount(),
+      ]);
 
       if (!mounted) return;
       setState(() {
-        _chalets = data;
+        _chalets = results[0] as List<Map<String, dynamic>>;
+        _unreadCount = results[1] as int;
         _loading = false;
       });
     } catch (e) {
@@ -76,15 +82,15 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
     }
   }
 
-  void _showComingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'تعديل الشاليهات الموجودة سيتوفر قريبًا',
-          style: TextStyle(fontFamily: 'Cairo'),
-        ),
-      ),
+  /// فتح شاشة تعديل الشاليه. تُمرَّر معرّفه فقط؛ الشاشة تجلب الصف وتتحقق أنه
+  /// للمستخدم الحالي. بعد الرجوع تُعاد القائمة لتعكس الاسم/الصورة/الحالة.
+  Future<void> _goToEdit(Map<String, dynamic> chalet) async {
+    final id = chalet['id'] as String;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => OwnerEditChaletScreen(chaletId: id)),
     );
+    if (mounted) _load();
   }
 
   Future<void> _goToAddChalet() async {
@@ -221,7 +227,7 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
                               ),
                               itemBuilder: (_, i) => _ChaletCard(
                                 chalet: _chalets[i],
-                                onEditPressed: _showComingSoon,
+                                onEditPressed: () => _goToEdit(_chalets[i]),
                                 onManagePricesPressed: () =>
                                     _goToPricing(_chalets[i]),
                               ),
@@ -242,6 +248,14 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
           'إضافة',
           style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w900),
         ),
+      ),
+      // ✅ إصلاح: هذه الشاشة كانت بلا أي طريقة مرئية للرجوع (تُفتح عبر
+      // context.go من لوحة التحكم، فلا يوجد Route سابق لـ Navigator
+      // ليعرض سهم رجوع تلقائي بالـ AppBar). إضافة الشريط السفلي
+      // المشترك تعطي طريقًا واضحًا دائمًا للتنقّل بدل شاشة بلا مخرج.
+      bottomNavigationBar: OwnerBottomNav(
+        currentRoute: '/owner-chalets',
+        unreadCount: _unreadCount,
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:makan/presentation/screens/auth/auth_shared.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../data/services/services.dart';
+import '../home/main_screen.dart' show goToMainTab;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -75,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
             break;
           case 'open_tab':
             final idx = pending.data['index'] as int? ?? 0;
-            context.go('/home', extra: idx);
+            goToMainTab(context, idx);
             break;
           default:
             context.go('/home');

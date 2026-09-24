@@ -36,6 +36,11 @@ class AppColors {
   static const Color accentLight = Color(0xFFFFC65A);
   static const Color accentDark = Color(0xFF9A7A2A);
 
+  // الذهبي المطفأ (muted gold) المستخدم بتدرّج أزرار شاشات المصادقة والدفع.
+  // كان معرّفاً بشكل منفصل ومكرر بـAuthColors وPaymentColors — تم توحيده هون
+  // ليصير مصدر واحد بدل نسخ نفس القيمة بأكثر من ملف.
+  static const Color accentMuted = Color(0xFFC9A24B);
+
   // Text
   static const Color textPrimary =
       Color(0xFF2A2A22); // أسود دافئ (يقارب الصورة)

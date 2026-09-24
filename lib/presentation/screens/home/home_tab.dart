@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/location_service.dart';
+import '../../../data/services/notification_service.dart';
 import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/luxury_widgets.dart';
+import '../profile/profile_screen.dart' show NotificationsScreen;
+import '../profile/profile_provider.dart';
+import '../../widgets/common/login_prompt.dart';
 import 'dart:async' if (dart.library.html) 'dart:async';
 
 class HomeTab extends ConsumerStatefulWidget {
@@ -24,14 +30,24 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
   // ✅ إصلاح: يتتبع إذا المستخدم اختار مدينة فعلياً (بدل الاعتماد بس على
   // القيمة الافتراضية 'الكل'). يُستخدم لإجبار فتح شاشة اختيار المدينة
-  // أول ما تفتح الشاشة، وما ينسمح تسكرها لحد ما يختار.
-  //
-  // ⚠️ هاد المتغيّر بالذاكرة بس (مش محفوظ)، يعني رح يرجع يطلب الاختيار
-  // من جديد كل ما يعاد فتح التطبيق. إذا بدك الاختيار يصير "مرة وحدة
-  // للأبد"، خزّنه بـ SharedPreferences (مثال بالأسفل بتعليق
-  // _showCityPicker) وحمّل القيمة المحفوظة بـ initState.
+  // فقط لما ما يكون في اختيار محفوظ سابقًا لهالمستخدم (انظر
+  // _initCityPreferenceThenLoad/_persistCityPreference). القيمة محفوظة
+  // عبر SharedPreferences بمفتاح خاص بكل مستخدم (auth uid)، فما بترجع
+  // تسأل من جديد بعد إغلاق التطبيق أو تسجيل الخروج/الدخول بنفس الحساب.
   bool _hasSelectedCity = false;
 
+  // مفتاح SharedPreferences لتخزين المدينة المفضّلة، بشكل خاص لكل مستخدم
+  // (guest إذا ما في جلسة دخول) عشان ما يختلط اختيار مستخدم بآخر على نفس
+  // الجهاز.
+  static const _preferredCityKeyPrefix = 'preferred_city_';
+
+  String get _preferredCityKey =>
+      '$_preferredCityKeyPrefix${Supabase.instance.client.auth.currentUser?.id ?? 'guest'}';
+
+  // ✅ إصلاح: كانت القائمة تغطي 6 مدن فقط بينما شاشة "إضافة شاليه" تسمح
+  // للمالك باختيار 10 مدن فعلية (owner_add_chalet_screen.dart) — يعني
+  // شاليهات طولكرم/قلقيلية/طوباس/سلفيت ما كانت قابلة للوصول عبر فلتر
+  // المدينة بالرئيسية إطلاقًا. الآن القائمة تطابق كل المدن الحقيقية.
   static const _chips = [
     'الكل',
     'رام الله',
@@ -40,26 +56,34 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     'الخليل',
     'أريحا',
     'بيت لحم',
+    'طولكرم',
+    'قلقيلية',
+    'طوباس',
+    'سلفيت',
   ];
 
   // ------------------------------------------------------------
-  // NEW: cities shown as their own horizontal sections on the
-  // home screen, below "أماكن مميزة". Add/remove city names here
-  // and the matching section appears/disappears automatically.
+  // cities shown as their own horizontal sections on the home
+  // screen, below "أماكن مميزة". Add/remove city names here and
+  // the matching section appears/disappears automatically.
+  //
+  // ✅ إصلاح: كانت القائمة تحتوي "القدس" و"الناصرة" رغم أنه لا يمكن لأي
+  // شاليه أن يحمل هاتين المدينتين أصلاً (ليستا ضمن قائمة المدن بشاشة
+  // إضافة شاليه) — فكان قسماهما ميتين دائمًا (يختفيان تلقائيًا لعدم وجود
+  // بيانات). استُبدلا بمدينتين حقيقيتين يمكن أن تحتويا شاليهات فعلاً.
   // ------------------------------------------------------------
   static const List<String> _featuredCitySections = [
     'جنين',
     'رام الله',
-    'القدس',
-    'الناصرة',
+    'نابلس',
+    'الخليل',
   ];
 
   List<ChaletModel> _featured = [];
-  List<ChaletModel> _all = [];
-  // NEW: unfiltered pool of chalets used to build the per-city sections.
+  // مجموع الشاليهات غير المفلترة (كل المدن)، تُستخدم لبناء أقسام المدن
+  // ولحساب "بالقرب منك"، وأيضاً لفلترة العرض محلياً عند اختيار مدينة من
+  // الهيدر (بدون أي طلب شبكة إضافي — انظر _filterByCity).
   List<ChaletModel> _allForGrouping = [];
-  // NEW: city name -> chalets in that city, derived from _allForGrouping.
-  Map<String, List<ChaletModel>> _cityChalets = {};
   bool _loading = true;
   String? _error;
   String? _userName;
@@ -68,20 +92,40 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   // قسم "بالقرب منك". null يعني الصلاحية مرفوضة/معطلة أو لم يُجلب بعد.
   Position? _userPosition;
 
+  // ✅ إصلاح: عدد الإشعارات غير المقروءة لجرس الهيدر. تحميل مستقل وصامت
+  // عن _load() الأساسية — فشله لا يجب أن يعطّل باقي الشاشة أو يُظهر
+  // حالة خطأ عامة، تمامًا كمنطق _loadUserLocation() أعلاه.
+  int _unreadNotifications = 0;
+
   @override
   void initState() {
     super.initState();
-    _load();
     _loadUserLocation();
+    _loadUnreadNotifications();
+    _initCityPreferenceThenLoad();
+  }
 
-    // ✅ إصلاح: إجبار المستخدم على اختيار مدينة أول ما تُفتح الشاشة.
-    // نستخدم addPostFrameCallback لأن showModalBottomSheet يحتاج
-    // BuildContext جاهز بعد أول build، مش من جوا initState مباشرة.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_hasSelectedCity) {
-        _showCityPicker(mandatory: true);
+  // ✅ إصلاح: يحمّل المدينة المفضّلة المحفوظة (إن وجدت) لهذا المستخدم قبل
+  // أول استدعاء لـ _load()، بدل الاعتماد على متغيّر _hasSelectedCity
+  // بالذاكرة فقط. إذا في اختيار محفوظ، نطبّقه كفلتر افتراضي ونتجاوز شاشة
+  // الاختيار الإجباري. إذا ما في، نعرض الشاشة الإجبارية مرة وحدة فقط ثم
+  // نحفظ اختيار المستخدم عشان ما ترجع تظهر ثانية (انظر _showCityPicker).
+  Future<void> _initCityPreferenceThenLoad() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_preferredCityKey);
+      if (mounted && saved != null && saved.isNotEmpty) {
+        setState(() {
+          _hasSelectedCity = true;
+          _selectedCity = saved;
+        });
       }
-    });
+    } catch (_) {
+      // فشل صامت (مثلاً أول تشغيل بدون توفر التخزين بعد) — يتصرف كأنه
+      // ما في اختيار محفوظ، فتظهر شاشة الاختيار الإجبارية كالمعتاد.
+    }
+
+    await _load();
   }
 
   @override
@@ -96,6 +140,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final pos = await LocationService.instance.getCurrentPosition();
     if (mounted && pos != null) {
       setState(() => _userPosition = pos);
+    }
+  }
+
+  // ✅ إصلاح: يجلب عدد الإشعارات غير المقروءة بهدوء لعرضه كنقطة على
+  // جرس الهيدر. لا تُستخدم NotificationService لأي شيء آخر هنا، ولا
+  // يوجد تغيير على الخدمة نفسها — نفس الاستدعاء المستخدم أصلًا بشاشات
+  // أخرى (مثل لوحة تحكم المالك).
+  Future<void> _loadUnreadNotifications() async {
+    try {
+      final count = await NotificationService.instance.getUnreadCount();
+      if (mounted) setState(() => _unreadNotifications = count);
+    } catch (_) {
+      // فشل صامت — لا داعي لإظهار خطأ عام بسبب عداد ثانوي بالهيدر.
     }
   }
 
@@ -119,22 +176,17 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     try {
       final results = await Future.wait([
         ChaletService.instance.getFeaturedChalets(),
-        ChaletService.instance.getChalets(city: _selectedCity),
         AuthService.instance.getCurrentProfile(),
-        // NEW: broader pool (no city filter) so we can group it by city
-        // client-side below, instead of firing one network call per city.
+        // مجموعة غير مفلترة (بدون تحديد مدينة) نبني منها أقسام المدن
+        // ونفلترها محلياً عند اختيار مدينة من الهيدر، بدل طلب شبكة منفصل
+        // لكل مدينة أو عند كل تبديل.
         ChaletService.instance.getChalets(),
       ]);
       if (mounted) {
         setState(() {
           _featured = results[0] as List<ChaletModel>;
-          _all = results[1] as List<ChaletModel>;
-          _userName = (results[2] as dynamic)?.fullName;
-          _allForGrouping = results[3] as List<ChaletModel>;
-          _cityChalets = {
-            for (final city in _featuredCitySections)
-              city: _allForGrouping.where((c) => c.city == city).toList(),
-          };
+          _userName = (results[1] as dynamic)?.fullName;
+          _allForGrouping = results[2] as List<ChaletModel>;
           _loading = false;
         });
       }
@@ -151,40 +203,45 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   }
 
   Future<void> _toggleFavorite(ChaletModel chalet) async {
+    // ✅ إصلاح: الضيف كان يضغط القلب فيومض ثم يرجع بصمت (الخدمة ترفض ضيفاً
+    // والمزوّد يتراجع عن التحديث المتفائل) بلا أي إرشاد لتسجيل الدخول.
+    if (!requireAuth(context,
+        PendingAuthAction('toggle_favorite', {'chaletId': chalet.id}))) {
+      return;
+    }
     await ref.read(favoritesProvider.notifier).toggleFavorite(chalet);
   }
 
-  Future<void> _search(String q) async {
-    setState(() => _loading = true);
-    try {
-      final results = await ChaletService.instance
-          .getChalets(searchQuery: q, city: _selectedCity);
-      if (mounted) {
-        setState(() {
-          _all = results;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
+  // ✅ إصلاح: كانت هذه الدالة تُستدعى مع كل حرف يكتبه المستخدم بمربع
+  // البحث بالرئيسية (onChanged) وتخزّن النتيجة بحقل (_all) لا تعرضه أي
+  // واجهة فعلياً — أي أن البحث بالرئيسية لم يكن يُظهر أي نتيجة على
+  // الإطلاق رغم أنه ينفّذ طلب شبكة حقيقي لكل ضغطة مفتاح. الآن مربع
+  // البحث بالرئيسية ينقل المستخدم لشاشة البحث الفعلية (SearchScreen)
+  // عند الإرسال، حيث يوجد فعلاً عرض نتائج/تحميل/فراغ متكامل.
+  void _submitSearch(String q) {
+    final query = q.trim();
+    if (query.isEmpty) return;
+    context.push('/search?q=${Uri.encodeComponent(query)}');
   }
 
-  Future<void> _filterByCity(String city) async {
-    setState(() {
-      _selectedCity = city;
-      _loading = true;
-    });
+  // ✅ إصلاح: كانت تطلق طلب شبكة كامل (وتُظهر Loading على كامل الشاشة)
+  // فقط لتخزين نتيجة لا تُعرض بأي مكان (_all)، رغم أن اختيار مدينة لا
+  // يغيّر أي محتوى مرئي فعلياً غير نص الهيدر. الآن الفلترة تتم محلياً
+  // وفوراً على البيانات المُحمَّلة أصلاً (_allForGrouping) بدون أي طلب
+  // شبكة جديد ولا وميض تحميل على باقي الأقسام.
+  void _filterByCity(String city) {
+    setState(() => _selectedCity = city);
+  }
+
+  // يحفظ المدينة المختارة (أو "الكل") بشكل دائم لهذا المستخدم، عشان
+  // شاشة الاختيار الإجباري ما ترجع تظهر بجلسات/تشغيلات لاحقة للتطبيق.
+  Future<void> _persistCityPreference(String city) async {
     try {
-      final results = await ChaletService.instance.getChalets(city: city);
-      if (mounted) {
-        setState(() {
-          _all = results;
-          _loading = false;
-        });
-      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_preferredCityKey, city);
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      // فشل صامت — أسوأ حالة إنه يرجع يسأل المرة الجاية، مش أهم من تعطيل
+      // باقي الشاشة.
     }
   }
 
@@ -193,16 +250,14 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   // مربوط بـ TODO فاضي. تفتح Bottom Sheet لاختيار المدينة من نفس
   // قائمة _chips المستخدمة أصلاً بفلترة الشاليهات.
   //
-  // mandatory=true (أول فتح للشاشة): الشيت غير قابل للإغلاق بالسحب
-  // لأسفل ولا بالضغط خارجها، ولازم يختار مدينة عشان يكمل.
-  // mandatory=false (من زر الهيدر لاحقاً): قابل للإغلاق عادي، ويقدر
-  // يختار "الكل" لعرض كل المدن.
+  // mandatory=true (أول فتح للشاشة، ما في اختيار محفوظ سابقًا): الشيت
+  // غير قابل للإغلاق بالسحب لأسفل ولا بالضغط خارجها، ولازم يختار مدينة
+  // عشان يكمل. mandatory=false (من زر الهيدر لاحقاً): قابل للإغلاق
+  // عادي، ويقدر يختار "الكل" لعرض كل المدن.
   //
-  // ⚠️ إذا بدك الاختيار يتحفظ بين جلسات التطبيق (مش بس بالجلسة
-  // الحالية)، ضيف شرط تحميل/حفظ عبر SharedPreferences، مثال:
-  //   final prefs = await SharedPreferences.getInstance();
-  //   await prefs.setString('selected_city', city);
-  // واقرأها بـ initState قبل قرار إظهار الشيت الإجباري.
+  // أي اختيار (إجباري أو من الهيدر) يُحفظ فورًا عبر SharedPreferences
+  // (_preferredCityKey) فما ترجع الشاشة الإجبارية تظهر بجلسات لاحقة، وهذا
+  // لا يمنع المستخدم من تغيير المدينة أو استكشاف "كل المدن" لاحقًا.
   // ------------------------------------------------------------
   Future<void> _showCityPicker({bool mandatory = false}) async {
     final result = await showModalBottomSheet<String>(
@@ -210,7 +265,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       isDismissible: !mandatory,
       enableDrag: !mandatory,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -236,11 +291,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 Text(
                   mandatory ? 'اختر مدينتك للمتابعة' : 'اختر المدينة',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 17,
                     fontWeight: FontWeight.w900,
-                    color: AppColors.textPrimary,
+                    color: Theme.of(sheetContext).textTheme.bodyLarge?.color,
                   ),
                 ),
                 if (mandatory) ...[
@@ -294,7 +349,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                         : FontWeight.w600,
                                     color: selected
                                         ? AppColors.primary
-                                        : AppColors.textPrimary,
+                                        : Theme.of(sheetContext)
+                                            .textTheme
+                                            .bodyLarge
+                                            ?.color,
                                   ),
                                 ),
                               ),
@@ -317,8 +375,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
     if (result != null) {
       setState(() => _hasSelectedCity = true);
+      unawaited(_persistCityPreference(result));
       if (result != _selectedCity) {
-        await _filterByCity(result);
+        _filterByCity(result);
       }
     } else if (mandatory && mounted && !_hasSelectedCity) {
       // المستخدم حاول يتهرب من الاختيار الإجباري (مثلاً بزر الرجوع
@@ -336,28 +395,48 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: RefreshIndicator(
         onRefresh: _load,
         color: AppColors.accent,
-        backgroundColor: AppColors.card,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _buildTopHeader()),
-            SliverToBoxAdapter(child: _buildSearchBar()),
-            SliverToBoxAdapter(child: _buildWelcomeBanner()),
-            SliverToBoxAdapter(child: _buildCategoriesRow()),
-            SliverToBoxAdapter(child: _buildMostBookedSection()),
-            // NEW: "بالقرب منك" section, sorted by real distance from GPS.
-            // Hides itself automatically if location isn't available.
-            SliverToBoxAdapter(child: _buildNearYouGrid()),
-            // NEW: one horizontal section per city in _featuredCitySections
-            for (final city in _featuredCitySections)
-              SliverToBoxAdapter(child: _buildCitySection(city)),
-            SliverToBoxAdapter(child: _buildInviteBanner()),
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
-          ],
-        ),
+        backgroundColor: Theme.of(context).cardColor,
+        // ✅ إصلاح: _error كان يُضبط عند فشل _load() لكن لا يُقرأ أبدًا —
+        // فشل الشبكة كان يمر بصمت وتبقى الشاشة فارغة بلا أي رسالة.
+        // الآن، عند وجود خطأ (وبعد انتهاء التحميل)، نعرض _buildError()
+        // الموجودة أصلًا (بها زر "إعادة المحاولة" الذي يستدعي _load نفسها)
+        // مع الإبقاء على الهيدر ظاهرًا وRefreshIndicator يعمل للسحب لإعادة
+        // المحاولة أيضًا. لا تغيير على منطق _load()/_search()/المفضلة.
+        child: (_error != null && !_loading)
+            ? CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _buildTopHeader()),
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: _buildError()),
+                  ),
+                ],
+              )
+            : CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _buildTopHeader()),
+                  SliverToBoxAdapter(child: _buildGreeting()),
+                  SliverToBoxAdapter(child: _buildSearchBar()),
+                  SliverToBoxAdapter(child: _buildWelcomeBanner()),
+                  SliverToBoxAdapter(child: _buildCategoriesRow()),
+                  SliverToBoxAdapter(child: _buildMostBookedSection()),
+                  // NEW: "بالقرب منك" section, sorted by real distance from GPS.
+                  // Hides itself automatically if location isn't available.
+                  SliverToBoxAdapter(child: _buildNearYouGrid()),
+                  // ✅ إصلاح: عند اختيار مدينة معيّنة من الهيدر، نعرض قسمها
+                  // فقط بدل كل الأقسام الأربعة الثابتة — بما إنه فعلياً صار
+                  // فلتر حقيقي (انظر _filterByCity) بدل تسمية بلا أثر مرئي.
+                  for (final city in _selectedCity == 'الكل'
+                      ? _featuredCitySections
+                      : [_selectedCity])
+                    SliverToBoxAdapter(child: _buildCitySection(city)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              ),
       ),
     );
   }
@@ -393,24 +472,50 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
               Positioned(
                 left: 0,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.card,
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.notifications_none_rounded,
-                        color: AppColors.primary, size: 22),
-                    onPressed: () {
-                      // ⚠️ TODO تاني بنفس النمط (إيقونة ظاهرة بدون وظيفة).
-                      // ما عدّلتها لأنه ما في شاشة إشعارات جاهزة بعد —
-                      // خبرني لو بدك أربطها بمسار موجود عندك.
-                    },
-                  ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Theme.of(context).cardColor,
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      // ✅ إصلاح: شاشة الإشعارات الفعلية للعميل موجودة أصلًا
+                      // داخل profile_screen.dart (NotificationsScreen) —
+                      // ربطناها هنا بدل زر معطّل بلا وظيفة.
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: Icon(Icons.notifications_none_rounded,
+                            color: AppColors.primary, size: 22),
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen()),
+                          );
+                          if (mounted) _loadUnreadNotifications();
+                        },
+                      ),
+                    ),
+                    if (_unreadNotifications > 0)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: Theme.of(context).cardColor, width: 1.5),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               Positioned(
@@ -426,15 +531,16 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         // المدينة المختارة "الكل"، وكأنها المدينة الفعلية
                         // المختارة رغم إنه ما في اختيار حقيقي — مضلل.
                         _selectedCity == 'الكل' ? 'كل المدن' : _selectedCity,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
                         ),
                       ),
-                      const Icon(Icons.keyboard_arrow_down_rounded,
-                          size: 18, color: AppColors.textPrimary),
+                      Icon(Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: Theme.of(context).textTheme.bodyLarge?.color),
                       const SizedBox(width: 6),
                       const Icon(Icons.location_on_rounded,
                           size: 20, color: AppColors.accent),
@@ -444,6 +550,35 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------
+  // ✅ إصلاح: كان اسم المستخدم (_userName) يُجلب من الملف الشخصي بنجاح
+  // (AuthService.getCurrentProfile) لكنه لا يُعرض بأي مكان بالشاشة على
+  // الإطلاق — بيانات حقيقية موجودة ومهدورة. ترحيب شخصي بسيط باسمه
+  // الأول يعطي إحساساً أكثر دفئاً بدل شاشة عامة للجميع. يختفي بهدوء
+  // للضيوف (لا يوجد _userName).
+  // ------------------------------------------------------------
+  Widget _buildGreeting() {
+    // الاسم من profileProvider (يتحدّث عند تسجيل الدخول/الخروج) مع الرجوع
+    // للقيمة المحمّلة سابقاً كاحتياط.
+    final name =
+        (ref.watch(profileProvider).valueOrNull?.fullName ?? _userName)?.trim();
+    if (name == null || name.isEmpty) return const SizedBox.shrink();
+    final firstName = name.split(' ').first;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Text(
+        'مرحباً، $firstName 👋',
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: Theme.of(context).textTheme.bodyLarge?.color,
         ),
       ),
     );
@@ -539,19 +674,23 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   }
 
   // ------------------------------------------------------------
-  // 5 square category tiles
+  // صف فئات سريعة أسفل الهيدر.
+  //
+  // ✅ إصلاح: كانت 3 من أصل 5 فئات ("مزارع"، "مسابح"، "أماكن إقامة") لا
+  // تطابق أي فلتر حقيقي بالـbackend — ChaletModel لا يحتوي مفهوم "نوع
+  // عقار" إطلاقاً (فقط مرافق boolean: مسبح/واي فاي/شواء/موقف)، وشاشة
+  // البحث كانت أصلاً تتجاهل query param اسمه "type" بالكامل. الضغط على
+  // "مزارع" مثلاً كان يفتح نفس نتائج "المزيد" تماماً بدون أي فلترة فعلية
+  // رغم أنه يوحي بخلاف ذلك. استُبدلت بفئتين حقيقيتين فقط (مسبح/واي فاي)
+  // مبنيتين على حقول فعلية موجودة، والآن SearchScreen يقرأ query param
+  // "type" فعلياً (انظر search_screen.dart + app_router.dart).
   // ------------------------------------------------------------
   Widget _buildCategoriesRow() {
     final categories = [
-      {'label': 'شاليهات', 'icon': Icons.cottage_outlined, 'query': 'chalet'},
-      {'label': 'مزارع', 'icon': Icons.agriculture_outlined, 'query': 'farm'},
-      {'label': 'مسابح', 'icon': Icons.pool_outlined, 'query': 'pool'},
-      {
-        'label': 'أماكن إقامة',
-        'icon': Icons.apartment_outlined,
-        'query': 'stay'
-      },
-      {'label': 'المزيد', 'icon': Icons.grid_view_rounded, 'query': null},
+      {'label': 'كل الشاليهات', 'icon': Icons.cottage_outlined, 'query': null},
+      {'label': 'مسبح', 'icon': Icons.pool_outlined, 'query': 'pool'},
+      {'label': 'واي فاي', 'icon': Icons.wifi_rounded, 'query': 'wifi'},
+      {'label': 'كل الفلاتر', 'icon': Icons.tune_rounded, 'query': null},
     ];
 
     return Padding(
@@ -582,11 +721,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 const SizedBox(height: 6),
                 Text(
                   cat['label'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
                   ),
                 ),
               ],
@@ -602,7 +741,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   // exact same card design is reused by the per-city sections below.
   // ------------------------------------------------------------
   Widget _buildMostBookedSection() {
-    final items = _featured.isEmpty ? [] : _featured.take(2).toList();
+    // ✅ إصلاح: اختيار مدينة من الهيدر كان لا يغيّر أي محتوى مرئي فعلياً
+    // (فقط نص الهيدر) لأن هذا القسم كان يعرض كل الشاليهات المميزة بغض
+    // النظر عن المدينة المختارة. الآن يُفلتر محلياً حسب _selectedCity.
+    final pool = _selectedCity == 'الكل'
+        ? _featured
+        : _featured.where((c) => c.city == _selectedCity).toList();
+    final items = pool.take(2).toList();
+
+    // ✅ إصلاح: سابقاً عند انتهاء التحميل بدون أي شاليهات مميزة، كان
+    // العنصر النائب (skeleton) يبقى ظاهراً للأبد (itemCount:2 دائماً حتى
+    // بعد _loading=false) وكأن التحميل مستمر لا نهائياً. الآن القسم
+    // يختفي بهدوء بنفس منطق أقسام المدن أدناه بدل تجميد مؤشر تحميل وهمي.
+    if (!_loading && items.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
@@ -640,18 +791,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
             height: 230,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: items.isEmpty ? 2 : items.length,
+              itemCount: _loading ? 2 : items.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (_, i) {
-                if (items.isEmpty) {
-                  return Container(
+                if (_loading) {
+                  return const SizedBox(
                     width: 220,
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(22),
-                      border:
-                          Border.all(color: AppColors.border.withOpacity(0.2)),
-                    ),
+                    child: LuxuryShimmerCard(height: 230),
                   );
                 }
                 return _buildPlaceCard(items[i]);
@@ -664,13 +810,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   }
 
   // ------------------------------------------------------------
-  // NEW: one horizontal section for a given city, e.g. "شاليهات جنين".
-  // Pulls its chalets from _cityChalets (grouped in _load()).
-  // The whole section hides itself if that city has nothing to show
-  // once loading is done — no empty section on the home screen.
+  // one horizontal section for a given city, e.g. "شاليهات جنين".
+  // Filters _allForGrouping locally (no extra network call). The whole
+  // section hides itself if that city has nothing to show once loading
+  // is done — no empty section on the home screen.
   // ------------------------------------------------------------
   Widget _buildCitySection(String city) {
-    final chalets = _cityChalets[city] ?? const <ChaletModel>[];
+    final chalets = _allForGrouping.where((c) => c.city == city).toList();
 
     if (!_loading && chalets.isEmpty) {
       return const SizedBox.shrink();
@@ -716,14 +862,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (_, i) {
                 if (_loading) {
-                  return Container(
+                  return const SizedBox(
                     width: 220,
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(22),
-                      border:
-                          Border.all(color: AppColors.border.withOpacity(0.2)),
-                    ),
+                    child: LuxuryShimmerCard(height: 230),
                   );
                 }
                 return _buildPlaceCard(chalets[i]);
@@ -747,7 +888,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       child: Container(
         width: 240,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
@@ -847,11 +988,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       chalet.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        color: Colors.black87,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
                     Column(
@@ -891,7 +1032,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                 fontFamily: 'Cairo',
                                 fontSize: 16,
                                 fontWeight: FontWeight.w900,
-                                color: Color(0xFF1A73E8),
+                                color: AppColors.primary,
                               ),
                             ),
                             const Text(
@@ -911,101 +1052,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  // ------------------------------------------------------------
-  // "ادعو أصدقائك" invite banner
-  // ------------------------------------------------------------
-  Widget _buildInviteBanner() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: AppColors.accentLight.withOpacity(0.25),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'ادعو أصدقائك',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'واحصل على رصيد هدية',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 40,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        // ⚠️ TODO تاني بنفس النمط — ماله منطق مشاركة/دعوة
-                        // مربوط بعد. خبرني لو بدك أربطه بنظام إحالة موجود.
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        'ادعو الآن',
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Icon(Icons.card_giftcard_rounded,
-                size: 60, color: AppColors.accent),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ------------------------------------------------------------
-  // UNCHANGED helpers kept below (still used by _buildSearchBar,
-  // and left in place in case other screens/tests reference them).
-  // ------------------------------------------------------------
-
-  Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Container(
-        height: 1,
-        decoration: const BoxDecoration(
-          border: BorderDirectional(
-            start: BorderSide(
-                width: 1, style: BorderStyle.solid, color: Color(0x3300450d)),
-            end: BorderSide(
-                width: 1, style: BorderStyle.solid, color: Color(0x3300450d)),
-          ),
         ),
       ),
     );
@@ -1086,7 +1132,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       onTap: () => context.push('/home/chalet/${chalet.id}', extra: chalet),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.border.withOpacity(0.15)),
           boxShadow: [
@@ -1131,11 +1177,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       chalet.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
-                        color: Colors.black87,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
                         height: 1.1,
                       ),
                     ),
@@ -1189,442 +1235,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     return LuxurySearchBar(
       controller: _searchCtrl,
       hintText: AppStrings.search,
-      onChanged: _search,
-      onClear: () {
-        _searchCtrl.clear();
-        _search('');
-      },
-    );
-  }
-
-  Widget _buildCityFilter() {
-    return SizedBox(
-      height: 46,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _chips.length,
-        itemBuilder: (_, i) {
-          final city = _chips[i];
-          final selected = city == _selectedCity;
-          return Padding(
-            padding: const EdgeInsets.only(left: 10, top: 6, bottom: 6),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: () => _filterByCity(city),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.textPrimary : AppColors.white,
-                  border: Border.all(
-                    color: selected ? Colors.transparent : AppColors.border,
-                  ),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  city,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? AppColors.white : AppColors.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildFeatured() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const LuxurySectionHeader(
-            title: AppStrings.featuredChalets,
-            emoji: '⭐',
-          ),
-          const SizedBox(height: 12),
-          if (_loading)
-            SizedBox(
-              height: 285,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: 3,
-                itemBuilder: (_, i) => Container(
-                  width: 250,
-                  margin: const EdgeInsets.only(left: 16),
-                  child: const LuxuryShimmerCard(height: 285),
-                ),
-              ),
-            )
-          else if (_featured.isEmpty)
-            const LuxuryEmptyState(
-              icon: Icons.search_off_rounded,
-              message: 'لا توجد شاليهات مميزة حالياً',
-            )
-          else
-            SizedBox(
-              height: 285,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _featured.length,
-                itemBuilder: (_, i) => Container(
-                  width: 250,
-                  margin: const EdgeInsets.only(left: 16),
-                  child: _buildFeaturedCard(_featured[i]),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAllChalets() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.accent, AppColors.accentLight],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                _selectedCity == 'الكل'
-                    ? 'جميع الشاليهات'
-                    : 'شاليهات $_selectedCity',
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          if (_loading)
-            Column(
-              children: List.generate(
-                3,
-                (_) => Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            )
-          else if (_all.isEmpty)
-            const _EmptyState(message: 'لا توجد شاليهات متاحة')
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _all.length,
-              itemBuilder: (_, i) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _buildListCard(_all[i]),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeaturedCard(ChaletModel chalet) {
-    final isFav = ref.watch(isFavoriteProvider(chalet.id));
-    return GestureDetector(
-      onTap: () => context.push('/home/chalet/${chalet.id}', extra: chalet),
-      child: Container(
-        height: 285,
-        width: 250,
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.accent.withOpacity(0.15)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.12),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 175,
-              width: double.infinity,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Image.network(
-                        chalet.coverImage,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: AppColors.primaryLight,
-                          child: const Icon(Icons.home_work_rounded,
-                              color: Colors.grey, size: 44),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 10,
-                      bottom: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Text(
-                          chalet.city,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontFamily: 'Cairo',
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 10,
-                      top: 10,
-                      child: GestureDetector(
-                        onTap: () => _toggleFavorite(chalet),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isFav
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            color: isFav ? Colors.red : Colors.grey,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Text(
-                      chalet.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_rounded,
-                            size: 13, color: Colors.grey),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(
-                            chalet.city,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '₪${chalet.pricePerNight.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF1A73E8),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            const Icon(Icons.star_rounded,
-                                size: 14, color: Colors.amber),
-                            const SizedBox(width: 3),
-                            Text(
-                              chalet.rating.toStringAsFixed(1),
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListCard(ChaletModel chalet) {
-    final isFav = ref.watch(isFavoriteProvider(chalet.id));
-    return GestureDetector(
-      onTap: () => context.push('/home/chalet/${chalet.id}', extra: chalet),
-      child: Container(
-        height: 120,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(
-                color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))
-          ],
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-              child: Image.network(
-                chalet.coverImage,
-                width: 120,
-                height: 120,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 120,
-                  height: 120,
-                  color: Colors.grey[200],
-                  child:
-                      const Icon(Icons.home_work_rounded, color: Colors.grey),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      chalet.name,
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            chalet.city,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.end,
-                            style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                color: Colors.grey,
-                                fontSize: 12),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.location_on_rounded,
-                            size: 12, color: Colors.grey),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        GestureDetector(
-                          onTap: () => _toggleFavorite(chalet),
-                          child: Icon(
-                            isFav
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            color: isFav ? Colors.red : Colors.grey,
-                            size: 20,
-                          ),
-                        ),
-                        Text(
-                          '₪${chalet.pricePerNight.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            color: Color(0xFF1A73E8),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      onSubmitted: _submitSearch,
+      onClear: () => _searchCtrl.clear(),
     );
   }
 
@@ -1637,7 +1249,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: Theme.of(context).cardColor,
               shape: BoxShape.circle,
               border: Border.all(
                   color: AppColors.accent.withOpacity(0.2), width: 2),
@@ -1646,13 +1258,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 size: 40, color: Colors.grey),
           ),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'فشل تحميل البيانات',
             style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
           ),
           const SizedBox(height: 8),
@@ -1679,47 +1291,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final String message;
-  const _EmptyState({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                shape: BoxShape.circle,
-                border:
-                    Border.all(color: Colors.grey.withOpacity(0.2), width: 2),
-              ),
-              child: const Icon(Icons.home_work_outlined,
-                  size: 40, color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              message,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 16,
-                color: Colors.grey,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }
