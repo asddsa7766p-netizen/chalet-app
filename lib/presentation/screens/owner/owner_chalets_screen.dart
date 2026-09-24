@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/services/services.dart';
@@ -30,8 +29,6 @@ class OwnerChaletsScreen extends StatefulWidget {
 }
 
 class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
-  final _supabase = Supabase.instance.client;
-
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _chalets = [];
@@ -62,15 +59,17 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
     }
 
     try {
-      final results = await Future.wait([
-        ChaletService.instance.getOwnerChalets(ownerId),
-        NotificationService.instance.getUnreadCount(),
-      ]);
+      // الشاليهات هي الطلب الأساسي؛ عدّاد الإشعارات ثانوي ولا يُسقط القائمة
+      // إن فشل (نفس نمط _init() بـ owner_calendar_screen.dart).
+      final chalets = await ChaletService.instance.getOwnerChalets(ownerId);
+      final unread = await NotificationService.instance
+          .getUnreadCount()
+          .catchError((_) => _unreadCount);
 
       if (!mounted) return;
       setState(() {
-        _chalets = results[0] as List<Map<String, dynamic>>;
-        _unreadCount = results[1] as int;
+        _chalets = chalets;
+        _unreadCount = unread;
         _loading = false;
       });
     } catch (e) {

@@ -1,4 +1,5 @@
 import '../../../data/models/models.dart';
+import '../../../data/services/chalet_slot_availability.dart';
 import '../../../data/services/pricing_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/services/services.dart';
@@ -49,6 +50,11 @@ abstract class OwnerCalendarDataSource {
 
   /// الليالي المحجوبة (is_available=false) ضمن [from]..[to] شاملة.
   Future<Set<DateTime>> loadBlocked(String chaletId, DateTime from, DateTime to);
+
+  /// توفر الفترتين (صباحية/مسائية) لكل يوم ضمن [from]..[to] شاملة، من
+  /// نفس المصدر الذي يستخدمه تقويم الضيف (get_chalet_slot_availability).
+  Future<Map<DateTime, ChaletDaySlot>> loadDaySlots(
+      String chaletId, DateTime from, DateTime to);
 
   /// حجب الليالي: upsert بـ is_available=false في كتابة واحدة.
   Future<void> blockDates(String chaletId, List<DateTime> dates);
@@ -149,6 +155,14 @@ class SupabaseOwnerCalendarDataSource implements OwnerCalendarDataSource {
   }
 
   @override
+  Future<Map<DateTime, ChaletDaySlot>> loadDaySlots(
+    String chaletId,
+    DateTime from,
+    DateTime to,
+  ) =>
+      ChaletSlotAvailability.load(chaletId, from: from, to: to);
+
+  @override
   Future<void> blockDates(String chaletId, List<DateTime> dates) async {
     if (dates.isEmpty) return;
     await supabase.from('availability').upsert(
@@ -167,11 +181,16 @@ class SupabaseOwnerCalendarDataSource implements OwnerCalendarDataSource {
   @override
   Future<void> unblockDates(String chaletId, List<DateTime> dates) async {
     if (dates.isEmpty) return;
-    await supabase
+    // .select() لأن رفض RLS يعدّل صفر صفوف بلا خطأ، فيظهر "تم" كاذب.
+    final rows = await supabase
         .from('availability')
         .update({'is_available': true})
         .eq('chalet_id', chaletId)
-        .inFilter('date', [for (final d in dates) _isoDate(d)]);
+        .inFilter('date', [for (final d in dates) _isoDate(d)])
+        .select('date');
+    if (rows.isEmpty) {
+      throw Exception('تعذر إلغاء الحجب: غير مصرح لك أو الأيام غير محجوبة.');
+    }
   }
 
   @override

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/utils/date_utils.dart';
 import '../models/chalet_model.dart';
 import '../models/models.dart';
 import 'chalet_slot_availability.dart';
@@ -18,6 +19,10 @@ final supabase = Supabase.instance.client;
 /// عمداً: لا تذكر أن المالك حجبه، وتصلح للضيف وللمالك في الحجز اليدوي.
 const unavailableDatesMessage =
     'بعض الأيام المختارة غير متاحة للحجز. اختر تواريخ أخرى.';
+
+/// تحديث لم يعدّل أي صف: رفض صامت من RLS أو أن الحجز لم يعد موجوداً.
+const bookingNotUpdatedMessage =
+    'تعذر تحديث الحجز: غير مصرح لك به أو لم يعد موجوداً.';
 
 @visibleForTesting
 String translateSupabaseError(dynamic error) => _translateSupabaseError(error);
@@ -633,7 +638,7 @@ class BookingService {
     required int guestsCount,
     String stayType = defaultStayType,
   }) async {
-    final nights = checkOut.difference(checkIn).inDays;
+    final nights = nightsBetween(checkIn, checkOut);
     if (nights <= 0) throw Exception('تواريخ غير صحيحة');
 
     final checkInStr = checkIn.toIso8601String().split('T').first;
@@ -691,30 +696,10 @@ class BookingService {
     }
   }
 
-  /// الليالي غير المتاحة (محجوزة أو محجوبة) لشاليه، من [from] (افتراضياً
-  /// اليوم) لمدى تقويم الضيف. تمرّ عبر دالة القاعدة لأن الضيف لا يقرأ حجوزات
-  /// غيره، وتعيد ليالٍ فقط بلا أي بيانات عن الضيف.
-  Future<List<DateTime>> getUnavailableNights(
-    String chaletId, {
-    DateTime? from,
-    @visibleForTesting RpcCaller? rpc,
-  }) async {
-    try {
-      final nights = await UnavailableNights.load(
-        chaletId,
-        from: from ?? DateTime.now(),
-        rpc: rpc,
-      );
-      return nights.toList()..sort();
-    } catch (e) {
-      throw Exception(_translateSupabaseError(e));
-    }
-  }
-
   /// توفر الفترات (صباحية/مسائية) لكل يوم لشاليه، من [from] (افتراضياً
-  /// اليوم) لمدى تقويم الضيف. المصدر الوحيد الذي يميّز حجز الفترتين معاً —
-  /// يستخدمه تقويم شاشة حجز الضيف بدل getUnavailableNights القديمة بعد أن
-  /// صار الشاليه يقبل حجزاً صباحياً وآخر مسائياً بنفس اليوم.
+  /// اليوم) لمدى تقويم الضيف. تمرّ عبر دالة القاعدة لأن الضيف لا يقرأ حجوزات
+  /// غيره، وهي المصدر الوحيد الذي يميّز حجز الفترتين معاً (تقويم الضيف
+  /// وورقة الحجز اليدوي).
   Future<Map<DateTime, ChaletDaySlot>> getDaySlots(
     String chaletId, {
     DateTime? from,
@@ -758,25 +743,27 @@ class BookingService {
   }
 
   /// Confirm booking (owner action)
-  Future<void> confirmIncomingBooking(String bookingId) async {
-    try {
-      await supabase
-          .from('bookings')
-          .update({'status': 'confirmed'}).eq('id', bookingId);
-    } catch (e) {
-      throw Exception(_translateSupabaseError(e));
-    }
-  }
+  Future<void> confirmIncomingBooking(String bookingId) =>
+      _setIncomingBookingStatus(bookingId, 'confirmed');
 
   /// Reject booking (owner action)
-  Future<void> rejectIncomingBooking(String bookingId) async {
+  Future<void> rejectIncomingBooking(String bookingId) =>
+      _setIncomingBookingStatus(bookingId, 'rejected');
+
+  /// رفض RLS لا يرمي خطأً: UPDATE يمرّ بصمت ويعدّل صفر صفوف، فكانت تظهر
+  /// للمالك رسالة "نجاح" كاذبة. .select() يرجع الصفوف المعدَّلة فعلاً.
+  Future<void> _setIncomingBookingStatus(String bookingId, String status) async {
+    final List<dynamic> rows;
     try {
-      await supabase
+      rows = await supabase
           .from('bookings')
-          .update({'status': 'rejected'}).eq('id', bookingId);
+          .update({'status': status})
+          .eq('id', bookingId)
+          .select('id');
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }
+    if (rows.isEmpty) throw Exception(bookingNotUpdatedMessage);
   }
 
   /// Get my bookings (for customer)
@@ -802,15 +789,18 @@ class BookingService {
     final userId = _auth.currentUser?.id;
     if (userId == null) return;
 
+    final List<dynamic> rows;
     try {
-      await supabase
+      rows = await supabase
           .from('bookings')
           .update({'status': 'cancelled'})
           .eq('id', bookingId)
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .select('id');
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }
+    if (rows.isEmpty) throw Exception(bookingNotUpdatedMessage);
   }
 
   /// Cancel a manual (owner-entered) booking through cancel_external_booking.

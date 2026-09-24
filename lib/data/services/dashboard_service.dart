@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/utils/date_utils.dart';
+
 // Supabase client
 final supabase = Supabase.instance.client;
 
@@ -240,7 +242,7 @@ class DashboardService {
         totalBookings > 0 ? (cancelledTotal / totalBookings * 100) : 0.0;
 
     // متوسط الحجوزات اليومية: عدد أيام النطاق المختار (شامل الطرفين).
-    final daysInRange = endExclusive.difference(start).inDays;
+    final daysInRange = nightsBetween(start, endExclusive);
     final avgDailyBookings =
         daysInRange > 0 ? totalBookings / daysInRange : 0.0;
 

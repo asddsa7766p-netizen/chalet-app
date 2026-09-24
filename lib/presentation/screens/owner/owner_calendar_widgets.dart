@@ -7,6 +7,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
+import '../../../data/services/chalet_slot_availability.dart';
 import '../../../data/services/pricing_service.dart';
 import 'manual_booking_actions.dart';
 import 'owner_calendar_data_source.dart';
@@ -178,6 +179,9 @@ class CalendarDayCell extends StatelessWidget {
   final bool selected;
   final bool hasBlockBadge;
 
+  /// يوم محجوز جزئياً: شارة شمس (الصباحية محجوزة) أو قمر (المسائية).
+  final ChaletDaySlot? partialSlot;
+
   /// اسم الضيف المختصر (يظهر بالشاشات العريضة عند بداية الشريط).
   final String? label;
   final bool roomy;
@@ -192,6 +196,7 @@ class CalendarDayCell extends StatelessWidget {
     this.isPast = false,
     this.selected = false,
     this.hasBlockBadge = false,
+    this.partialSlot,
     this.label,
     this.roomy = false,
   });
@@ -288,6 +293,27 @@ class CalendarDayCell extends StatelessWidget {
                   ),
                   child: const Icon(Icons.block_rounded,
                       size: 12, color: CalendarPalette.blockedInk),
+                ),
+              ),
+            if (partialSlot != null)
+              PositionedDirectional(
+                top: 2,
+                end: 2,
+                child: Container(
+                  key: const Key('partial_slot_badge'),
+                  width: 14,
+                  height: 14,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    partialSlot!.morningBooked
+                        ? Icons.wb_sunny_rounded
+                        : Icons.nightlight_round,
+                    size: 11,
+                    color: AppColors.charcoal,
+                  ),
                 ),
               ),
           ],
@@ -552,6 +578,7 @@ class OwnerDayPanel extends StatelessWidget {
   List<Widget> _bookedBody(BookingModel booking) {
     return [
       _bookingCard(booking),
+      if (day.partialLabel != null) _note(day.partialLabel!),
       if (day.departing != null && day.departing!.id != booking.id)
         _departingNote(day.departing!),
       if (day.hasBlockAndBooking) ...[
@@ -637,6 +664,7 @@ class OwnerDayPanel extends StatelessWidget {
   List<Widget> _emptyBody() {
     return [
       _priceRow(),
+      if (day.partialLabel != null) _note(day.partialLabel!),
       if (day.departing != null) _departingNote(day.departing!),
       const SizedBox(height: 14),
       _primaryButton(

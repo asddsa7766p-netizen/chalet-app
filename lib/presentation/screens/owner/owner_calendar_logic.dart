@@ -1,5 +1,7 @@
+import '../../../core/utils/date_utils.dart';
 import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
+import '../../../data/services/chalet_slot_availability.dart';
 
 /// منطق تقويم المالك الخالص (بلا واجهة ولا قاعدة بيانات) حتى يُختبر مباشرة.
 ///
@@ -7,6 +9,8 @@ import '../../../data/models/models.dart';
 /// - الحجز يشغل الليالي من check_in حتى check_out غير شاملة، وpending أو
 ///   confirmed فقط يشغل التقويم. يوم المغادرة يظهر متاحاً.
 /// - الحجب صف availability بـ is_available=false لكل ليلة.
+/// - توفر الفترتين (صباحية/مسائية) لكل يوم من get_chalet_slot_availability:
+///   يوم فترة واحدة منه محجوزة يُعلَّم "محجوز جزئياً".
 
 DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -41,6 +45,9 @@ class CalendarDay {
   final bool isPast;
   final bool isToday;
 
+  /// توفر الفترتين بهذا اليوم (null إن لم يُحمَّل أو لا حجز عليه).
+  final ChaletDaySlot? slot;
+
   const CalendarDay({
     required this.date,
     required this.booking,
@@ -48,9 +55,22 @@ class CalendarDay {
     required this.blocked,
     required this.isPast,
     required this.isToday,
+    this.slot,
   });
 
   bool get isBooked => booking != null;
+
+  /// فترة واحدة فقط محجوزة (صباحية أو مسائية) والأخرى حرة.
+  bool get isPartiallyBooked => slot?.isPartiallyBooked ?? false;
+
+  /// وصف الحجز الجزئي للعرض ولقارئ الشاشة، أو null إن لم يكن جزئياً.
+  String? get partialLabel {
+    final s = slot;
+    if (s == null || !s.isPartiallyBooked) return null;
+    return s.morningBooked
+        ? 'الفترة الصباحية محجوزة، والمسائية متاحة'
+        : 'الفترة المسائية محجوزة، والصباحية متاحة';
+  }
 
   /// حجز وحجب معاً على نفس الليلة (لا يمنعه الـ trigger): يغلب الحجز لوناً
   /// وتظهر شارة منع فوقه.
@@ -66,10 +86,7 @@ class CalendarDay {
   int? get nightNumber {
     final b = booking;
     if (b == null) return null;
-    return DateTime.utc(date.year, date.month, date.day)
-            .difference(DateTime.utc(b.checkIn.year, b.checkIn.month, b.checkIn.day))
-            .inDays +
-        1;
+    return nightsBetween(b.checkIn, date) + 1;
   }
 }
 
@@ -77,9 +94,17 @@ class CalendarDay {
 class CalendarData {
   final Map<String, BookingModel> _bookings = {};
   final Set<DateTime> _blocked = {};
+  final Map<DateTime, ChaletDaySlot> _slots = {};
 
   Iterable<BookingModel> get bookings => _bookings.values;
   Set<DateTime> get blocked => _blocked;
+
+  /// يستبدل توفر الفترات ضمن [from]..[to] شاملة بالنتيجة الجديدة.
+  void replaceSlots(
+      DateTime from, DateTime to, Map<DateTime, ChaletDaySlot> fresh) {
+    _slots.removeWhere((d, _) => !d.isBefore(from) && !d.isAfter(to));
+    fresh.forEach((d, s) => _slots[dateOnly(d)] = s);
+  }
 
   void addBookings(Iterable<BookingModel> list) {
     for (final b in list) {
@@ -96,6 +121,7 @@ class CalendarData {
   void clear() {
     _bookings.clear();
     _blocked.clear();
+    _slots.clear();
   }
 
   BookingModel? bookingOnNight(DateTime day) {
@@ -128,6 +154,7 @@ class CalendarData {
       blocked: isBlocked(d),
       isPast: d.isBefore(t),
       isToday: d == t,
+      slot: _slots[d],
     );
   }
 }

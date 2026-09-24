@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:makan/data/models/models.dart';
+import 'package:makan/data/services/chalet_slot_availability.dart';
 import 'package:makan/data/services/pricing_service.dart';
 import 'package:makan/presentation/screens/owner/owner_calendar_data_source.dart';
 import 'package:makan/presentation/screens/owner/owner_calendar_screen.dart';
@@ -118,6 +119,19 @@ class FakeOwnerCalendarDataSource implements OwnerCalendarDataSource {
     return {
       for (final x in blocked[chaletId] ?? const <DateTime>{})
         if (!x.isBefore(from) && !x.isAfter(to)) x,
+    };
+  }
+
+  /// توفر الفترات لكل يوم (يُملأ صراحة بالاختبار؛ افتراضياً لا شيء).
+  final Map<String, Map<DateTime, ChaletDaySlot>> slots = {};
+
+  @override
+  Future<Map<DateTime, ChaletDaySlot>> loadDaySlots(
+      String chaletId, DateTime from, DateTime to) async {
+    log.add('slots $chaletId ${_s(from)}..${_s(to)}');
+    return {
+      for (final e in (slots[chaletId] ?? const {}).entries)
+        if (!e.key.isBefore(from) && !e.key.isAfter(to)) e.key: e.value,
     };
   }
 

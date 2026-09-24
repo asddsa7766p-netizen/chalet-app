@@ -36,6 +36,8 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
   OwnerDashboardStats? _stats;
   List<BookingModel> _upcomingBookings = [];
   int _pendingCount = 0;
+  // فشل جلب الحجوزات وحده: القسم يقول ذلك صراحة بدل "لا توجد حجوزات".
+  bool _bookingsFailed = false;
 
   // بانر "أكمل الإعداد" — قابل للإخفاء يدويًا من المستخدم لهذه الجلسة،
   // ويظهر فقط إذا كان المالك لا يملك أي شاليه بعد فعليًا (_hasChalets).
@@ -55,41 +57,60 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
       _error = null;
     });
     final ownerId = AuthService.instance.currentUser?.id ?? '';
+    // الطلبات تبدأ معاً (متوازية)، لكن غير مقترنة كما كانت بـ Future.wait:
+    // فشل طلب ثانوي لا يُسقط اللوحة كلها، بل يبقي قيمته السابقة/الافتراضية
+    // (نفس فلسفة _init() بـ owner_calendar_screen.dart). الإحصائيات وحدها
+    // أساسية.
+    final statsF =
+        DashboardService.instance.getOwnerDashboardStats(range: _range);
+    final profileF = AuthService.instance
+        .getCurrentProfile()
+        .then<UserProfile?>((p) => p)
+        .catchError((_) => _profile);
+    final unreadF = NotificationService.instance
+        .getUnreadCount()
+        .catchError((_) => _unreadCount);
+    final bookingsF = BookingService.instance
+        .getIncomingBookings()
+        .then<List<BookingModel>?>((b) => b)
+        .catchError((_) => null);
+    final chaletsF = ChaletService.instance
+        .getOwnerChalets(ownerId)
+        .then<List<Map<String, dynamic>>?>((c) => c)
+        .catchError((_) => null);
     try {
-      // ✅ تحميل متوازٍ (Future.wait) بدل استدعاءات متسلسلة — كل استدعاء
-      // مستقل عن الآخر فلا داعي لانتظار كل واحد على حدة قبل بدء التالي.
-      final results = await Future.wait([
-        AuthService.instance.getCurrentProfile(),
-        DashboardService.instance.getOwnerDashboardStats(range: _range),
-        NotificationService.instance.getUnreadCount(),
-        BookingService.instance.getIncomingBookings(),
-        ChaletService.instance.getOwnerChalets(ownerId),
-      ]);
+      final stats = await statsF;
+      final profile = await profileF;
+      final unread = await unreadF;
+      final allBookings = await bookingsF;
+      final chalets = await chaletsF;
       if (!mounted) return;
 
-      final allBookings = results[3] as List<BookingModel>;
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       // ✅ "الحجوزات القادمة" الحقيقية: قيد الانتظار أو مؤكدة، بتاريخ
       // وصول اليوم أو لاحقًا، مرتبة بالأقرب أولًا — بدل بطاقة CTA ثابتة.
-      final upcoming = allBookings
+      final upcoming = (allBookings ?? const <BookingModel>[])
           .where((b) =>
               (b.status == BookingStatus.pending ||
                   b.status == BookingStatus.confirmed) &&
               !b.checkIn.isBefore(today))
           .toList()
         ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
-      final pendingCount =
-          allBookings.where((b) => b.status == BookingStatus.pending).length;
-      final chalets = results[4] as List<Map<String, dynamic>>;
 
       setState(() {
-        _profile = results[0] as UserProfile?;
-        _stats = results[1] as OwnerDashboardStats;
-        _unreadCount = results[2] as int;
-        _upcomingBookings = upcoming.take(3).toList();
-        _pendingCount = pendingCount;
-        _hasChalets = chalets.isNotEmpty;
+        _profile = profile;
+        _stats = stats;
+        _unreadCount = unread;
+        _bookingsFailed = allBookings == null;
+        if (allBookings != null) {
+          _upcomingBookings = upcoming.take(3).toList();
+          _pendingCount = allBookings
+              .where((b) => b.status == BookingStatus.pending)
+              .length;
+        }
+        // عند الفشل لا نفترض "لا شاليهات" (كان سيُظهر بانر الإعداد خطأً).
+        if (chalets != null) _hasChalets = chalets.isNotEmpty;
         _loading = false;
       });
     } catch (e) {
@@ -106,7 +127,9 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
   // يُعيد تحميل البروفايل/الإحصائيات/الحجوزات/الشاليهات ويصفّر موضع
   // التمرير وحالة loading بلا أي داعٍ فعلي (كل ما تغيّر هو حالة القراءة).
   Future<void> _refreshUnreadCount() async {
-    final count = await NotificationService.instance.getUnreadCount();
+    final count = await NotificationService.instance
+        .getUnreadCount()
+        .catchError((_) => _unreadCount);
     if (!mounted) return;
     setState(() => _unreadCount = count);
   }
@@ -466,7 +489,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
           icon: Icons.access_time_rounded,
           iconColor: const Color(0xFFC9A24B),
           title: 'طلبات قيد الانتظار',
-          value: '$_pendingCount',
+          value: _bookingsFailed ? '—' : '$_pendingCount',
           footer: 'طلب',
           onTap: _pendingCount > 0 ? () => context.go('/owner-bookings') : null,
         ),
@@ -583,18 +606,21 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.sand),
               ),
-              child: const Column(
+              child: Column(
                 children: [
-                  Icon(Icons.event_note_outlined,
+                  const Icon(Icons.event_note_outlined,
                       size: 32, color: AppColors.textHint),
-                  SizedBox(height: 8),
-                  Text('لا توجد حجوزات قادمة حالياً',
-                      style: TextStyle(
+                  const SizedBox(height: 8),
+                  Text(
+                      _bookingsFailed
+                          ? 'تعذر تحميل الحجوزات القادمة'
+                          : 'لا توجد حجوزات قادمة حالياً',
+                      style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 12,
                           color: AppColors.textSecondary)),
-                  SizedBox(height: 4),
-                  Row(
+                  const SizedBox(height: 4),
+                  const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text('عرض سجل الحجوزات',

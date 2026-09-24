@@ -6,6 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/date_utils.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/chalet_slot_availability.dart';
@@ -108,7 +109,7 @@ class _BookingScreenState extends State<BookingScreen> {
   ChaletModel? get _chaletModel => _chalet ?? widget.chalet;
 
   int get _nights => _checkIn != null && _checkOut != null
-      ? _checkOut!.difference(_checkIn!).inDays
+      ? nightsBetween(_checkIn!, _checkOut!)
       : 0;
 
   double? get _total => _serverTotalPrice;

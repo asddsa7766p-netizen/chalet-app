@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:makan/data/models/manual_booking.dart';
 import 'package:makan/data/models/models.dart';
+import 'package:makan/data/services/chalet_slot_availability.dart';
+import 'package:makan/data/services/pricing_service.dart';
 import 'package:makan/presentation/screens/owner/manual_booking_actions.dart';
 import 'package:makan/presentation/screens/owner/manual_booking_sheet.dart';
 
@@ -189,13 +191,29 @@ void main() {
 
   group('ورقة الحجز اليدوي (اعتماديات وهمية، بدون قاعدة بيانات)', () {
     final today = DateTime(2030, 3, 10);
-    // الليلتان المحجوزتان: 14 و15 مارس.
+    // اليومان المحجوزان بالكامل (الفترتان): 14 و15 مارس.
     final booked = [DateTime(2030, 3, 14), DateTime(2030, 3, 15)];
 
     late List<ManualBookingRequest> submitted;
     late List<String> bookedLoadedFor;
     late int quoteCalls;
+    late List<String> quotedStayTypes;
     late bool? sheetResult;
+    // أنواع الإقامة المفعّلة وتوفر فترات إضافي لكل اختبار (افتراضياً لا شيء).
+    var stayTypes = <ChaletStayTypeConfig>[];
+    var extraSlots = <DateTime, ChaletDaySlot>{};
+
+    Map<DateTime, ChaletDaySlot> slotsFor(List<DateTime> fullyBooked) => {
+          for (final d in fullyBooked)
+            d: const ChaletDaySlot(
+                morningBooked: true, eveningBooked: true, blocked: false),
+          ...extraSlots,
+        };
+
+    setUp(() {
+      stayTypes = [];
+      extraSlots = {};
+    });
 
     Future<void> openSheet(
       WidgetTester tester, {
@@ -209,6 +227,7 @@ void main() {
       submitted = [];
       bookedLoadedFor = [];
       quoteCalls = 0;
+      quotedStayTypes = [];
       sheetResult = null;
 
       await tester.pumpWidget(MaterialApp(
@@ -227,12 +246,14 @@ void main() {
                             ManualBookingChalet(
                                 id: 'c1', name: 'شاليه الندى', maxGuests: 3),
                           ],
-                      loadBookedNights: (id) async {
+                      loadDaySlots: (id) async {
                         bookedLoadedFor.add(id);
-                        return booked;
+                        return slotsFor(booked);
                       },
-                      quotePrice: (id, ci, co) async {
+                      loadStayTypes: (id) async => stayTypes,
+                      quotePrice: (id, ci, co, stay) async {
                         quoteCalls++;
+                        quotedStayTypes.add(stay);
                         return price;
                       },
                       submit: (r) async => submitted.add(r),
@@ -437,11 +458,11 @@ void main() {
               ManualBookingChalet(id: 'c1', name: 'الأول'),
               ManualBookingChalet(id: 'c2', name: 'الثاني'),
             ],
-            loadBookedNights: (id) async {
+            loadDaySlots: (id) async {
               asked.add(id);
-              return booked;
+              return slotsFor(booked);
             },
-            quotePrice: (id, ci, co) async => 1500,
+            quotePrice: (id, ci, co, stay) async => 1500,
             submit: (r) async {},
           ),
         ),
@@ -465,8 +486,8 @@ void main() {
             today: today,
             initialCheckIn: DateTime(2030, 3, 14), // ليلة محجوزة/محجوبة
             chalets: const [ManualBookingChalet(id: 'c1', name: 'الأول')],
-            loadBookedNights: (id) async => booked,
-            quotePrice: (id, ci, co) async => 1500,
+            loadDaySlots: (id) async => slotsFor(booked),
+            quotePrice: (id, ci, co, stay) async => 1500,
             submit: (r) async {},
           ),
         ),
@@ -486,8 +507,8 @@ void main() {
             today: today,
             initialCheckIn: DateTime(2030, 3, 2),
             chalets: const [ManualBookingChalet(id: 'c1', name: 'الأول')],
-            loadBookedNights: (id) async => booked,
-            quotePrice: (id, ci, co) async => 1500,
+            loadDaySlots: (id) async => slotsFor(booked),
+            quotePrice: (id, ci, co, stay) async => 1500,
             submit: (r) async {},
           ),
         ),
@@ -508,6 +529,86 @@ void main() {
       await tester.tap(find.text('الثاني'));
       await tester.pumpAndSettle();
       expect(bookedLoadedFor, ['c1', 'c2']);
+    });
+
+    testWidgets('بلا أنواع إقامة: لا اختيار نوع، ويُرسل default', (tester) async {
+      await openSheet(tester);
+      expect(find.byKey(const Key('manual_stay_morning')), findsNothing);
+
+      await pickDates(tester);
+      await tester.enterText(find.byType(TextFormField).at(1), 'سامي');
+      await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
+      await tester.tap(find.text('حجز التواريخ'));
+      await tester.pumpAndSettle();
+
+      expect(quotedStayTypes, ['default']);
+      expect(submitted.single.stayType, 'default');
+    });
+
+    group('أنواع الإقامة والأيام المحجوزة جزئياً', () {
+      ChaletStayTypeConfig cfg(ChaletStayType t) => ChaletStayTypeConfig(
+            type: t,
+            checkinTime: t.defaultCheckin,
+            checkoutTime: t.defaultCheckout,
+          );
+
+      setUp(() {
+        stayTypes = [
+          cfg(ChaletStayType.morning),
+          cfg(ChaletStayType.evening),
+        ];
+        // 12 مارس: الفترة الصباحية محجوزة فقط.
+        extraSlots = {
+          DateTime(2030, 3, 12): const ChaletDaySlot(
+              morningBooked: true, eveningBooked: false, blocked: false),
+        };
+      });
+
+      testWidgets('أول نوع مفعّل مختار افتراضياً، والفترة المحجوزة معطّلة له',
+          (tester) async {
+        await openSheet(tester);
+        expect(find.byKey(const Key('manual_stay_morning')), findsOneWidget);
+        expect(find.byKey(const Key('manual_stay_evening')), findsOneWidget);
+        // شارة "الصباحية محجوزة" على يوم 12.
+        expect(find.byIcon(Icons.wb_sunny_rounded), findsWidgets);
+
+        await tester.tap(find.text('12'));
+        await tester.pump();
+        expect(
+            find.text('الفترة المطلوبة محجوزة بهذا اليوم — جرّب نوع إقامة آخر'),
+            findsOneWidget);
+      });
+
+      testWidgets('المسائية: يوم 12 متاح، ويُرسل نوع الإقامة للتسعير والحفظ',
+          (tester) async {
+        await openSheet(tester);
+        await tester.tap(find.byKey(const Key('manual_stay_evening')));
+        await tester.pump();
+
+        await pickDates(tester);
+        expect(find.textContaining('1 ليالٍ'), findsOneWidget);
+        expect(quotedStayTypes, ['evening']);
+
+        await tester.enterText(find.byType(TextFormField).at(1), 'سامي');
+        await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
+        await tester.tap(find.text('حجز التواريخ'));
+        await tester.pumpAndSettle();
+        expect(submitted.single.stayType, 'evening');
+        expect(submitted.single.checkIn, DateTime(2030, 3, 12));
+      });
+
+      testWidgets('تغيير النوع لنوع لا يتيح التواريخ المختارة يمسحها',
+          (tester) async {
+        await openSheet(tester);
+        await tester.tap(find.byKey(const Key('manual_stay_evening')));
+        await tester.pump();
+        await pickDates(tester);
+        expect(find.textContaining('من 12 مارس'), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('manual_stay_morning')));
+        await tester.pump();
+        expect(find.text('اختر يوم الوصول'), findsOneWidget);
+      });
     });
   });
 }

@@ -23,3 +23,18 @@
 **الاختبارات:** `test/reels_screen_test.dart` — 7 اختبارات. أُضيفت دالة `_settleDisposal` لأن `VideoPlayerController.dispose()` يحتاج فجوة async حقيقية خارج FakeAsync (مُثبت باختبار عزل)؛ معنى كل توقّع أصلي لم يتغيّر. أُضيفت 3 اختبارات: تشغيل تلقائي، لا مشغّلات والتبويب مخفي، الإخفاء يحرّر المشغّلات.
 
 **البوابة:** analyze 245 (0 جديد). test: 310 نجاح.
+
+## المرحلة 2: الحجوزات والمالك — ✅ منتهية
+(تحقق من القاعدة الحية بقراءة فقط: سياسة `bookings_update_unified` تسمح للمالك بتحديث حجوزات شاليهاته، و`availability_update_owner` كذلك؛ `create_external_booking` تقبل `p_stay_type` افتراضياً 'default'؛ `booking_slots` تطابق `isDayAvailableForStayType`.)
+- **فحص عدد الصفوف:** `confirmIncomingBooking`/`rejectIncomingBooking` (دالة مشتركة `_setIncomingBookingStatus`) و`cancelBooking` للزبون و`unblockDates`: `.select()` ورمي استثناء عند 0 صف (`bookingNotUpdatedMessage`).
+- **فك اقتران Future.wait:** `owner_bookings_screen` و`owner_chalets_screen` (أساسي تسلسلي + `catchError` للثانوي). `owner_dashboard_screen`: الطلبات الخمسة تبدأ متوازية لكن كل ثانوي بـ `catchError` مستقل؛ الإحصائيات وحدها أساسية. فشل الحجوزات يعرض "تعذر تحميل الحجوزات القادمة" و"—" بدل "لا توجد حجوزات"، وفشل الشاليهات لا يُظهر بانر الإعداد خطأً. `_refreshUnreadCount` لم يعد يرمي.
+- **القبول/الرفض:** حوار تأكيد للقبول أيضاً (مشترك مع التقويم)، و`onStart` يضبط "مشغول" بعد موافقة الحوار وقبل الطلب، بالشاشتين (الحجوزات والتقويم).
+- **الشهران:** "30 مارس - 2 أبريل" (مع السنة إن اختلفت).
+- **أنواع الإقامة:** ورقة الحجز اليدوي تقرأ `getDaySlots` بدل الليالي، تعرض أنواع الإقامة المفعّلة (أول نوع افتراضياً كشاشة الضيف)، تعطّل الأيام بـ `isDayDisabledForStaySlot`، تعلّم الأيام الجزئية (شمس/قمر)، وترسل `stay_type` للتسعير ولـ `create_external_booking`. تقويم المالك يحمّل الفترات (`loadDaySlots`، ثانوي) ويعرض شارة وملاحظة "الفترة الصباحية/المسائية محجوزة" + وصف لقارئ الشاشة — يظهر الآن أيضاً صباح اليوم التالي لحجز "يوم كامل مسائي" الذي كان يبدو حراً.
+- **unavailable_nights.dart:** نموذج الليالي القديم (`UnavailableNights`, `isDayDisabledForStay`, `rangeHasUnavailableNight`, `getUnavailableNights`) لم يعد له مستخدم بـ lib/ (مؤكَّد بـ grep) فأُزيل؛ الملف يحتفظ بـ `RpcCaller` فقط. الاختبارات نُقلت لـ `ChaletSlotAvailability` بنفس التغطية + اختبارات الأيام الجزئية لكل نوع إقامة.
+- **nightsBetween:** `lib/core/utils/date_utils.dart` بـ `DateTime.utc`، مستخدمة في: `BookingModel.nightsCount`، `calculateBookingPrice`، `dashboard_service` (أيام النطاق)، `booking_screen._nights`، `payment_flow_entry`، `manual_booking_sheet`، `owner_calendar_logic.nightNumber`.
+- حُذف حقل `_supabase` الميت من `owner_chalets_screen`.
+
+**الاختبارات الجديدة/المعدّلة:** `date_utils_test` (DST)، `manual_booking_test` (+4: default، نوع أول افتراضي، المسائية ترسل stayType، تغيير النوع يمسح التواريخ)، `owner_calendar_screen_test` (+2: شارة جزئية، فشل الفترات لا يُسقط التقويم؛ اختبار القبول يمر الآن بالحوار)، `unavailable_nights_test` (أُعيدت كتابته على الفترات).
+
+**البوابة:** analyze 244 (0 جديد). test: 322 نجاح.

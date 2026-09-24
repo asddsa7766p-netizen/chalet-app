@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:makan/data/models/models.dart';
+import 'package:makan/data/services/chalet_slot_availability.dart';
 import 'package:makan/data/services/pricing_service.dart';
 import 'package:makan/presentation/screens/owner/owner_calendar_data_source.dart';
 import 'package:makan/presentation/screens/owner/owner_calendar_logic.dart';
@@ -20,6 +21,18 @@ CalendarDayKind kindOn(WidgetTester t, String iso) => cellWidget(t, iso).kind;
 Future<void> tapDay(WidgetTester t, String iso) async {
   await t.tap(cellOf(iso));
   await t.pumpAndSettle();
+}
+
+class _SlotsFailingDataSource extends FakeOwnerCalendarDataSource {
+  _SlotsFailingDataSource()
+      : super(bookings: {
+          'c1': [fakeBooking('app1', d(2030, 3, 12), d(2030, 3, 15))],
+        });
+
+  @override
+  Future<Map<DateTime, ChaletDaySlot>> loadDaySlots(
+          String chaletId, DateTime from, DateTime to) async =>
+      throw Exception('rpc down');
 }
 
 void main() {
@@ -395,8 +408,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(ds.log.where((l) => l.startsWith('reject')), isEmpty);
 
-      // تأكيد.
+      // تأكيد: حوار أيضاً، "إلغاء" لا يؤكّد.
       await tester.tap(find.byKey(const Key('day_action_confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('هل تريد قبول هذا الحجز؟ ستُحجز هذه التواريخ للضيف.'),
+          findsOneWidget);
+      await tester.tap(find.text('إلغاء'));
+      await tester.pumpAndSettle();
+      expect(ds.log.where((l) => l.startsWith('confirm')), isEmpty);
+
+      await tester.tap(find.byKey(const Key('day_action_confirm')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('قبول الحجز').last);
       await tester.pumpAndSettle();
       expect(ds.log.where((l) => l.startsWith('confirm')), ['confirm pend']);
       expect(kindOn(tester, '2030-03-24'), CalendarDayKind.appConfirmed);
@@ -626,6 +649,43 @@ void main() {
     testWidgets('خط مكبّر 2×: لا تجاوز بالخلايا', (tester) async {
       await pumpCalendar(tester, sampleDataSource(), textScale: 2.0);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('الأيام المحجوزة جزئياً (صباحي/مسائي)', () {
+    testWidgets('يوم فترة واحدة منه محجوزة: شارة بالخلية وملاحظة باللوحة',
+        (tester) async {
+      final ds = sampleDataSource();
+      // 22 مارس: حر بالحجوزات، لكن فترته المسائية محجوزة (من get_chalet_slot_availability).
+      ds.slots['c1'] = {
+        d(2030, 3, 22): const ChaletDaySlot(
+            morningBooked: false, eveningBooked: true, blocked: false),
+      };
+      await pumpCalendar(tester, ds);
+
+      expect(ds.log.where((l) => l.startsWith('slots c1')), isNotEmpty);
+      expect(
+          find.descendant(
+              of: cellOf('2030-03-22'),
+              matching: find.byKey(const Key('partial_slot_badge'))),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: cellOf('2030-03-21'),
+              matching: find.byKey(const Key('partial_slot_badge'))),
+          findsNothing);
+
+      await tapDay(tester, '2030-03-22');
+      expect(find.text('الفترة المسائية محجوزة، والصباحية متاحة'),
+          findsOneWidget);
+    });
+
+    testWidgets('فشل تحميل الفترات لا يُسقط التقويم', (tester) async {
+      final ds = _SlotsFailingDataSource();
+      await pumpCalendar(tester, ds);
+      expect(find.byKey(const Key('partial_slot_badge')), findsNothing);
+      expect(find.text('تعذر تحميل بيانات التقويم، حاول مرة أخرى'), findsNothing);
+      expect(kindOn(tester, '2030-03-13'), CalendarDayKind.appConfirmed);
     });
   });
 

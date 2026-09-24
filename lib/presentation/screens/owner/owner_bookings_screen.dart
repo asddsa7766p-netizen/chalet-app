@@ -54,14 +54,16 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        BookingService.instance.getIncomingBookings(),
-        NotificationService.instance.getUnreadCount(),
-      ]);
+      // الحجوزات هي الطلب الأساسي؛ عدّاد الإشعارات ثانوي ولا يُسقط القائمة
+      // إن فشل (نفس نمط _init() بـ owner_calendar_screen.dart).
+      final bookings = await BookingService.instance.getIncomingBookings();
+      final unread = await NotificationService.instance
+          .getUnreadCount()
+          .catchError((_) => _unreadCount);
       if (!mounted) return;
       setState(() {
-        _bookings = results[0] as List<BookingModel>;
-        _unreadCount = results[1] as int;
+        _bookings = bookings;
+        _unreadCount = unread;
         _loading = false;
       });
     } catch (e) {
@@ -74,27 +76,33 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
     }
   }
 
-  Future<void> _onConfirm(String bookingId) async {
+  Future<void> _onConfirm(String bookingId) => _decide(
+      (onStart) => confirmBookingFlow(context, bookingId, onStart: onStart));
+
+  Future<void> _onReject(String bookingId) => _decide(
+      (onStart) => rejectBookingFlow(context, bookingId, onStart: onStart));
+
+  /// القبول والرفض متناظران: حوار تأكيد أولاً، ثم "مشغول" قبل الطلب نفسه
+  /// (كان الرفض يضبطه بعد الطلب، فيبقى الزر مفعّلاً أثناءه).
+  Future<void> _decide(Future<bool> Function(VoidCallback onStart) flow) async {
     if (_actionLoading) return;
-    setState(() => _actionLoading = true);
     try {
-      final ok = await confirmBookingFlow(context, bookingId);
-      if (ok) await _load();
+      final ok = await flow(() => setState(() => _actionLoading = true));
+      if (ok && mounted) await _load();
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
   }
 
-  Future<void> _onReject(String bookingId) async {
-    if (_actionLoading) return;
-    final ok = await rejectBookingFlow(context, bookingId);
-    if (!ok || !mounted) return;
-    setState(() => _actionLoading = true);
-    try {
-      await _load();
-    } finally {
-      if (mounted) setState(() => _actionLoading = false);
+  /// "3 - 7 مارس"، أو "30 مارس - 2 أبريل" حين يعبر الحجز شهرين.
+  String _dateRangeLabel(DateTime checkIn, DateTime checkOut) {
+    if (checkIn.year == checkOut.year && checkIn.month == checkOut.month) {
+      return '${checkIn.day} - ${checkOut.day} ${_monthName(checkIn.month)}';
     }
+    final yearSuffix =
+        checkIn.year == checkOut.year ? '' : ' ${checkOut.year}';
+    return '${checkIn.day} ${_monthName(checkIn.month)} - '
+        '${checkOut.day} ${_monthName(checkOut.month)}$yearSuffix';
   }
 
   void _showSnack(String msg, {bool isError = false}) {
@@ -338,7 +346,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                                   size: 14),
                               const SizedBox(width: 6),
                               Text(
-                                '${b.checkIn.day} - ${b.checkOut.day} ${_monthName(b.checkIn.month)}',
+                                _dateRangeLabel(b.checkIn, b.checkOut),
                                 style: const TextStyle(
                                   fontFamily: 'Cairo',
                                   fontSize: 12,

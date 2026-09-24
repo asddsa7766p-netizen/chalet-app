@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/date_utils.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/models/booking_payment_details.dart';
 import 'payment_review_screen.dart';
@@ -13,7 +14,7 @@ Widget buildPaymentFlow({
   double taxAndFeesPercent = 5,
   String? userEmail,
 }) {
-  final nights = checkOut.difference(checkIn).inDays;
+  final nights = nightsBetween(checkIn, checkOut);
   final subtotal = chalet.pricePerNight * nights;
   final taxAndFees = (subtotal + extrasTotal) * (taxAndFeesPercent / 100);
   final total = subtotal + extrasTotal + taxAndFees;

@@ -1,3 +1,5 @@
+import '../../core/utils/date_utils.dart';
+
 // ============================================
 // HELPERS
 // ============================================
@@ -100,12 +102,7 @@ class BookingModel {
     this.externalGuestPhone,
   });
 
-  // ✅ إصلاح: الفرق بين تاريخين محليين يتأثر بتغيير التوقيت الصيفي (ليلة
-  // 23 ساعة ⇒ inDays أقل بواحد؛ مثال: 25→27 مارس 2027 كانت تُعرض "ليلة
-  // واحدة"). الحساب بالتواريخ UTC يعطي عدد الليالي الفعلي دائماً.
-  int get nightsCount => DateTime.utc(checkOut.year, checkOut.month, checkOut.day)
-      .difference(DateTime.utc(checkIn.year, checkIn.month, checkIn.day))
-      .inDays;
+  int get nightsCount => nightsBetween(checkIn, checkOut);
 
   factory BookingModel.fromJson(Map<String, dynamic> json) {
     return BookingModel(

@@ -40,7 +40,7 @@ class ChaletSlotAvailability {
 
   /// نافذة تقويم الضيف: من اليوم لسنة (365) + يوم إضافي لأن قاعدة
   /// full_day_evening تحتاج معرفة صباح اليوم التالي لآخر يوم ظاهر بالتقويم
-  /// + يوم احتياطي زي UnavailableNights.guestWindowDays.
+  /// + يوم احتياطي لأن حدّ p_to غير مؤكد كونه شاملاً أم لا.
   static const guestWindowDays = 367;
 
   static String _date(DateTime d) =>
@@ -141,8 +141,8 @@ bool isDayAvailableForStayType(
 }
 
 /// هل في يوم من [from] (شاملاً) حتى [to] (غير شامل) يوم غير متاح لنوع
-/// الإقامة [stayType]؟ مطابقة لـ rangeHasUnavailableNight بملف
-/// unavailable_nights.dart، لكن حسب توفر الفترات بدل مجموعة ليالٍ خام.
+/// الإقامة [stayType]؟ المغادرة غير شاملة لأن الـ trigger يفحص الأيام من
+/// الوصول حتى ما قبل المغادرة.
 bool rangeHasUnavailableDayForStayType(
   DateTime? from,
   DateTime? to, {
@@ -161,11 +161,10 @@ bool rangeHasUnavailableDayForStayType(
   return false;
 }
 
-/// قاعدة تعطيل أيام تقويم اختيار التواريخ لنوع إقامة معيّن — نفس فكرة
-/// isDayDisabledForStay بملف unavailable_nights.dart، لكن مبنية على توفر
-/// الفترات (صباحية/مسائية) حسب [stayType] بدل مجموعة ليالٍ عامة.
-/// [selectingEnd] = الوصول محدد ويُنتظر اليوم التالي (مغادرة أو وصول جديد
-/// أبكر).
+/// قاعدة تعطيل أيام تقويم اختيار التواريخ لنوع إقامة معيّن (مشتركة بين شاشة
+/// الضيف وورقة الحجز اليدوي): اليوم غير المتاح لا يُختار كوصول، ويجوز
+/// اختياره كمغادرة إذا كانت أيام الفترة قبله متاحة. [selectingEnd] = الوصول
+/// محدد ويُنتظر اليوم التالي (مغادرة أو وصول جديد أبكر).
 bool isDayDisabledForStaySlot(
   DateTime day, {
   required Map<DateTime, ChaletDaySlot> slots,

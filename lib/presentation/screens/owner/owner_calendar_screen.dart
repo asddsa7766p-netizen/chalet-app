@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/models/models.dart';
+import '../../../data/services/chalet_slot_availability.dart';
 import '../../../data/services/pricing_service.dart';
 import 'chalet_pricing_screen.dart';
 import 'manual_booking_actions.dart';
@@ -207,10 +208,15 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
       final results = await Future.wait<Object>([
         _ds.loadBookings(chalet.id, from, toExclusive),
         _ds.loadBlocked(chalet.id, from, toInclusive),
+        // ثانوي: فشله يخفي علامة "محجوز جزئياً" فقط، لا التقويم كله.
+        _ds
+            .loadDaySlots(chalet.id, from, toInclusive)
+            .catchError((_) => <DateTime, ChaletDaySlot>{}),
       ]);
       if (!mounted || gen != _gen || chalet.id != _chalet?.id) return;
       final bookings = results[0] as List<BookingModel>;
       final blocked = results[1] as Set<DateTime>;
+      final slots = results[2] as Map<DateTime, ChaletDaySlot>;
       setState(() {
         if (reset) {
           _data = CalendarData();
@@ -218,6 +224,7 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
         }
         _data.addBookings(bookings);
         _data.replaceBlocked(from, toInclusive, blocked);
+        _data.replaceSlots(from, toInclusive, slots);
         for (final m in months) {
           _loadedMonths.add(_monthKey(m));
         }
@@ -394,15 +401,24 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
     ));
   }
 
-  Future<void> _confirmBooking(BookingModel b) async {
-    final ok = await confirmBookingFlow(context, b.id, confirm: _ds.confirmBooking);
-    if (!ok || !mounted) return;
-    _closeSheet();
-    await _refresh();
-  }
+  Future<void> _confirmBooking(BookingModel b) => _decideBooking(
+      (onStart) => confirmBookingFlow(context, b.id,
+          confirm: _ds.confirmBooking, onStart: onStart));
 
-  Future<void> _rejectBooking(BookingModel b) async {
-    final ok = await rejectBookingFlow(context, b.id, reject: _ds.rejectBooking);
+  Future<void> _rejectBooking(BookingModel b) => _decideBooking(
+      (onStart) => rejectBookingFlow(context, b.id,
+          reject: _ds.rejectBooking, onStart: onStart));
+
+  /// "مشغول" يُضبط بعد موافقة المالك بالحوار وقبل الطلب (لا بعده).
+  Future<void> _decideBooking(
+      Future<bool> Function(VoidCallback onStart) flow) async {
+    if (_busy) return;
+    var ok = false;
+    try {
+      ok = await flow(() => setState(() => _busy = true));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
     if (!ok || !mounted) return;
     _closeSheet();
     await _refresh();
@@ -1132,6 +1148,7 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
       ..write('، ')
       ..write(kindLabel(info.kind));
     if (info.hasBlockAndBooking) semantics.write('، ومحجوب أيضاً');
+    if (info.partialLabel != null) semantics.write('، ${info.partialLabel}');
     if (info.isToday) semantics.write('، اليوم');
     if (info.isPast) semantics.write('، منتهٍ');
 
@@ -1154,6 +1171,7 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
           isPast: info.isPast,
           selected: selected,
           hasBlockBadge: info.hasBlockAndBooking,
+          partialSlot: info.isPartiallyBooked ? info.slot : null,
           label: label,
           roomy: wide,
         ),
