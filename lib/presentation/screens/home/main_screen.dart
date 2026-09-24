@@ -88,7 +88,9 @@ class _MainScreenState extends State<MainScreen> {
       const PalestineChaletsMapScreen(),
       const FavoritesScreen(),
       MyBookingsScreen(key: _bookingsKey),
-      const ReelsScreen(),
+      // داخل IndexedStack تبقى الشاشة حية بالخلفية؛ active يوقف الفيديو
+      // ويحرّر المشغّلات حين لا يكون تبويب Reels ظاهراً.
+      ReelsScreen(active: _currentIndex == 4),
       const ProfileScreen(),
     ];
 

@@ -36,12 +36,14 @@ class ReelModel {
 
     return ReelModel(
       id: json['id'] as String,
-      chaletId: json['chalet_id'] as String,
-      videoUrl: json['video_url'] as String,
-      thumbnailUrl: json['thumbnail_url'] as String,
+      // الأعمدة التالية nullable بالقاعدة؛ القيمة الفارغة تُفلتر بـ ReelsService.
+      chaletId: json['chalet_id'] as String? ?? '',
+      videoUrl: json['video_url'] as String? ?? '',
+      thumbnailUrl: json['thumbnail_url'] as String? ?? '',
       description: json['description'] as String? ?? '',
       likesCount: json['likes_count'] as int? ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       chaletName: chalet['name'] as String? ?? '',
       chaletDescription: chalet['description'] as String? ?? '',
       chaletImages: (chalet['images'] as List? ?? const [])

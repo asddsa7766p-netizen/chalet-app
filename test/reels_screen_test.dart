@@ -97,6 +97,16 @@ ReelModel _fakeReel(int i) => ReelModel(
       chaletPricePerNight: 0,
     );
 
+/// VideoPlayerController.dispose() ينتظر إلغاء اشتراك ستريم يكتمل خارج
+/// FakeAsync الخاصة باختبارات widget، فلا يصل dispose للمنصة بـ pump وحده.
+/// هذا يمنح التخريب فجوة async حقيقية قصيرة قبل فحص المشغّلات الحية.
+Future<void> _settleDisposal(WidgetTester tester) async {
+  await tester.pumpAndSettle();
+  await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)));
+  await tester.pump();
+}
+
 void main() {
   late _FakeVideoPlayerPlatform fakePlatform;
 
@@ -160,7 +170,7 @@ void main() {
       final pageView = find.byType(PageView);
       for (var i = 0; i < 4; i++) {
         await tester.drag(pageView, const Offset(0, -700));
-        await tester.pumpAndSettle();
+        await _settleDisposal(tester);
         expect(fakePlatform.aliveIds.length, lessThanOrEqualTo(3));
       }
 
@@ -188,9 +198,49 @@ void main() {
       // استبدال شجرة الودجت بالكامل يُنهي ReelsScreen (نفس أثر مغادرة الشاشة
       // فعلياً) ويستدعي dispose() الخاص بها.
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-      await tester.pumpAndSettle();
+      await _settleDisposal(tester);
 
       expect(fakePlatform.aliveIds, isEmpty);
+    });
+
+    testWidgets('الفيديو الظاهر يبدأ تلقائياً فور جاهزيته', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: ReelsScreen(fetchReels: () async => [_fakeReel(0)]),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(fakePlatform.calls, contains('play:0'));
+    });
+  });
+
+  group('تبويب مخفي داخل IndexedStack', () {
+    Widget host({required bool active}) => MaterialApp(
+          home: ReelsScreen(
+            active: active,
+            fetchReels: () async => List.generate(3, _fakeReel),
+          ),
+        );
+
+    testWidgets('لا يُنشأ أي مشغّل والتبويب مخفي', (tester) async {
+      await tester.pumpWidget(host(active: false));
+      await tester.pumpAndSettle();
+
+      expect(fakePlatform.calls.where((c) => c.startsWith('create:')), isEmpty);
+    });
+
+    testWidgets('إخفاء التبويب يوقف ويحرّر كل المشغّلات، وإظهاره يعيدها',
+        (tester) async {
+      await tester.pumpWidget(host(active: true));
+      await tester.pumpAndSettle();
+      expect(fakePlatform.aliveIds, isNotEmpty);
+
+      await tester.pumpWidget(host(active: false));
+      await _settleDisposal(tester);
+      expect(fakePlatform.aliveIds, isEmpty);
+
+      await tester.pumpWidget(host(active: true));
+      await tester.pumpAndSettle();
+      expect(fakePlatform.aliveIds, isNotEmpty);
     });
   });
 }

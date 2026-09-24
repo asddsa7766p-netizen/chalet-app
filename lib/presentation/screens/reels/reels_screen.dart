@@ -11,11 +11,16 @@ import '../../../data/models/reel_model.dart';
 import '../../../data/services/reels_service.dart';
 
 class ReelsScreen extends StatefulWidget {
-  const ReelsScreen({super.key, this.fetchReels});
+  const ReelsScreen({super.key, this.fetchReels, this.active = true});
 
   /// Injectable for tests; defaults to [ReelsService.instance.fetchReels].
   @visibleForTesting
   final Future<List<ReelModel>> Function()? fetchReels;
+
+  /// هل الشاشة ظاهرة فعلياً؟ داخل IndexedStack بـ MainScreen تبقى الشاشة حية
+  /// حتى وهي بتبويب مخفي، فبدون هذا العلم يستمر تشغيل الفيديو (بالصوت) بينما
+  /// المستخدم بتبويب آخر. عند false تُوقف وتُحرَّر كل المشغّلات.
+  final bool active;
 
   @override
   State<ReelsScreen> createState() => _ReelsScreenState();
@@ -35,12 +40,24 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
 
   int _currentIndex = 0;
 
+  // true أثناء تغطية الشاشة بمسار آخر (تفاصيل الشاليه) أو خروج التطبيق
+  // للخلفية، حتى لا يُستأنف التشغيل تحت شاشة أخرى.
+  bool _suspended = false;
+
+  bool get _canPlay => widget.active && !_suspended;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
     _pageController.addListener(_onPageChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant ReelsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) _syncPlayers();
   }
 
   @override
@@ -69,7 +86,7 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
         _pauseAll();
         break;
       case AppLifecycleState.resumed:
-        _togglePlaybackForVisibleIndex();
+        _syncPlayers();
         break;
     }
   }
@@ -78,13 +95,18 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
     final idx = _pageController.page?.round() ?? 0;
     if (idx == _currentIndex) return;
     setState(() => _currentIndex = idx);
-    _togglePlaybackForVisibleIndex();
+    _syncPlayers();
   }
 
   Future<void> _load() async {
+    // المشغّلات مفهرسة حسب موقع الفيديو بالقائمة، فلا تصلح بعد إعادة الجلب.
+    for (final idx in _videoControllers.keys.toList()) {
+      _releaseControllerForIndex(idx);
+    }
     setState(() {
       _loading = true;
       _error = null;
+      _currentIndex = 0;
     });
 
     try {
@@ -98,7 +120,7 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _togglePlaybackForVisibleIndex();
+        _syncPlayers();
       });
     } catch (_) {
       if (!mounted) return;
@@ -119,30 +141,35 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
       Uri.parse(reel.videoUrl),
     );
 
+    // ملاحظة: Chewie يرسم placeholder دائماً تحت الفيديو (وليس فقط أثناء
+    // التحميل)، فلا يوضع فيه أي مؤشّر متحرك لا ينتهي؛ مؤشّر التحميل يُرسم
+    // فوقه بـ _LoadingOverlay ويختفي فور جاهزية الفيديو.
     final chewieController = ChewieController(
       videoPlayerController: videoController,
       autoPlay: false,
       looping: true,
       allowMuting: false,
       showControls: false,
-      placeholder: Container(
-        color: AppColors.sand,
-        child: const Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
-        ),
-      ),
+      placeholder: _Thumbnail(url: reel.thumbnailUrl),
     );
 
     _videoControllers[index] = videoController;
     _chewieControllers[index] = chewieController;
 
-    // Start loading asynchronously.
-    unawaited(videoController.initialize());
+    unawaited(
+      videoController.initialize().then((_) {
+        // الفيديو الظاهر يبدأ فور جاهزيته، لا عند أول سحب فقط.
+        if (!mounted || _videoControllers[index] != videoController) return;
+        if (index == _currentIndex && _canPlay) videoController.play();
+      }).catchError((Object _) {
+        // الخطأ يظهر للمستخدم عبر _LoadingOverlay (value.hasError).
+      }),
+    );
   }
 
   /// فهارس النافذة المسموح ببقاء مشغّلاتها حية: الحالي ± [_windowRadius].
   Set<int> _activeWindow() {
-    if (_reels.isEmpty) return const {};
+    if (_reels.isEmpty || !widget.active) return const {};
     final window = <int>{};
     for (var i = _currentIndex - _windowRadius;
         i <= _currentIndex + _windowRadius;
@@ -152,11 +179,16 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
     return window;
   }
 
-  void _disposeControllerForIndex(int index) {
+  void _releaseControllerForIndex(int index) {
     final chewie = _chewieControllers.remove(index);
-    chewie?.dispose();
     final video = _videoControllers.remove(index);
-    video?.dispose();
+    video?.pause();
+    // التخريب بعد إعادة البناء التالية، حتى لا تبقى ودجة Chewie/VideoPlayer
+    // بالشجرة مرتبطة بمتحكّم مُخرَّب ولو لإطار واحد.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      chewie?.dispose();
+      video?.dispose();
+    });
   }
 
   void _pauseAll() {
@@ -165,16 +197,16 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _togglePlaybackForVisibleIndex() {
+  /// يحافظ على نافذة المشغّلات حول الفهرس الظاهر ويشغّل الظاهر فقط.
+  void _syncPlayers() {
+    if (!mounted) return;
     final window = _activeWindow();
 
-    // تخريب أي مشغّل خرج عن النافذة فوراً (بدل إبقائه حياً بلا داعٍ).
-    // نتتبّع أي تغيير فعلي بالخريطتين لإعادة البناء فقط عند الحاجة (وليس
-    // مع كل استدعاء تشغيل/إيقاف مؤقت لا يغيّر أي مشغّل، مثل استئناف التطبيق).
+    // تحرير أي مشغّل خرج عن النافذة فوراً (بدل إبقائه حياً بلا داعٍ).
     var changed = false;
     for (final idx in _videoControllers.keys.toList()) {
       if (!window.contains(idx)) {
-        _disposeControllerForIndex(idx);
+        _releaseControllerForIndex(idx);
         changed = true;
       }
     }
@@ -184,14 +216,10 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
       _ensureControllerForIndex(i);
     }
 
-    final visible = _currentIndex;
     for (final entry in _videoControllers.entries) {
-      final idx = entry.key;
       final controller = entry.value;
-      if (idx == visible) {
-        if (controller.value.isInitialized) {
-          controller.play();
-        }
+      if (entry.key == _currentIndex && _canPlay) {
+        if (controller.value.isInitialized) controller.play();
       } else {
         controller.pause();
       }
@@ -199,15 +227,17 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
 
     // بدون هذا، لا يُعاد بناء itemBuilder فور إنشاء المشغّل الأول، فيبقى
     // العنصر عالقاً على الصورة المصغّرة الثابتة إلى أن يسحب المستخدم الشاشة.
-    if (changed && mounted) setState(() {});
+    if (changed) setState(() {});
   }
 
   Future<void> _onTapReel(ReelModel reel) async {
     // إيقاف التشغيل قبل مغادرة الشاشة (تفاصيل الشاليه)، واستئنافه عند الرجوع.
+    _suspended = true;
     _pauseAll();
-    await context.push('/home/chalet/${reel.chaletId}', extra: null);
+    await context.push('/home/chalet/${reel.chaletId}');
     if (!mounted) return;
-    _togglePlaybackForVisibleIndex();
+    _suspended = false;
+    _syncPlayers();
   }
 
   @override
@@ -224,125 +254,112 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
               : _reels.isEmpty
                   ? _buildEmptyState()
                   : PageView.builder(
-                  controller: _pageController,
-                  scrollDirection: Axis.vertical,
-                  itemCount: _reels.length,
-                  itemBuilder: (context, index) {
-                    final reel = _reels[index];
-                    final chewie = _chewieControllers[index];
+                      controller: _pageController,
+                      scrollDirection: Axis.vertical,
+                      itemCount: _reels.length,
+                      itemBuilder: (context, index) =>
+                          _buildReel(_reels[index], index),
+                    ),
+    );
+  }
 
-                    return GestureDetector(
-                      onTap: () => _onTapReel(reel),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: chewie == null
-                                ? Container(
-                                    color: AppColors.sand,
-                                    child: Image.network(
-                                      reel.thumbnailUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
-                                        color: AppColors.sand,
-                                      ),
-                                    ),
-                                  )
-                                : Chewie(controller: chewie),
-                          ),
-                          // Bottom overlay
-                          Positioned(
-                            left: 16,
-                            right: 16,
-                            bottom: 24,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        reel.chaletName,
-                                        style: const TextStyle(
-                                          fontFamily: 'Cairo',
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.white,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  reel.description,
-                                  style: const TextStyle(
-                                    fontFamily: 'Cairo',
-                                    fontSize: 13,
-                                    color: Colors.white70,
-                                    height: 1.4,
-                                  ),
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 12),
-                                // Like (UI only for now; wiring requires userId + like mutation)
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.35),
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.favorite_rounded,
-                                            color: AppColors.error,
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            '${reel.likesCount}',
-                                            style: const TextStyle(
-                                              fontFamily: 'Cairo',
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Gradient overlay
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.black.withOpacity(0.55),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+  Widget _buildReel(ReelModel reel, int index) {
+    final chewie = _chewieControllers[index];
+    final video = _videoControllers[index];
+
+    return GestureDetector(
+      onTap: () => _onTapReel(reel),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: chewie == null
+                ? _Thumbnail(url: reel.thumbnailUrl)
+                : Chewie(controller: chewie),
+          ),
+          if (video != null)
+            Positioned.fill(child: _LoadingOverlay(controller: video)),
+          // Gradient overlay
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.55),
+                    ],
+                  ),
                 ),
+              ),
+            ),
+          ),
+          // Bottom overlay
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reel.chaletName,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  reel.description,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    color: Colors.white70,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                // عدد الإعجابات للعرض فقط (زر الإعجاب غير موصول بعد).
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.favorite_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${reel.likesCount}',
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -411,6 +428,67 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
   }
 }
 
+/// الصورة المصغّرة للفيديو، بلون محايد عند غيابها أو فشل تحميلها.
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.sand,
+      child: url.isEmpty
+          ? null
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+    );
+  }
+}
+
+/// مؤشّر تحميل فوق الفيديو حتى يجهز فقط، أو رسالة عند فشل تشغيله.
+class _LoadingOverlay extends StatelessWidget {
+  const _LoadingOverlay({required this.controller});
+
+  final VideoPlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ValueListenableBuilder<VideoPlayerValue>(
+        valueListenable: controller,
+        builder: (context, value, _) {
+          if (value.hasError) {
+            return const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.videocam_off_rounded,
+                      color: Colors.white70, size: 40),
+                  SizedBox(height: 8),
+                  Text(
+                    'تعذر تشغيل هذا الفيديو',
+                    style: TextStyle(fontFamily: 'Cairo', color: Colors.white),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (value.isInitialized) return const SizedBox.shrink();
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
+        },
+      ),
+    );
+  }
+}
+
 // ============================================
 // REELS SKELETON LOADER
 // ============================================
@@ -422,80 +500,46 @@ class ReelsSkeletonLoader extends StatelessWidget {
     return Shimmer.fromColors(
       baseColor: Colors.grey[300]!,
       highlightColor: Colors.grey[100]!,
-      child: Column(
+      child: Stack(
         children: [
-          // AppBar skeleton
-          Container(
-            height: 56,
-            color: Colors.white,
+          // Video area skeleton
+          Positioned.fill(
+            child: Container(color: Colors.grey[300]),
           ),
-          // Reel skeleton (takes remaining space)
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(0),
-              color: Colors.white,
-              child: Stack(
-                children: [
-                  // Video area skeleton
-                  Positioned.fill(
-                    child: Container(
-                      color: Colors.grey[300],
-                    ),
-                  ),
-                  // Bottom overlay skeleton
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 24,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Title skeleton
-                        Container(
-                          width: 200,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // Description skeleton
-                        Container(
-                          width: double.infinity,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 150,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Like button skeleton
-                        Container(
-                          width: 80,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+          // Bottom overlay skeleton
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _bar(width: 200, height: 20),
+                const SizedBox(height: 8),
+                _bar(width: double.infinity, height: 14),
+                const SizedBox(height: 4),
+                _bar(width: 150, height: 14),
+                const SizedBox(height: 12),
+                _bar(width: 80, height: 36, radius: 14),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _bar({
+    required double width,
+    required double height,
+    double radius = 4,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(radius),
       ),
     );
   }
