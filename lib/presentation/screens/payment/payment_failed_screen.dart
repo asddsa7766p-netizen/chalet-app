@@ -3,8 +3,8 @@ import 'package:makan/data/models/booking_payment_details.dart';
 import 'package:makan/data/services/payment_gateway.dart';
 
 import '../../../core/utils/support_contact.dart';
-import '../theme/payment_theme.dart';
-import '../widgets/payment_widgets.dart';
+import 'payment_theme.dart';
+import 'widgets/payment_widgets.dart';
 import 'payment_method_screen.dart';
 import 'payment_processing_screen.dart';
 

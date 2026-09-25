@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/payment_theme.dart';
+import '../payment_theme.dart';
 
 /// زر أساسي بلون أخضر زيتوني، مطابق لأزرار "متابعة للدفع" / "ادفع الآن"
 class PrimaryButton extends StatelessWidget {

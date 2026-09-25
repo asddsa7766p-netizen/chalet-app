@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:makan/data/models/booking_payment_details.dart';
 import 'package:makan/data/services/payment_gateway.dart';
-import 'package:makan/presentation/screens/widgets/payment_widgets.dart';
+import 'package:makan/presentation/screens/payment/widgets/payment_widgets.dart';
 
-import '../theme/payment_theme.dart';
+import 'payment_theme.dart';
 import 'payment_failed_screen.dart';
 import 'payment_success_screen.dart';
 

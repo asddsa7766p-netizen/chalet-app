@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart' show NumberFormat;
 import 'package:makan/data/models/booking_payment_details.dart';
 
-import '../theme/payment_theme.dart';
-import '../widgets/payment_widgets.dart';
+import 'payment_theme.dart';
+import 'widgets/payment_widgets.dart';
 import 'payment_processing_screen.dart';
 
 /// شاشة (3): إدخال بيانات البطاقة

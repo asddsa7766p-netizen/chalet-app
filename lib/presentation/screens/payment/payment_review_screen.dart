@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:makan/data/models/booking_payment_details.dart';
 
-import '../theme/payment_theme.dart';
-import '../widgets/payment_widgets.dart';
+import 'payment_theme.dart';
+import 'widgets/payment_widgets.dart';
 import 'payment_method_screen.dart';
 
 /// شاشة (1): مراجعة الحجز وملخص الدفع قبل اختيار طريقة الدفع

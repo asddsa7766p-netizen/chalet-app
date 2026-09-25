@@ -3,7 +3,7 @@ import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:makan/data/models/booking_payment_details.dart';
 
 import '../home/main_screen.dart' show goToMainTab;
-import '../theme/payment_theme.dart';
+import 'payment_theme.dart';
 
 /// شاشة (4): تأكيد نجاح الحجز والدفع
 class PaymentSuccessScreen extends StatelessWidget {
