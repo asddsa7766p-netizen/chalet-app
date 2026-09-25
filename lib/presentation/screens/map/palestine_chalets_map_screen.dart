@@ -95,7 +95,7 @@ class _PalestineChaletsMapScreenState extends State<PalestineChaletsMapScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'السعر: ${chalet.pricePerNight.toStringAsFixed(0)} ₪ / ليلة',
+                'السعر يبدأ من ${chalet.pricePerNight.toStringAsFixed(0)} ₪',
                 style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 15,

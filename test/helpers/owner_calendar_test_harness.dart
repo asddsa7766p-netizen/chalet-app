@@ -26,6 +26,9 @@ BookingModel fakeBooking(
   double price = 1500,
   int guests = 4,
   String? notes,
+  String stayType = 'default',
+  String? periodStart,
+  String? periodEnd,
 }) =>
     BookingModel(
       id: id,
@@ -43,6 +46,9 @@ BookingModel fakeBooking(
       guestPhone: source == 'app' ? guestPhone : null,
       externalGuestName: source == 'external' ? guestName : null,
       externalGuestPhone: source == 'external' ? guestPhone : null,
+      stayType: stayType,
+      periodStart: periodStart,
+      periodEnd: periodEnd,
     );
 
 /// مصدر بيانات وهمي داخل الاختبار فقط — لا اتصال بقاعدة بيانات.
@@ -203,6 +209,9 @@ class FakeOwnerCalendarDataSource implements OwnerCalendarDataSource {
           source: b.source,
           externalGuestName: b.externalGuestName,
           externalGuestPhone: b.externalGuestPhone,
+          stayType: b.stayType,
+          periodStart: b.periodStart,
+          periodEnd: b.periodEnd,
         );
       }
     }

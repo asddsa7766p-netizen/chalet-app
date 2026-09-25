@@ -252,7 +252,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     setSheetState(() => draftCity = v),
                               ),
                               const SizedBox(height: 18),
-                              _sheetSectionLabel('الميزانية لليلة (₪)'),
+                              _sheetSectionLabel('الميزانية — السعر يبدأ من (₪)'),
                               const SizedBox(height: 8),
                               Row(
                                 children: [

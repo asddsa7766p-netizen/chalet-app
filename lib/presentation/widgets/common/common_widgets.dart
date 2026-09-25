@@ -313,7 +313,7 @@ class ChaletCard extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '₪${chalet.pricePerNight.toStringAsFixed(0)}',
+                              'يبدأ من ₪${chalet.pricePerNight.toStringAsFixed(0)}',
                               style: const TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 17,

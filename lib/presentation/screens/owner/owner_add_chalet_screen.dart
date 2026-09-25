@@ -825,7 +825,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
           const SizedBox(height: 16),
           CustomTextField(
             controller: _pricePerNightCtrl,
-            label: 'السعر لكل ليلة',
+            label: 'السعر الأساسي (يبدأ من)',
             hint: 'مثال: 350',
             prefixIcon: Icons.attach_money_rounded,
             keyboardType: TextInputType.number,

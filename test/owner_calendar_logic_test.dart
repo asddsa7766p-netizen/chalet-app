@@ -8,6 +8,7 @@ BookingModel booking(
   DateTime checkOut, {
   BookingStatus status = BookingStatus.confirmed,
   String source = 'app',
+  String stayType = 'default',
 }) =>
     BookingModel(
       id: id,
@@ -20,24 +21,50 @@ BookingModel booking(
       status: status,
       createdAt: DateTime(2030, 1, 1),
       source: source,
+      stayType: stayType,
     );
 
 void main() {
   final today = DateTime(2030, 3, 10);
 
-  group('إشغال الليالي', () {
-    test('الحجز يشغل من الوصول حتى ما قبل المغادرة (المغادرة غير شاملة)', () {
+  group('إشغال الأيام', () {
+    test('الحجز يشغل من check_in حتى ما قبل check_out (حجز قديم ممتد)', () {
       final data = CalendarData()
         ..addBookings([booking('b', DateTime(2030, 3, 14), DateTime(2030, 3, 16))]);
 
       expect(data.dayInfo(DateTime(2030, 3, 13), today: today).isBooked, isFalse);
       expect(data.dayInfo(DateTime(2030, 3, 14), today: today).isBooked, isTrue);
       expect(data.dayInfo(DateTime(2030, 3, 15), today: today).isBooked, isTrue);
-      final leave = data.dayInfo(DateTime(2030, 3, 16), today: today);
-      expect(leave.isBooked, isFalse);
-      expect(leave.kind, CalendarDayKind.available);
-      // يوم المغادرة يعرف الحجز المغادر (للمعلومة فقط).
-      expect(leave.departing?.id, 'b');
+      final after = data.dayInfo(DateTime(2030, 3, 16), today: today);
+      expect(after.isBooked, isFalse);
+      expect(after.kind, CalendarDayKind.available);
+      // 'default' ينتهي بنفس يومه (booking_slots): لا "امتداد" لليوم التالي.
+      expect(after.departing, isNull);
+    });
+
+    test('يوم كامل مسائي يمتد لصباح اليوم التالي (معلومة فقط)', () {
+      final data = CalendarData()
+        ..addBookings([
+          booking('e', DateTime(2030, 3, 14), DateTime(2030, 3, 15),
+              stayType: 'full_day_evening'),
+        ]);
+      final next = data.dayInfo(DateTime(2030, 3, 15), today: today);
+      expect(next.isBooked, isFalse);
+      expect(next.departing?.id, 'e');
+    });
+
+    test('يوم واحد بفترتين: حجز صباحي وآخر مسائي معاً، الصباحي أولاً', () {
+      final data = CalendarData()
+        ..addBookings([
+          booking('eve', DateTime(2030, 3, 14), DateTime(2030, 3, 15),
+              stayType: 'evening'),
+          booking('mor', DateTime(2030, 3, 14), DateTime(2030, 3, 15),
+              stayType: 'morning', source: 'external'),
+        ]);
+      final d = data.dayInfo(DateTime(2030, 3, 14), today: today);
+      expect(d.bookings.map((b) => b.id), ['mor', 'eve']);
+      expect(d.booking?.id, 'mor');
+      expect(d.kind, CalendarDayKind.manual);
     });
 
     test('pending وconfirmed فقط يشغلان التقويم', () {
@@ -90,7 +117,7 @@ void main() {
       expect(d.hasBlockAndBooking, isTrue);
     });
 
-    test('رقم الليلة داخل الحجز', () {
+    test('رقم اليوم داخل حجز قديم ممتد', () {
       final data = CalendarData()
         ..addBookings([booking('a', DateTime(2030, 3, 11), DateTime(2030, 3, 14))]);
       expect(data.dayInfo(DateTime(2030, 3, 11), today: today).nightNumber, 1);
@@ -118,7 +145,7 @@ void main() {
   });
 
   group('حجب نطاق (النهاية شاملة)', () {
-    test('"من 12 إلى 14" تحجب 3 ليالٍ', () {
+    test('"من 12 إلى 14" تحجب 3 أيام', () {
       final plan =
           planBlock(DateTime(2030, 3, 12), DateTime(2030, 3, 14), CalendarData(), today: today);
       expect(plan.dates,
@@ -138,7 +165,7 @@ void main() {
         ..addBookings([booking('a', DateTime(2030, 3, 13), DateTime(2030, 3, 15))]);
       final plan =
           planBlock(DateTime(2030, 3, 12), DateTime(2030, 3, 16), data, today: today);
-      // ليالي 13 و14 محجوزة. 15 (يوم المغادرة) حرّة.
+      // يوما 13 و14 محجوزان. 15 (check_out) حرّ.
       expect(plan.skippedBooked, 2);
       expect(plan.dates,
           [DateTime(2030, 3, 12), DateTime(2030, 3, 15), DateTime(2030, 3, 16)]);
@@ -188,11 +215,7 @@ void main() {
   });
 
   group('نصوص عربية', () {
-    test('الليالي والأيام', () {
-      expect(nightsLabel(1), 'ليلة واحدة');
-      expect(nightsLabel(2), 'ليلتان');
-      expect(nightsLabel(5), '5 ليالٍ');
-      expect(nightsLabel(12), '12 ليلة');
+    test('الأيام', () {
       expect(daysLabel(1), 'يوم واحد');
       expect(daysLabel(2), 'يومان');
       expect(daysLabel(4), '4 أيام');

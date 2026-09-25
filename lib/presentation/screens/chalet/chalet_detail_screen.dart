@@ -171,7 +171,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   Future<void> _shareChalet(ChaletModel chalet) async {
     final text = Uri.encodeComponent(
       'شاهد هذا الشاليه: ${chalet.name}\n'
-      '${AppCurrency.formatPrice(chalet.pricePerNight)} لليلة\n'
+      '${AppStrings.priceFrom} ${AppCurrency.formatPrice(chalet.pricePerNight)}\n'
       '${chalet.city}',
     );
     final uri = Uri.parse('https://wa.me/?text=$text');
@@ -1365,7 +1365,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('السعر لليلة',
+              const Text(AppStrings.priceFrom,
                   style: TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 11,

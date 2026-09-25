@@ -21,7 +21,8 @@ BookingModel _booking({
       chaletId: 'c1',
       userId: 'owner-1',
       checkIn: DateTime(2030, 3, 12),
-      checkOut: checkOut ?? DateTime(2030, 3, 14),
+      // الحجز يوم واحد: check_out = اليوم التالي.
+      checkOut: checkOut ?? DateTime(2030, 3, 13),
       guestsCount: 2,
       totalPrice: 1000,
       status: status,
@@ -128,7 +129,7 @@ void main() {
           isFalse);
     });
 
-    testWidgets('نافذة التأكيد: تعرض الاسم والتواريخ، و"تراجع" لا يلغي شيئاً',
+    testWidgets('نافذة التأكيد: تعرض الاسم واليوم والفترة، و"تراجع" لا يلغي شيئاً',
         (tester) async {
       final b = _booking(source: 'external', guestName: 'سامي');
       bool? result;
@@ -148,7 +149,8 @@ void main() {
 
       expect(find.text('إلغاء الحجز اليدوي؟'), findsOneWidget);
       expect(find.textContaining('سامي'), findsOneWidget);
-      expect(find.textContaining('12/3/2030'), findsOneWidget);
+      expect(find.textContaining('الثلاثاء 12 مارس 2030'), findsOneWidget);
+      expect(find.textContaining('يوم كامل'), findsOneWidget);
 
       await tester.tap(find.text('تراجع'));
       await tester.pumpAndSettle();
@@ -270,10 +272,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Future<void> pickDates(WidgetTester tester) async {
-      await tester.tap(find.text('12'));
-      await tester.pump();
-      await tester.tap(find.text('13'));
+    /// الحجز يوم واحد: نقرة واحدة على اليوم.
+    Future<void> pickDay(WidgetTester tester, [int day = 12]) async {
+      await tester.tap(find.text('$day'));
       await tester.pumpAndSettle();
     }
 
@@ -284,60 +285,55 @@ void main() {
     String priceText(WidgetTester tester) =>
         tester.widget<EditableText>(find.byType(EditableText).at(0)).controller.text;
 
-    testWidgets('شاليه واحد: لا اختيار، والأيام المحجوزة لا تُختار كوصول',
+    Future<void> fillGuest(WidgetTester tester, {String name = 'سامي'}) async {
+      await tester.enterText(find.byType(TextFormField).at(1), name);
+      await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
+    }
+
+    testWidgets('شاليه واحد: لا اختيار شاليه، واليوم المحجوز بالكامل لا يُختار',
         (tester) async {
       await openSheet(tester);
 
-      expect(find.byType(ChoiceChip), findsNothing);
       expect(find.text('شاليه الندى'), findsOneWidget);
+      // بلا أنواع إقامة: فترة واحدة "يوم كامل".
+      expect(find.byKey(const Key('manual_stay_default')), findsOneWidget);
       expect(bookedLoadedFor, ['c1']);
 
       await tester.tap(find.text('14'));
       await tester.pump();
-      expect(find.text('هذا اليوم محجوز'), findsOneWidget);
+      expect(find.text('هذا اليوم محجوز بالكامل'), findsOneWidget);
       expect(quoteCalls, 0);
     });
 
-    testWidgets('فترة تتضمن أياماً محجوزة تُرفض، والمغادرة على ليلة محجوزة تجوز',
-        (tester) async {
+    testWidgets('اختيار يوم واحد يحدد الفترة الوحيدة ويجلب سعرها', (tester) async {
       await openSheet(tester);
+      expect(find.text('اختر يوم الحجز'), findsOneWidget);
 
-      await tester.tap(find.text('12'));
-      await tester.pump();
-      expect(find.textContaining('اختر يوم المغادرة'), findsOneWidget);
-
-      await tester.tap(find.text('16'));
-      await tester.pump();
-      expect(find.text('الفترة المختارة تتضمن أياماً محجوزة'), findsOneWidget);
-      expect(quoteCalls, 0);
-
-      await tester.tap(find.text('14'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('2 ليالٍ'), findsOneWidget);
+      await pickDay(tester);
+      expect(find.text('الثلاثاء 12 مارس · يوم كامل'), findsOneWidget);
       expect(quoteCalls, 1);
       // سعر التقويم يُعرض كمقترح ويملأ الحقل مبدئياً.
       expect(find.text('سعر التقويم: ₪1500'), findsOneWidget);
       expect(priceText(tester), '1500');
     });
 
-    testWidgets('الحفظ يرسل الاسم والهاتف والضيوف والسعر ويُغلق الورقة',
+    testWidgets('الحفظ يرسل اليوم (check_out = اليوم التالي) والضيف والسعر',
         (tester) async {
       await openSheet(tester);
-      await pickDates(tester);
+      await pickDay(tester);
 
       // بدون اسم وهاتف: التحقق يمنع الإرسال (السعر مملوء من التقويم).
-      await tester.tap(find.text('حجز التواريخ'));
+      await tester.tap(find.text('حجز الفترة'));
       await tester.pump();
       expect(find.text('اسم الضيف مطلوب'), findsOneWidget);
       expect(find.text('رقم الهاتف مطلوب'), findsOneWidget);
       expect(submitted, isEmpty);
 
-      await tester.enterText(find.byType(TextFormField).at(1), 'أبو أحمد');
-      await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
+      await fillGuest(tester, name: 'أبو أحمد');
       await tester.tap(find.byIcon(Icons.add_circle_outline_rounded));
       await tester.pump();
 
-      await tester.tap(find.text('حجز التواريخ'));
+      await tester.tap(find.text('حجز الفترة'));
       await tester.pumpAndSettle();
 
       expect(submitted, hasLength(1));
@@ -345,6 +341,7 @@ void main() {
       expect(r.chaletId, 'c1');
       expect(r.checkIn, DateTime(2030, 3, 12));
       expect(r.checkOut, DateTime(2030, 3, 13));
+      expect(r.stayType, 'default');
       expect(r.guestsCount, 2);
       expect(r.guestName, 'أبو أحمد');
       expect(r.guestPhone, '0599123456');
@@ -356,7 +353,7 @@ void main() {
     testWidgets('المالك يكتب سعره المتفق عليه، ويستعيد سعر التقويم بنقرة',
         (tester) async {
       await openSheet(tester);
-      await pickDates(tester);
+      await pickDay(tester);
 
       expect(find.text('استعادة سعر التقويم'), findsNothing);
 
@@ -370,27 +367,22 @@ void main() {
       expect(find.text('استعادة سعر التقويم'), findsNothing);
 
       await tester.enterText(find.byType(TextFormField).at(0), '1200');
-      await tester.enterText(find.byType(TextFormField).at(1), 'سامي');
-      await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
-      await tester.tap(find.text('حجز التواريخ'));
+      await fillGuest(tester);
+      await tester.tap(find.text('حجز الفترة'));
       await tester.pumpAndSettle();
 
       expect(submitted.single.totalPrice, 1200);
     });
 
-    testWidgets('سعر مكتوب بيد المالك لا يُستبدل عند تغيير التواريخ',
+    testWidgets('سعر مكتوب بيد المالك لا يُستبدل عند تغيير اليوم',
         (tester) async {
       await openSheet(tester);
-      await pickDates(tester);
+      await pickDay(tester);
 
       await tester.enterText(find.byType(TextFormField).at(0), '900');
       await tester.pump();
 
-      // غيّر التواريخ: وصول جديد ثم مغادرة.
-      await tester.tap(find.text('17'));
-      await tester.pump();
-      await tester.tap(find.text('19'));
-      await tester.pumpAndSettle();
+      await pickDay(tester, 17);
 
       expect(quoteCalls, 2);
       expect(priceText(tester), '900');
@@ -411,26 +403,25 @@ void main() {
     testWidgets('لا سعر مقترح: الحقل فارغ ويجب أن يكتب المالك سعراً > 0',
         (tester) async {
       await openSheet(tester, price: 0);
-      await pickDates(tester);
+      await pickDay(tester);
 
       expect(find.textContaining('لا يوجد سعر مقترح'), findsOneWidget);
       expect(priceText(tester), '');
 
-      await tester.enterText(find.byType(TextFormField).at(1), 'سامي');
-      await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
-      await tester.tap(find.text('حجز التواريخ'));
+      await fillGuest(tester);
+      await tester.tap(find.text('حجز الفترة'));
       await tester.pump();
       expect(find.text('اكتب السعر المتفق عليه'), findsOneWidget);
       expect(submitted, isEmpty);
 
       await tester.enterText(find.byType(TextFormField).at(0), '0');
-      await tester.tap(find.text('حجز التواريخ'));
+      await tester.tap(find.text('حجز الفترة'));
       await tester.pump();
       expect(find.text('السعر يجب أن يكون أكبر من صفر'), findsOneWidget);
       expect(submitted, isEmpty);
 
       await tester.enterText(find.byType(TextFormField).at(0), '850');
-      await tester.tap(find.text('حجز التواريخ'));
+      await tester.tap(find.text('حجز الفترة'));
       await tester.pumpAndSettle();
       expect(submitted.single.totalPrice, 850);
     });
@@ -442,24 +433,27 @@ void main() {
       expect(field(tester, 0), isNotNull);
     });
 
-    testWidgets('يفتح بشاليه ووصول محدّدين مسبقاً (من يوم بالتقويم)', (tester) async {
+    Future<void> pumpDirect(
+      WidgetTester tester, {
+      String? initialChaletId,
+      required DateTime initialCheckIn,
+      List<ManualBookingChalet> chalets = const [
+        ManualBookingChalet(id: 'c1', name: 'الأول'),
+      ],
+      List<String>? asked,
+    }) async {
       tester.view.physicalSize = const Size(900, 3000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final asked = <String>[];
-
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: ManualBookingSheet(
             today: today,
-            initialChaletId: 'c2',
-            initialCheckIn: DateTime(2030, 3, 12),
-            chalets: const [
-              ManualBookingChalet(id: 'c1', name: 'الأول'),
-              ManualBookingChalet(id: 'c2', name: 'الثاني'),
-            ],
+            initialChaletId: initialChaletId,
+            initialCheckIn: initialCheckIn,
+            chalets: chalets,
             loadDaySlots: (id) async {
-              asked.add(id);
+              asked?.add(id);
               return slotsFor(booked);
             },
             quotePrice: (id, ci, co, stay) async => 1500,
@@ -468,53 +462,35 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
+    }
 
-      // الشاليه المحدد هو المحمَّل، وتاريخ الوصول محدد فالمطلوب المغادرة.
+    testWidgets('يفتح بشاليه ويوم محدّدين مسبقاً (من يوم بالتقويم)', (tester) async {
+      final asked = <String>[];
+      await pumpDirect(
+        tester,
+        initialChaletId: 'c2',
+        initialCheckIn: DateTime(2030, 3, 12),
+        chalets: const [
+          ManualBookingChalet(id: 'c1', name: 'الأول'),
+          ManualBookingChalet(id: 'c2', name: 'الثاني'),
+        ],
+        asked: asked,
+      );
+
+      // الشاليه المحدد هو المحمَّل، واليوم محدد وفترته الوحيدة مختارة.
       expect(asked, ['c2']);
-      expect(find.textContaining('اختر يوم المغادرة'), findsOneWidget);
+      expect(find.text('الثلاثاء 12 مارس · يوم كامل'), findsOneWidget);
     });
 
-    testWidgets('وصول محدد مسبقاً صار غير متاح: يُهمل ويختار المالك من جديد',
+    testWidgets('يوم محدد مسبقاً صار محجوزاً بالكامل: يُهمل ويختار المالك',
         (tester) async {
-      tester.view.physicalSize = const Size(900, 3000);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: ManualBookingSheet(
-            today: today,
-            initialCheckIn: DateTime(2030, 3, 14), // ليلة محجوزة/محجوبة
-            chalets: const [ManualBookingChalet(id: 'c1', name: 'الأول')],
-            loadDaySlots: (id) async => slotsFor(booked),
-            quotePrice: (id, ci, co, stay) async => 1500,
-            submit: (r) async {},
-          ),
-        ),
-      ));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('اختر يوم المغادرة'), findsNothing);
+      await pumpDirect(tester, initialCheckIn: DateTime(2030, 3, 14));
+      expect(find.text('اختر يوم الحجز'), findsOneWidget);
     });
 
-    testWidgets('وصول ماضٍ لا يُطبَّق', (tester) async {
-      tester.view.physicalSize = const Size(900, 3000);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: ManualBookingSheet(
-            today: today,
-            initialCheckIn: DateTime(2030, 3, 2),
-            chalets: const [ManualBookingChalet(id: 'c1', name: 'الأول')],
-            loadDaySlots: (id) async => slotsFor(booked),
-            quotePrice: (id, ci, co, stay) async => 1500,
-            submit: (r) async {},
-          ),
-        ),
-      ));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('اختر يوم المغادرة'), findsNothing);
+    testWidgets('يوم ماضٍ لا يُطبَّق', (tester) async {
+      await pumpDirect(tester, initialCheckIn: DateTime(2030, 3, 2));
+      expect(find.text('اختر يوم الحجز'), findsOneWidget);
     });
 
     testWidgets('عدة شاليهات: اختيار الشاليه يعيد تحميل الأيام المحجوزة',
@@ -523,7 +499,8 @@ void main() {
         ManualBookingChalet(id: 'c1', name: 'الأول'),
         ManualBookingChalet(id: 'c2', name: 'الثاني'),
       ]);
-      expect(find.byType(ChoiceChip), findsNWidgets(2));
+      expect(find.text('الأول'), findsOneWidget);
+      expect(find.text('الثاني'), findsOneWidget);
       expect(bookedLoadedFor, ['c1']);
 
       await tester.tap(find.text('الثاني'));
@@ -531,21 +508,21 @@ void main() {
       expect(bookedLoadedFor, ['c1', 'c2']);
     });
 
-    testWidgets('بلا أنواع إقامة: لا اختيار نوع، ويُرسل default', (tester) async {
+    testWidgets('بلا أنواع إقامة: فترة "يوم كامل" ويُرسل default', (tester) async {
       await openSheet(tester);
       expect(find.byKey(const Key('manual_stay_morning')), findsNothing);
+      expect(find.text('يوم كامل'), findsOneWidget);
 
-      await pickDates(tester);
-      await tester.enterText(find.byType(TextFormField).at(1), 'سامي');
-      await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
-      await tester.tap(find.text('حجز التواريخ'));
+      await pickDay(tester);
+      await fillGuest(tester);
+      await tester.tap(find.text('حجز الفترة'));
       await tester.pumpAndSettle();
 
       expect(quotedStayTypes, ['default']);
       expect(submitted.single.stayType, 'default');
     });
 
-    group('أنواع الإقامة والأيام المحجوزة جزئياً', () {
+    group('فترات الشاليه والأيام المحجوزة جزئياً', () {
       ChaletStayTypeConfig cfg(ChaletStayType t) => ChaletStayTypeConfig(
             type: t,
             checkinTime: t.defaultCheckin,
@@ -564,50 +541,46 @@ void main() {
         };
       });
 
-      testWidgets('أول نوع مفعّل مختار افتراضياً، والفترة المحجوزة معطّلة له',
-          (tester) async {
+      testWidgets('الفترات بأوقاتها، ولا فترة مختارة قبل اليوم', (tester) async {
         await openSheet(tester);
         expect(find.byKey(const Key('manual_stay_morning')), findsOneWidget);
         expect(find.byKey(const Key('manual_stay_evening')), findsOneWidget);
+        expect(find.text('10:00 ص - 9:00 م'), findsOneWidget);
         // شارة "الصباحية محجوزة" على يوم 12.
         expect(find.byIcon(Icons.wb_sunny_rounded), findsWidgets);
-
-        await tester.tap(find.text('12'));
-        await tester.pump();
-        expect(
-            find.text('الفترة المطلوبة محجوزة بهذا اليوم — جرّب نوع إقامة آخر'),
-            findsOneWidget);
+        expect(find.text('اختر يوم الحجز'), findsOneWidget);
       });
 
-      testWidgets('المسائية: يوم 12 متاح، ويُرسل نوع الإقامة للتسعير والحفظ',
+      testWidgets('يوم جزئي: الفترة المحجوزة معطّلة والمتاحة تُختار تلقائياً',
           (tester) async {
         await openSheet(tester);
-        await tester.tap(find.byKey(const Key('manual_stay_evening')));
-        await tester.pump();
+        await pickDay(tester);
 
-        await pickDates(tester);
-        expect(find.textContaining('1 ليالٍ'), findsOneWidget);
+        final morning = tester
+            .widget<ChoiceChip>(find.byKey(const Key('manual_stay_morning')));
+        expect(morning.onSelected, isNull);
+        expect(find.text('محجوزة بهذا اليوم'), findsOneWidget);
         expect(quotedStayTypes, ['evening']);
 
-        await tester.enterText(find.byType(TextFormField).at(1), 'سامي');
-        await tester.enterText(find.byType(TextFormField).at(2), '0599123456');
-        await tester.tap(find.text('حجز التواريخ'));
+        await fillGuest(tester);
+        await tester.tap(find.text('حجز الفترة'));
         await tester.pumpAndSettle();
         expect(submitted.single.stayType, 'evening');
         expect(submitted.single.checkIn, DateTime(2030, 3, 12));
+        expect(submitted.single.checkOut, DateTime(2030, 3, 13));
       });
 
-      testWidgets('تغيير النوع لنوع لا يتيح التواريخ المختارة يمسحها',
+      testWidgets('يوم حر بفترتين: يختار المالك الفترة ثم يُجلب سعرها',
           (tester) async {
         await openSheet(tester);
-        await tester.tap(find.byKey(const Key('manual_stay_evening')));
-        await tester.pump();
-        await pickDates(tester);
-        expect(find.textContaining('من 12 مارس'), findsOneWidget);
+        await pickDay(tester, 16);
+        expect(find.text('السبت 16 مارس — اختر الفترة'), findsOneWidget);
+        expect(quoteCalls, 0);
 
         await tester.tap(find.byKey(const Key('manual_stay_morning')));
-        await tester.pump();
-        expect(find.text('اختر يوم الوصول'), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(quotedStayTypes, ['morning']);
+        expect(find.textContaining('إقامة صباحية'), findsWidgets);
       });
     });
   });

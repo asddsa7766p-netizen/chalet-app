@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../data/models/booking_period.dart';
 import '../../../data/services/chalet_slot_availability.dart';
 import '../../../data/services/pricing_service.dart';
 import '../../../data/services/services.dart';
@@ -226,13 +227,18 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
   bool _loadingBooked = true;
   String? _bookedLoadError;
 
-  // أنواع الإقامة المفعّلة للشاليه؛ فارغة = السلوك القديم ('default').
-  List<ChaletStayTypeConfig> _stayTypes = [];
-  String _stayType = BookingService.defaultStayType;
+  // فترات الشاليه (أنواع الإقامة المفعّلة، أو "يوم كامل" بلا أنواع).
+  List<BookingPeriod> _periods = const [BookingPeriod.fullDayDefault];
+
+  /// الفترة المختارة (stay_type)، أو null قبل أن يختار المالك.
+  String? _stayType;
 
   DateTime _focusedDay = DateTime.now();
-  DateTime? _checkIn;
-  DateTime? _checkOut;
+
+  // الحجز = يوم واحد + فترة: check_in = اليوم، check_out = اليوم التالي.
+  DateTime? _date;
+  DateTime? get _checkIn => _date;
+  DateTime? get _checkOut => _date == null ? null : nextDay(_date!);
   String? _dateHint;
 
   final _priceCtrl = TextEditingController();
@@ -260,8 +266,8 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     );
     final initial = widget.initialCheckIn;
     if (initial != null && !_dateOnly(initial).isBefore(_today)) {
-      _checkIn = _dateOnly(initial);
-      _focusedDay = _checkIn!;
+      _date = _dateOnly(initial);
+      _focusedDay = _date!;
     }
     _loadBookedNights();
   }
@@ -275,9 +281,16 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     super.dispose();
   }
 
-  // ─── التواريخ ─────────────────────────────────────────────
+  // ─── اليوم والفترة ────────────────────────────────────────
 
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  BookingPeriod? get _selectedPeriod {
+    for (final p in _periods) {
+      if (p.stayType == _stayType) return p;
+    }
+    return null;
+  }
 
   Future<void> _loadBookedNights() async {
     final chaletId = _chalet.id;
@@ -285,7 +298,7 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
       _loadingBooked = true;
       _bookedLoadError = null;
     });
-    // أنواع الإقامة ثانوية: فشلها يعيد السلوك القديم ('default') فقط.
+    // أنواع الإقامة ثانوية: فشلها يترك فترة "يوم كامل" وحدها.
     final typesFuture = widget
         .loadStayTypes(chaletId)
         .catchError((_) => <ChaletStayTypeConfig>[]);
@@ -295,44 +308,49 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
       if (!mounted || chaletId != _chalet.id) return;
       setState(() {
         _slots = {for (final e in slots.entries) _dateOnly(e.key): e.value};
-        _stayTypes = types;
-        final known = types.any((t) => t.type.dbValue == _stayType);
-        if (!known) {
-          // نفس اختيار شاشة الضيف: أول نوع مفعّل، وإلا 'default'.
-          _stayType = types.isEmpty
-              ? BookingService.defaultStayType
-              : types.first.type.dbValue;
-        }
+        _periods = BookingPeriod.forChalet(types);
         _loadingBooked = false;
-        // وصول محدَّد مسبقاً لكنه صار غير متاح: نتركه للمالك ليختار من جديد.
-        final ci = _checkIn;
-        if (ci != null && _checkOut == null && _isBlocked(ci)) {
-          _checkIn = null;
-        }
+        // يوم محدَّد مسبقاً لكنه صار بلا أي فترة متاحة: يختار المالك من جديد.
+        final d = _date;
+        if (d != null && _isBlocked(d)) _date = null;
+        _reconcilePeriod();
       });
+      if (_date != null && _stayType != null) _fetchPrice();
     } catch (_) {
       final types = await typesFuture;
       if (!mounted || chaletId != _chalet.id) return;
       setState(() {
         _slots = {};
-        _stayTypes = types;
+        _periods = BookingPeriod.forChalet(types);
         _loadingBooked = false;
         _bookedLoadError = 'تعذر تحميل الأيام المحجوزة';
+        _reconcilePeriod();
       });
     }
   }
 
-  bool get _selectingEnd => _checkIn != null && _checkOut == null;
+  /// هل الفترة [stayType] متاحة باليوم المختار؟ (مطابقة booking_slots)
+  bool _isPeriodAvailable(String stayType) =>
+      _date == null ||
+      isDayAvailableForStayType(_date!, stayType: stayType, slots: _slots);
 
-  /// قاعدة التعطيل الوحيدة (تستخدمها الخلايا والنقر معاً) — نفس قاعدة
-  /// تقويم الضيف، حسب نوع الإقامة المختار.
-  bool _isBlocked(DateTime day) => isDayDisabledForStaySlot(
-        day,
-        slots: _slots,
-        stayType: _stayType,
-        checkIn: _checkIn,
-        selectingEnd: _selectingEnd,
-      );
+  /// تبقى الفترة المختارة إن ظلت متاحة، وتُختار تلقائياً إن بقيت فترة
+  /// متاحة واحدة فقط، وإلا يختار المالك.
+  void _reconcilePeriod() {
+    final current = _stayType;
+    if (current != null &&
+        _periods.any((p) => p.stayType == current) &&
+        _isPeriodAvailable(current)) {
+      return;
+    }
+    final available =
+        _periods.where((p) => _isPeriodAvailable(p.stayType)).toList();
+    _stayType = available.length == 1 ? available.single.stayType : null;
+  }
+
+  /// اليوم معطّل إن لم تبقَ فيه أي فترة متاحة (تستخدمها الخلايا والنقر معاً).
+  bool _isBlocked(DateTime day) => !_periods.any((p) =>
+      isDayAvailableForStayType(day, stayType: p.stayType, slots: _slots));
 
   /// فترة واحدة فقط محجوزة بهذا اليوم (يُعلَّم بالتقويم).
   ChaletDaySlot? _partialSlot(DateTime day) {
@@ -344,45 +362,27 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     final day = _dateOnly(selected);
 
     if (_isBlocked(day)) {
-      final String hint;
-      if (_selectingEnd && day.isAfter(_checkIn!)) {
-        hint = 'الفترة المختارة تتضمن أياماً محجوزة';
-      } else if (_partialSlot(day) != null) {
-        hint = 'الفترة المطلوبة محجوزة بهذا اليوم — جرّب نوع إقامة آخر';
-      } else {
-        hint = 'هذا اليوم محجوز';
-      }
-      setState(() => _dateHint = hint);
-      return;
-    }
-
-    if (_selectingEnd && isSameDay(day, _checkIn)) {
-      setState(() =>
-          _dateHint = 'المغادرة يجب أن تكون بعد الوصول بيوم على الأقل');
+      setState(() => _dateHint = 'هذا اليوم محجوز بالكامل');
       return;
     }
 
     setState(() {
       _dateHint = null;
       _submitError = null;
-      if (_selectingEnd && day.isAfter(_checkIn!)) {
-        _checkOut = day;
-      } else {
-        _checkIn = day;
-        _checkOut = null;
-        _resetQuote();
-      }
+      _date = day;
+      _resetQuote();
+      _reconcilePeriod();
     });
 
-    if (_checkIn != null && _checkOut != null) _fetchPrice();
+    if (_stayType != null) _fetchPrice();
   }
 
   void _onChaletChanged(ManualBookingChalet chalet) {
     if (chalet.id == _chalet.id) return;
     setState(() {
       _chalet = chalet;
-      _checkIn = null;
-      _checkOut = null;
+      _date = null;
+      _stayType = null;
       _dateHint = null;
       _resetQuote();
       _submitError = null;
@@ -392,28 +392,19 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     _loadBookedNights();
   }
 
-  /// تغيير نوع الإقامة يغيّر الأيام المتاحة والسعر: التواريخ المختارة تبقى
-  /// إن بقيت متاحة للنوع الجديد، وإلا تُمسح.
   void _onStayTypeChanged(String stayType) {
     if (stayType == _stayType) return;
+    if (!_isPeriodAvailable(stayType)) {
+      setState(() => _dateHint = 'هذه الفترة محجوزة في اليوم المختار');
+      return;
+    }
     setState(() {
       _stayType = stayType;
       _dateHint = null;
       _submitError = null;
       _resetQuote();
-      final ci = _checkIn;
-      final co = _checkOut;
-      final stillValid = ci != null &&
-          isDayAvailableForStayType(ci, stayType: stayType, slots: _slots) &&
-          (co == null ||
-              !rangeHasUnavailableDayForStayType(ci, co,
-                  stayType: stayType, slots: _slots));
-      if (!stillValid) {
-        _checkIn = null;
-        _checkOut = null;
-      }
     });
-    if (_checkIn != null && _checkOut != null) _fetchPrice();
+    if (_date != null) _fetchPrice();
   }
 
   // ─── السعر (المقترح من التقويم + حقل يكتبه المالك) ─────────
@@ -438,6 +429,7 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     final token = ++_priceToken;
     final checkIn = _checkIn!;
     final checkOut = _checkOut!;
+    final stayType = _stayType!;
     setState(() {
       _priceLoading = true;
       _quote = null;
@@ -445,7 +437,7 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     });
     try {
       final value =
-          await widget.quotePrice(_chalet.id, checkIn, checkOut, _stayType);
+          await widget.quotePrice(_chalet.id, checkIn, checkOut, stayType);
       if (!mounted || token != _priceToken) return;
       setState(() {
         _priceLoading = false;
@@ -468,10 +460,7 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
   // ─── الحفظ ────────────────────────────────────────────────
 
   bool get _canSubmit =>
-      !_saving &&
-      _checkIn != null &&
-      _checkOut != null &&
-      !_priceLoading;
+      !_saving && _date != null && _stayType != null && !_priceLoading;
 
   Future<void> _save() async {
     if (!_canSubmit) return;
@@ -492,7 +481,7 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
         guestPhone: _phoneCtrl.text.trim(),
         notes: notes.isEmpty ? null : notes,
         totalPrice: parseManualPrice(_priceCtrl.text)!,
-        stayType: _stayType,
+        stayType: _stayType!,
       ));
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -507,23 +496,6 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
   }
 
   // ─── الواجهة ──────────────────────────────────────────────
-
-  static const _monthNames = [
-    'يناير',
-    'فبراير',
-    'مارس',
-    'أبريل',
-    'مايو',
-    'يونيو',
-    'يوليو',
-    'أغسطس',
-    'سبتمبر',
-    'أكتوبر',
-    'نوفمبر',
-    'ديسمبر',
-  ];
-
-  String _fmt(DateTime d) => '${d.day} ${_monthNames[d.month - 1]}';
 
   @override
   Widget build(BuildContext context) {
@@ -561,15 +533,16 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
                         fontWeight: FontWeight.w900,
                         color: AppColors.charcoal)),
                 const SizedBox(height: 2),
-                const Text('لزبون كلّمك بالتلفون أو وجاهياً — تنحجز التواريخ فوراً',
+                const Text('لزبون كلّمك بالتلفون أو وجاهياً — تنحجز الفترة فوراً',
                     style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 12,
                         color: AppColors.textSecondary)),
                 const SizedBox(height: 14),
                 _buildChaletPicker(),
-                _buildStayTypePicker(),
                 _buildCalendar(),
+                const SizedBox(height: 10),
+                _buildStayTypePicker(),
                 _buildSelectionSummary(),
                 const SizedBox(height: 12),
                 _buildPriceField(),
@@ -640,7 +613,7 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
                             height: 20,
                             child: CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2.2))
-                        : const Text('حجز التواريخ',
+                        : const Text('حجز الفترة',
                             style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 15,
@@ -718,40 +691,59 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     );
   }
 
-  /// أنواع الإقامة المفعّلة (تُخفى إن لم يعرّف الشاليه أي نوع).
+  /// فترات الشاليه بأوقاتها؛ غير المتاحة باليوم المختار معطّلة.
   Widget _buildStayTypePicker() {
-    if (_stayTypes.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('الفترة',
+            style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: AppColors.charcoal)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in _periods) _periodChip(p),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _periodChip(BookingPeriod p) {
+    final selected = p.stayType == _stayType;
+    final available = _isPeriodAvailable(p.stayType);
+    final fg = selected ? Colors.white : AppColors.charcoal;
+    return ChoiceChip(
+      key: Key('manual_stay_${p.stayType}'),
+      avatar: Icon(p.icon,
+          size: 16, color: selected ? Colors.white : AppColors.primary),
+      label: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final t in _stayTypes)
-            ChoiceChip(
-              key: Key('manual_stay_${t.type.dbValue}'),
-              avatar: Icon(t.type.icon,
-                  size: 16,
-                  color: t.type.dbValue == _stayType
-                      ? Colors.white
-                      : AppColors.primary),
-              label: Text(t.type.label,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    color: t.type.dbValue == _stayType
-                        ? Colors.white
-                        : AppColors.charcoal,
-                  )),
-              selected: t.type.dbValue == _stayType,
-              selectedColor: AppColors.primary,
-              backgroundColor: Colors.white,
-              showCheckmark: false,
-              onSelected: (_) => _onStayTypeChanged(t.type.dbValue),
-            ),
+          Text(p.label,
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: fg)),
+          Text(
+              available
+                  ? (p.timeLabel ?? 'طوال اليوم')
+                  : 'محجوزة بهذا اليوم',
+              style: TextStyle(fontFamily: 'Cairo', fontSize: 10.5, color: fg)),
         ],
       ),
+      selected: selected,
+      selectedColor: AppColors.primary,
+      backgroundColor: Colors.white,
+      showCheckmark: false,
+      onSelected: available ? (_) => _onStayTypeChanged(p.stayType) : null,
     );
   }
 
@@ -772,11 +764,9 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
             focusedDay: _focusedDay,
             calendarFormat: CalendarFormat.month,
             rowHeight: 44,
-            // نفس نمط شاشة حجز الزبون: الوضع toggledOn لعرض المدى فقط، والنقر
-            // يصل عبر onDaySelected لأن قاعدة التعطيل مخصّصة (_isBlocked).
-            rangeSelectionMode: RangeSelectionMode.toggledOn,
-            rangeStartDay: _checkIn,
-            rangeEndDay: _checkOut,
+            // يوم واحد فقط. النقر يصل عبر onDaySelected حتى لليوم المعطّل
+            // (قاعدة التعطيل مخصّصة بـ _isBlocked) فتظهر رسالة السبب.
+            selectedDayPredicate: (day) => isSameDay(_date, day),
             onDaySelected: (selected, focused) {
               _focusedDay = focused;
               _onDayTapped(selected);
@@ -789,10 +779,7 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
                   _dayCell(day, isToday: true),
             ),
             calendarStyle: const CalendarStyle(
-              rangeHighlightColor: AppColors.primaryPale,
-              rangeStartDecoration: BoxDecoration(
-                  color: AppColors.primary, shape: BoxShape.circle),
-              rangeEndDecoration: BoxDecoration(
+              selectedDecoration: BoxDecoration(
                   color: AppColors.primary, shape: BoxShape.circle),
               defaultTextStyle: TextStyle(fontFamily: 'Cairo'),
             ),
@@ -881,13 +868,14 @@ class _ManualBookingSheetState extends State<ManualBookingSheet> {
     } else if (_dateHint != null) {
       text = _dateHint!;
       color = AppColors.error;
-    } else if (_checkIn == null) {
-      text = 'اختر يوم الوصول';
-    } else if (_checkOut == null) {
-      text = 'الوصول ${_fmt(_checkIn!)} — اختر يوم المغادرة';
+    } else if (_date == null) {
+      text = 'اختر يوم الحجز';
+    } else if (_selectedPeriod == null) {
+      text = '${arabicDayLabel(_date!, withYear: false)} — اختر الفترة';
     } else {
-      final nights = nightsBetween(_checkIn!, _checkOut!);
-      text = 'من ${_fmt(_checkIn!)} إلى ${_fmt(_checkOut!)} · $nights ليالٍ';
+      final p = _selectedPeriod!;
+      text = '${arabicDayLabel(_date!, withYear: false)} · ${p.label}'
+          '${p.timeLabel == null ? '' : ' (${p.timeLabel})'}';
       color = AppColors.primary;
     }
     return Padding(

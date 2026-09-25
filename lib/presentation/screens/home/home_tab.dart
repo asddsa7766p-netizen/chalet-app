@@ -1002,6 +1002,14 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            const Text(
+                              AppStrings.priceFrom,
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
+                            ),
                             Text(
                               '₪${chalet.pricePerNight.toStringAsFixed(0)}',
                               style: const TextStyle(
@@ -1009,14 +1017,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                 fontSize: 16,
                                 fontWeight: FontWeight.w900,
                                 color: AppColors.primary,
-                              ),
-                            ),
-                            const Text(
-                              '/ الليلة',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 11,
-                                color: Colors.grey,
                               ),
                             ),
                           ],
@@ -1188,7 +1188,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        '₪${chalet.pricePerNight.toStringAsFixed(0)}',
+                        'يبدأ من ₪${chalet.pricePerNight.toStringAsFixed(0)}',
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 12,

@@ -1,8 +1,9 @@
 /// ChaletModel — يطابق جدول chalets بقاعدة البيانات كاملاً
 ///
 /// التغييرات عن النسخة السابقة:
-/// - إضافة: depositAmount, minNights, videoUrl, bookingType, isApproved,
+/// - إضافة: depositAmount, videoUrl, bookingType, isApproved,
 ///           isFeatured, address, latitude, longitude
+/// - min_nights لا يُقرأ ولا يُرسل: الحجز يوم واحد + فترة (العمود باقٍ بالقاعدة)
 /// - تحويل coverImage (String واحد) → images (List<String>) ليعكس
 ///   قاعدة البيانات الفعلية (images text[])
 /// - إضافة getter coverImage للتوافق مع الكود القديم (non-breaking)
@@ -31,7 +32,6 @@ class ChaletModel {
   final double? latitude;
   final double? longitude;
   final String bookingType;
-  final int minNights;
   final double depositAmount;
   final List<String> images;
   final String? videoUrl;
@@ -62,7 +62,6 @@ class ChaletModel {
     this.latitude,
     this.longitude,
     this.bookingType = 'يومي',
-    this.minNights = 1,
     this.depositAmount = 0,
     this.images = const [],
     this.videoUrl,
@@ -111,7 +110,6 @@ class ChaletModel {
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       bookingType: json['booking_type'] as String? ?? 'يومي',
-      minNights: json['min_nights'] as int? ?? 1,
       depositAmount: (json['deposit_amount'] as num?)?.toDouble() ?? 0,
       images: parseImages(json['images']),
       videoUrl: json['video_url'] as String?,
@@ -148,7 +146,6 @@ class ChaletModel {
         'latitude': latitude,
         'longitude': longitude,
         'booking_type': bookingType,
-        'min_nights': minNights,
         'deposit_amount': depositAmount,
         'images': images,
         'video_url': videoUrl,
@@ -178,7 +175,6 @@ class ChaletModel {
     double? latitude,
     double? longitude,
     String? bookingType,
-    int? minNights,
     double? depositAmount,
     List<String>? images,
     String? videoUrl,
@@ -209,7 +205,6 @@ class ChaletModel {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       bookingType: bookingType ?? this.bookingType,
-      minNights: minNights ?? this.minNights,
       depositAmount: depositAmount ?? this.depositAmount,
       images: images ?? this.images,
       videoUrl: videoUrl ?? this.videoUrl,

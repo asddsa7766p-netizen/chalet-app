@@ -8,7 +8,7 @@ import '../../../data/models/chalet_model.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
-import '../../../data/services/pricing_service.dart' show ChaletStayType;
+import '../../../data/models/booking_period.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../widgets/common/common_widgets.dart';
 
@@ -604,7 +604,7 @@ class _BookingCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '${booking.checkIn.day}/${booking.checkIn.month}/${booking.checkIn.year} — ${booking.checkOut.day}/${booking.checkOut.month}/${booking.checkOut.year}',
+                        booking.dateLabel,
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 12,
@@ -623,37 +623,33 @@ class _BookingCard extends StatelessWidget {
               children: [
                 const Divider(height: 1),
                 const SizedBox(height: 10),
-                // ✅ إضافة: نوع الإقامة الفعلي لهذا الحجز، فقط عندما يكون
-                // ذا معنى (غير 'default' — السلوك القديم بلا أنواع إقامة).
-                // بيانات حقيقية موجودة أصلاً بـBookingModel.stayType.
-                if (booking.stayType != 'default') ...[
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryPale,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        ChaletStayType.fromDb(booking.stayType).shortLabel,
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
+                // الفترة واسمها ووقتها (كل حجز = يوم + فترة).
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryPale,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      booking.periodWithTime,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                ],
+                ),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${booking.nightsCount == 1 ? 'ليلة واحدة' : '${booking.nightsCount} ليالٍ'} · ${booking.guestsCount} ضيف',
+                      '${booking.guestsCount} ضيف',
                       style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 12,

@@ -19,7 +19,15 @@ final supabase = Supabase.instance.client;
 /// رسالة اليوم الذي يرفضه الـ trigger لأنه غير متاح للحجز (محجوب). محايدة
 /// عمداً: لا تذكر أن المالك حجبه، وتصلح للضيف وللمالك في الحجز اليدوي.
 const unavailableDatesMessage =
-    'بعض الأيام المختارة غير متاحة للحجز. اختر تواريخ أخرى.';
+    'هذا اليوم غير متاح للحجز. اختر يوماً آخر.';
+
+/// تعارض فترة محجوزة (exclusion/overlap بالقاعدة).
+const periodTakenMessage = 'هذه الفترة محجوزة، جرّب فترة أو يوماً آخر';
+
+/// أوقات فترات الشاليه، تُضمَّن داخل chalets(...) باستعلامات الحجوزات حتى
+/// يُعرض كل حجز بتاريخه واسم فترته ووقتها (BookingModel.periodStart/End).
+const bookingPeriodColumns =
+    'chalet_stay_types(stay_type, checkin_time, checkout_time)';
 
 /// تحديث لم يعدّل أي صف: رفض صامت من RLS أو أن الحجز لم يعد موجوداً.
 const bookingNotUpdatedMessage =
@@ -52,7 +60,7 @@ String _translateSupabaseError(dynamic error) {
       normalized.contains('exclusion constraint') ||
       normalized.contains('23p01') ||
       normalized.contains('23505')) {
-    return 'هذا التاريخ محجوز، جرب تواريخ تانية';
+    return periodTakenMessage;
   }
 
   if (normalized.contains('غير مسموح تعديل هذه الحقول من طرفك') ||
@@ -731,7 +739,8 @@ class BookingService {
       final data = await supabase
           .from('bookings')
           .select(
-            '*, chalets!inner(name, city, owner_id, images), '
+            '*, chalets!inner(name, city, owner_id, images, '
+            '$bookingPeriodColumns), '
             'profiles(full_name, phone, avatar_url)',
           )
           .eq('chalets.owner_id', userId)
@@ -775,7 +784,7 @@ class BookingService {
     try {
       final data = await supabase
           .from('bookings')
-          .select('*, chalets(name, city, images)')
+          .select('*, chalets(name, city, images, $bookingPeriodColumns)')
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 

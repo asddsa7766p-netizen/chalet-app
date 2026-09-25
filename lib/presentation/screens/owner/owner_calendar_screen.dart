@@ -376,7 +376,7 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
     final opener = widget.manualBookingOpener ?? openManualBookingSheet;
     final saved = await opener(context, chaletId: chalet.id, checkIn: day);
     if (!mounted || !saved) return;
-    _snack('تم حجز التواريخ');
+    _snack('تم حجز الفترة');
     await _refresh();
   }
 
@@ -460,7 +460,7 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
     _snack(
       dates.length == 1
           ? 'تم حجب $label'
-          : 'تم حجب ${nightsLabel(dates.length)}$extra',
+          : 'تم حجب ${daysLabel(dates.length)}$extra',
       undoLabel: 'تراجع',
       onUndo: () => _writeAndRefresh(() => _ds.unblockDates(chalet.id, dates)),
     );
@@ -488,7 +488,7 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
     _snack(
       dates.length == 1
           ? 'تم إلغاء حجب $label'
-          : 'تم إلغاء حجب ${nightsLabel(dates.length)}',
+          : 'تم إلغاء حجب ${daysLabel(dates.length)}',
       undoLabel: 'تراجع',
       onUndo: () => _writeAndRefresh(() => _ds.blockDates(chalet.id, dates)),
     );

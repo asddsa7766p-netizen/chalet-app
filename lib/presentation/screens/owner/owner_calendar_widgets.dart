@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/manual_booking.dart';
+import '../../../data/models/booking_period.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/chalet_slot_availability.dart';
 import '../../../data/services/pricing_service.dart';
@@ -358,7 +359,7 @@ class CalendarLegend extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'يوم المغادرة يظهر متاحاً لأن ليلته غير محجوزة.',
+            'كل حجز يوم واحد بفترة. الشمس/القمر = فترة صباحية/مسائية محجوزة والأخرى متاحة.',
             style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11.5,
@@ -563,21 +564,71 @@ class OwnerDayPanel extends StatelessWidget {
   List<Widget> _pastBody(BookingModel? booking) {
     return [
       if (booking != null) ...[
-        _bookingCard(booking),
+        for (final b in day.bookings)
+          KeyedSubtree(
+            key: ValueKey('day_booking_${b.id}'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _bookingCard(b),
+                if (canCancelManualBooking(b, now: today)) ...[
+                  const SizedBox(height: 12),
+                  _cancelManualButton(b),
+                ],
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
         if (day.departing != null && day.departing!.id != booking.id)
           _departingNote(day.departing!),
-        if (canCancelManualBooking(booking, now: today)) ...[
-          const SizedBox(height: 12),
-          _cancelManualButton(booking),
-        ],
       ] else
         _note('يوم منتهٍ، للاطّلاع فقط.'),
     ];
   }
 
+  /// بطاقة حجز مع إجراءاته (تأكيد/رفض أو إلغاء اليدوي).
+  Widget _bookingWithActions(BookingModel booking) {
+    return KeyedSubtree(
+      key: ValueKey('day_booking_${booking.id}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _bookingCard(booking),
+          const SizedBox(height: 10),
+          if (booking.status == BookingStatus.pending && !booking.isManual)
+            Row(
+              children: [
+                Expanded(
+                  child: _primaryButton(
+                    key: const Key('day_action_confirm'),
+                    label: 'تأكيد الحجز',
+                    icon: Icons.check_rounded,
+                    onTap: busy ? null : () => onConfirm(booking),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _outlineButton(
+                    key: const Key('day_action_reject'),
+                    label: 'رفض',
+                    icon: Icons.close_rounded,
+                    color: AppColors.error,
+                    onTap: busy ? null : () => onReject(booking),
+                  ),
+                ),
+              ],
+            ),
+          if (canCancelManualBooking(booking, now: today))
+            _cancelManualButton(booking),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _bookedBody(BookingModel booking) {
     return [
-      _bookingCard(booking),
+      for (final b in day.bookings) _bookingWithActions(b),
       if (day.partialLabel != null) _note(day.partialLabel!),
       if (day.departing != null && day.departing!.id != booking.id)
         _departingNote(day.departing!),
@@ -585,32 +636,16 @@ class OwnerDayPanel extends StatelessWidget {
         const SizedBox(height: 10),
         _note('هذا اليوم محجوب أيضاً. يمكنك إلغاء الحجب دون المساس بالحجز.'),
       ],
-      const SizedBox(height: 14),
-      if (booking.status == BookingStatus.pending && !booking.isManual)
-        Row(
-          children: [
-            Expanded(
-              child: _primaryButton(
-                key: const Key('day_action_confirm'),
-                label: 'تأكيد الحجز',
-                icon: Icons.check_rounded,
-                onTap: busy ? null : () => onConfirm(booking),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _outlineButton(
-                key: const Key('day_action_reject'),
-                label: 'رفض',
-                icon: Icons.close_rounded,
-                color: AppColors.error,
-                onTap: busy ? null : () => onReject(booking),
-              ),
-            ),
-          ],
+      // فترة أخرى من اليوم ما زالت حرة: يمكن إدخال حجز يدوي لها.
+      if (day.isPartiallyBooked && !day.blocked) ...[
+        const SizedBox(height: 10),
+        _outlineButton(
+          key: const Key('day_action_manual'),
+          label: 'حجز يدوي للفترة المتاحة',
+          icon: Icons.edit_calendar_rounded,
+          onTap: busy ? null : onManualBooking,
         ),
-      if (canCancelManualBooking(booking, now: today))
-        _cancelManualButton(booking),
+      ],
       if (day.hasBlockAndBooking) ...[
         const SizedBox(height: 10),
         _outlineButton(
@@ -705,7 +740,7 @@ class OwnerDayPanel extends StatelessWidget {
           text = 'تعذر جلب سعر هذا اليوم';
         } else {
           final info = snap.data!;
-          text = 'سعر الليلة: ${AppCurrency.formatPrice(info.finalPrice)}';
+          text = 'سعر اليوم: ${AppCurrency.formatPrice(info.finalPrice)}';
           if ((info.finalPrice - info.originalPrice).abs() > 0.001) {
             sub = 'سعر خاص لهذا التاريخ';
           }
@@ -781,11 +816,12 @@ class OwnerDayPanel extends StatelessWidget {
       padding: const EdgeInsets.only(top: 10),
       child: Row(
         children: [
-          const Icon(Icons.logout_rounded,
+          const Icon(Icons.wb_twilight_rounded,
               size: 16, color: AppColors.textSecondary),
           const SizedBox(width: 6),
           Expanded(
-            child: Text('مغادرة $name صباح هذا اليوم',
+            child: Text(
+                'حجز $name (يوم كامل - مسائي) يمتد حتى صباح هذا اليوم',
                 style: const TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12.5,
@@ -882,10 +918,13 @@ class OwnerDayPanel extends StatelessWidget {
                 ],
               ),
             ),
-          row(Icons.date_range_rounded,
-              'من ${shortDayLabel(b.checkIn)} إلى ${shortDayLabel(b.checkOut)} · ${nightsLabel(nights)}'),
+          row(Icons.event_rounded, b.dateLabel,
+              key: const Key('day_booking_date')),
+          row(Icons.schedule_rounded, b.periodWithTime,
+              key: const Key('day_booking_period')),
+          // حجز قديم ممتد لعدة أيام: موقع هذا اليوم داخله.
           if (night != null && nights > 1)
-            row(Icons.nightlight_round, 'الليلة $night من $nights'),
+            row(Icons.today_rounded, 'اليوم $night من $nights'),
           row(Icons.group_outlined, '${b.guestsCount} ضيوف'),
           row(Icons.payments_outlined,
               'الإجمالي ${AppCurrency.formatPrice(b.totalPrice)}'),
@@ -995,7 +1034,7 @@ class RangeActionBar extends StatelessWidget {
       if (plan.dates.isEmpty) {
         detail = 'لا توجد أيام محجوبة في هذا النطاق.';
       } else {
-        buttonLabel = 'إلغاء حجب ${nightsLabel(plan.dates.length)}';
+        buttonLabel = 'إلغاء حجب ${daysLabel(plan.dates.length)}';
         enabled = true;
         if (plan.skippedNotBlocked > 0) {
           detail = 'سيُتخطى ${daysLabel(plan.skippedNotBlocked)} غير محجوب.';
@@ -1016,7 +1055,7 @@ class RangeActionBar extends StatelessWidget {
             ? 'لا توجد أيام يمكن حجبها في هذا النطاق.'
             : '${notes.join(' · ')}. لا توجد أيام يمكن حجبها.';
       } else {
-        buttonLabel = 'حجب ${nightsLabel(plan.dates.length)}';
+        buttonLabel = 'حجب ${daysLabel(plan.dates.length)}';
         enabled = true;
         if (notes.isNotEmpty) detail = '${notes.join(' · ')}.';
       }

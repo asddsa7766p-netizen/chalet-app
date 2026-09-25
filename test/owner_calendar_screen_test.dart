@@ -76,7 +76,7 @@ void main() {
       expect(cellWidget(tester, '2030-03-05').isPast, isTrue);
       expect(cellWidget(tester, '2030-03-10').isToday, isTrue);
 
-      // يوم المغادرة يظهر متاحاً (18→20: ليلتا 18 و19).
+      // اليوم بعد حجز قديم ممتد متاح (18→20: يوما 18 و19).
       expect(kindOn(tester, '2030-03-19'), CalendarDayKind.manual);
       expect(kindOn(tester, '2030-03-20'), CalendarDayKind.available);
     });
@@ -247,7 +247,7 @@ void main() {
 
       expect(find.byKey(const Key('day_panel')), findsOneWidget);
       expect(find.text('السبت 16 مارس'), findsOneWidget);
-      expect(find.text('سعر الليلة: ₪1,000'), findsOneWidget);
+      expect(find.text('سعر اليوم: ₪1,000'), findsOneWidget);
       expect(find.byKey(const Key('day_action_manual')), findsOneWidget);
       expect(find.byKey(const Key('day_action_block')), findsOneWidget);
       expect(find.byKey(const Key('day_action_pricing')), findsOneWidget);
@@ -263,7 +263,7 @@ void main() {
       );
       await pumpCalendar(tester, ds);
       await tapDay(tester, '2030-03-16');
-      expect(find.text('سعر الليلة: ₪1,400'), findsOneWidget);
+      expect(find.text('سعر اليوم: ₪1,400'), findsOneWidget);
       expect(find.text('سعر خاص لهذا التاريخ'), findsOneWidget);
     });
 
@@ -349,8 +349,10 @@ void main() {
           findsOneWidget);
       expect(find.descendant(of: card, matching: find.text('0599123456')),
           findsOneWidget);
-      expect(find.text('من 12 مارس إلى 15 مارس · 3 ليالٍ'), findsOneWidget);
-      expect(find.text('الليلة 2 من 3'), findsOneWidget);
+      // حجز قديم ممتد (12→15) يُعرض كمدى أيام، مع موقع اليوم داخله.
+      expect(find.text('من 12 مارس إلى 14 مارس 2030 (3 أيام)'), findsOneWidget);
+      expect(find.text('يوم كامل'), findsOneWidget);
+      expect(find.text('اليوم 2 من 3'), findsOneWidget);
       expect(find.text('الإجمالي ₪2,400'), findsOneWidget);
       // الرأس يوضح المصدر والحالة (لا شارة مكررة داخل البطاقة).
       expect(find.text('محجوز من التطبيق'), findsWidgets);
@@ -438,11 +440,52 @@ void main() {
       expect(kindOn(tester, '2030-03-24'), CalendarDayKind.available);
     });
 
-    testWidgets('يوم مغادرة: يظهر متاحاً مع ملاحظة المغادرة', (tester) async {
+    testWidgets('اليوم التالي لحجز قديم: متاح بلا أي ملاحظة امتداد',
+        (tester) async {
       await pumpCalendar(tester, sampleDataSource());
-      await tapDay(tester, '2030-03-20');
-      expect(find.text('مغادرة أبو أحمد صباح هذا اليوم'), findsOneWidget);
+      await tapDay(tester, '2030-03-20'); // بعد حجز يدوي 18→20 (default)
+      expect(find.textContaining('يمتد حتى صباح'), findsNothing);
       expect(find.byKey(const Key('day_action_block')), findsOneWidget);
+    });
+
+    testWidgets('يوم كامل مسائي: ملاحظة امتداده لصباح اليوم التالي',
+        (tester) async {
+      final ds = FakeOwnerCalendarDataSource(bookings: {
+        'c1': [
+          fakeBooking('fde', d(2030, 3, 21), d(2030, 3, 22),
+              guestName: 'منى', stayType: 'full_day_evening'),
+        ],
+      });
+      ds.slots['c1'] = {
+        d(2030, 3, 22): const ChaletDaySlot(
+            morningBooked: true, eveningBooked: false, blocked: false),
+      };
+      await pumpCalendar(tester, ds);
+      await tapDay(tester, '2030-03-22');
+      expect(find.text('حجز منى (يوم كامل - مسائي) يمتد حتى صباح هذا اليوم'),
+          findsOneWidget);
+      expect(find.text('الفترة الصباحية محجوزة، والمسائية متاحة'),
+          findsOneWidget);
+    });
+
+    testWidgets('يوم بفترتين محجوزتين: بطاقتان بالفترة والوقت', (tester) async {
+      final ds = FakeOwnerCalendarDataSource(bookings: {
+        'c1': [
+          fakeBooking('mor', d(2030, 3, 21), d(2030, 3, 22),
+              guestName: 'صباح', stayType: 'morning',
+              periodStart: '10:00:00', periodEnd: '21:00:00'),
+          fakeBooking('eve', d(2030, 3, 21), d(2030, 3, 22),
+              guestName: 'مساء', stayType: 'evening'),
+        ],
+      });
+      await pumpCalendar(tester, ds);
+      await tapDay(tester, '2030-03-21');
+      expect(find.byKey(const Key('day_booking_card')), findsNWidgets(2));
+      expect(find.text('صباح'), findsOneWidget);
+      expect(find.text('مساء'), findsOneWidget);
+      expect(find.text('إقامة صباحية · 10:00 ص - 9:00 م'), findsOneWidget);
+      expect(find.text('إقامة مسائية'), findsOneWidget);
+      expect(find.text('الخميس 21 مارس 2030'), findsNWidgets(2));
     });
 
     testWidgets('يوم ماضٍ فارغ لا يفتح شيئاً', (tester) async {
@@ -462,7 +505,7 @@ void main() {
 
     testWidgets('حجز يدوي جارٍ (وصل قبل اليوم) يمكن إلغاؤه', (tester) async {
       await pumpCalendar(tester, sampleDataSource());
-      await tapDay(tester, '2030-03-09'); // ليلة ماضية من حجز 8→12
+      await tapDay(tester, '2030-03-09'); // يوم ماضٍ من حجز قديم 8→12
       expect(find.text('خالد يوسف'), findsOneWidget);
       expect(find.byKey(const Key('day_action_cancel_manual')), findsOneWidget);
     });
@@ -493,11 +536,11 @@ void main() {
       // لا تفتح ورقة يوم بهذا الوضع.
       expect(find.byKey(const Key('day_panel')), findsNothing);
 
-      // 16..19: ليلتا 18 و19 عليهما حجز يدوي.
+      // 16..19: يوما 18 و19 عليهما حجز يدوي.
       await tapDay(tester, '2030-03-19');
       expect(find.text('حجب من 16 مارس إلى 19 مارس'), findsOneWidget);
       expect(find.text('سيُتخطى يومان لوجود حجز عليه.'), findsOneWidget);
-      expect(find.text('حجب ليلتان'), findsOneWidget);
+      expect(find.text('حجب يومان'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('range_confirm')));
       await tester.pumpAndSettle();
@@ -507,13 +550,13 @@ void main() {
       expect(kindOn(tester, '2030-03-16'), CalendarDayKind.blocked);
       expect(kindOn(tester, '2030-03-17'), CalendarDayKind.blocked);
       expect(kindOn(tester, '2030-03-18'), CalendarDayKind.manual);
-      expect(find.text('تم حجب ليلتان، وتم تخطي يومان لوجود حجز'),
+      expect(find.text('تم حجب يومان، وتم تخطي يومان لوجود حجز'),
           findsOneWidget);
       // خرج من الوضع.
       expect(find.byKey(const Key('range_bar')), findsNothing);
     });
 
-    testWidgets('التراجع عن حجب النطاق يعيد الليالي المحجوبة فقط', (tester) async {
+    testWidgets('التراجع عن حجب النطاق يعيد الأيام المحجوبة فقط', (tester) async {
       final ds = sampleDataSource();
       await pumpCalendar(tester, ds);
       await tester.tap(find.byKey(const Key('action_range_mode')));
@@ -540,14 +583,14 @@ void main() {
       await tapDay(tester, '2030-03-31');
       expect(find.text('إلغاء حجب من 28 مارس إلى 31 مارس'), findsOneWidget);
       expect(find.text('سيُتخطى يوم واحد غير محجوب.'), findsOneWidget);
-      expect(find.text('إلغاء حجب 3 ليالٍ'), findsOneWidget);
+      expect(find.text('إلغاء حجب 3 أيام'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('range_confirm')));
       await tester.pumpAndSettle();
       expect(ds.log.where((l) => l.startsWith('unblock ')),
           ['unblock c1 2030-03-28,2030-03-29,2030-03-30']);
       expect(kindOn(tester, '2030-03-29'), CalendarDayKind.available);
-      expect(find.text('تم إلغاء حجب 3 ليالٍ'), findsOneWidget);
+      expect(find.text('تم إلغاء حجب 3 أيام'), findsOneWidget);
     });
 
     testWidgets('البداية على يوم عليه حجز مرفوضة برسالة', (tester) async {
@@ -565,9 +608,9 @@ void main() {
       await tester.tap(find.byKey(const Key('action_range_mode')));
       await tester.pumpAndSettle();
       await tapDay(tester, '2030-03-16');
-      // 16 → 19 يتضمن ليلتين محجوزتين. نضيّق: من 16 إلى 16 (يوم واحد حر).
+      // 16 → 19 يتضمن يومين محجوزين. نضيّق: من 16 إلى 16 (يوم واحد حر).
       await tapDay(tester, '2030-03-16');
-      expect(find.text('حجب ليلة واحدة'), findsOneWidget);
+      expect(find.text('حجب يوم واحد'), findsOneWidget);
     });
 
     testWidgets('اليوم الماضي لا يُختار برسالة', (tester) async {

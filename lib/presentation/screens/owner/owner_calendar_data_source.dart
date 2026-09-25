@@ -89,7 +89,8 @@ class SupabaseOwnerCalendarDataSource implements OwnerCalendarDataSource {
   static const _bookingColumns =
       'id, chalet_id, user_id, check_in, check_out, guests_count, total_price, '
       'status, payment_method, notes, created_at, stay_type, source, '
-      'guest_name, guest_phone, profiles(full_name, phone, avatar_url)';
+      'guest_name, guest_phone, profiles(full_name, phone, avatar_url), '
+      'chalets($bookingPeriodColumns)';
 
   @override
   Future<List<CalendarChalet>> loadChalets() async {

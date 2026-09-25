@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/date_utils.dart';
+import '../../../data/models/booking_period.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/dashboard_service.dart';
 import '../../../data/services/services.dart'
@@ -713,12 +715,23 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${b.guestName?.isNotEmpty == true ? b.guestName : 'ضيف'} · ${b.checkIn.day}/${b.checkIn.month} - ${b.checkOut.day}/${b.checkOut.month}',
+                    '${b.guestName?.isNotEmpty == true ? b.guestName : 'ضيف'} · '
+                    '${b.isMultiDay ? b.dateLabel : arabicDayLabel(b.checkIn, withYear: false)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 11,
+                        color: AppColors.textSecondary),
+                  ),
+                  Text(
+                    b.periodWithTime,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textSecondary),
                   ),
                 ],
@@ -762,7 +775,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
     if (!mounted || !saved) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('تم حجز التواريخ', style: TextStyle(fontFamily: 'Cairo')),
+        content: Text('تم حجز الفترة', style: TextStyle(fontFamily: 'Cairo')),
         backgroundColor: AppColors.primary,
       ),
     );

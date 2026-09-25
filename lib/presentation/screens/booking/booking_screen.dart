@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/error_reporter.dart';
+import '../../../data/models/booking_period.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/chalet_slot_availability.dart';
@@ -33,8 +35,11 @@ class _BookingScreenState extends State<BookingScreen> {
   static const _slotJustBookedMessage =
       'تم حجز هذه الفترة للتو، يرجى اختيار فترة أخرى';
 
-  DateTime? _checkIn;
-  DateTime? _checkOut;
+  // الحجز = يوم واحد + فترة واحدة. check_in = اليوم المختار و check_out =
+  // اليوم التالي دائماً (booking_slots تحدد الفترة المشغولة من stay_type).
+  DateTime? _date;
+  DateTime? get _checkIn => _date;
+  DateTime? get _checkOut => _date == null ? null : nextDay(_date!);
 
   // ⚠️ الديزاين يفصل عدد الضيوف لـ 3 فئات (رضع/أطفال/بالغين)، لكن
   // الـ Backend الحالي (BookingService.createBooking) بياخد رقم واحد
@@ -55,8 +60,7 @@ class _BookingScreenState extends State<BookingScreen> {
   // قبل ربط بوابة دفع حقيقية بمسار /payment.
   static const bool _onlinePaymentEnabled = false;
   bool _loading = false;
-  bool _showCalendar = false;
-  bool _selectingCheckIn = true;
+  bool _showCalendar = true;
 
   bool _priceLoading = false;
   double? _serverTotalPrice;
@@ -70,8 +74,21 @@ class _BookingScreenState extends State<BookingScreen> {
   Map<DateTime, ChaletDaySlot> _daySlots = {};
 
   bool _stayTypesLoading = true;
-  List<ChaletStayTypeConfig> _enabledStayTypes = [];
-  String _selectedStayType = BookingService.defaultStayType;
+  // فترات الحجز: أنواع الإقامة المفعّلة، أو "يوم كامل" لشاليه بلا أنواع.
+  List<BookingPeriod> _periods = const [BookingPeriod.fullDayDefault];
+
+  /// الفترة المختارة (stay_type)، أو null قبل أن يختار الضيف.
+  String? _selectedStayType;
+
+  BookingPeriod? get _selectedPeriod {
+    for (final p in _periods) {
+      if (p.stayType == _selectedStayType) return p;
+    }
+    return null;
+  }
+
+  /// نوع الإقامة الذي تُعرض أسعار أيام التقويم له.
+  String get _pricingStayType => _selectedStayType ?? _periods.first.stayType;
 
   DateTime _visibleMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
@@ -108,9 +125,8 @@ class _BookingScreenState extends State<BookingScreen> {
   String get _chaletId => _chalet?.id ?? widget.chaletId ?? '';
   ChaletModel? get _chaletModel => _chalet ?? widget.chalet;
 
-  int get _nights => _checkIn != null && _checkOut != null
-      ? nightsBetween(_checkIn!, _checkOut!)
-      : 0;
+  /// اليوم والفترة محددان.
+  bool get _hasSelection => _date != null && _selectedStayType != null;
 
   double? get _total => _serverTotalPrice;
 
@@ -119,26 +135,20 @@ class _BookingScreenState extends State<BookingScreen> {
       !_priceLoading &&
       _serverTotalPrice != null &&
       _serverCalculated &&
-      _checkIn != null &&
-      _checkOut != null &&
-      _nights > 0;
+      _hasSelection;
 
   /// UI-level confirmation availability.
   /// For online payments we allow proceeding to the payment flow even if
   /// server-side price calculation is still pending (mock payment path).
   bool get _canConfirmForUI {
     if (_paymentMethod == 'online') {
-      return _isAvailable &&
-          _checkIn != null &&
-          _checkOut != null &&
-          _nights > 0;
+      return _isAvailable && _hasSelection;
     }
     return _canConfirm;
   }
 
   Future<void> _fetchServerPrice() async {
-    if (_checkIn == null || _checkOut == null) return;
-    if (_nights < 1) return;
+    if (!_hasSelection) return;
 
     final requestId = ++_priceRequestId;
 
@@ -155,7 +165,7 @@ class _BookingScreenState extends State<BookingScreen> {
         chaletId: _chaletId,
         checkIn: _checkIn!,
         checkOut: _checkOut!,
-        stayType: _selectedStayType,
+        stayType: _selectedStayType!,
       );
 
       if (!mounted) return;
@@ -167,7 +177,7 @@ class _BookingScreenState extends State<BookingScreen> {
           _serverTotalPrice = null;
           _isAvailable = false;
           _serverCalculated = false;
-          _availabilityError = 'عذراً، هذا الشاليه محجوز في التواريخ المحددة';
+          _availabilityError = 'عذراً، هذه الفترة محجوزة في اليوم المختار';
           _priceLoading = false;
         });
         return;
@@ -192,7 +202,7 @@ class _BookingScreenState extends State<BookingScreen> {
         checkIn: _checkIn!,
         checkOut: _checkOut!,
         guestsCount: _guests,
-        stayType: _selectedStayType,
+        stayType: _selectedStayType!,
       );
 
       if (!mounted) return;
@@ -214,7 +224,7 @@ class _BookingScreenState extends State<BookingScreen> {
         _isAvailable = is409;
         _serverCalculated = false;
         _availabilityError = is409
-            ? 'عذراً، هذا الشاليه محجوز في التواريخ المحددة'
+            ? 'عذراً، هذه الفترة محجوزة في اليوم المختار'
             : 'تعذر حساب السعر حالياً، يرجى المحاولة لاحقاً';
       });
     } finally {
@@ -231,22 +241,43 @@ class _BookingScreenState extends State<BookingScreen> {
           await ChaletPricingService.instance.getEnabledStayTypes(_chaletId);
       if (!mounted) return;
       setState(() {
-        _enabledStayTypes = types;
-        if (types.isNotEmpty) {
-          _selectedStayType = types.first.type.dbValue;
-        }
+        _periods = BookingPeriod.forChalet(types);
+        _reconcileSelectedPeriod();
       });
-    } catch (_) {
-      // ⚠️ فشل صامت مقصود: نوع الإقامة ثانوي (تصير الشاشة تعتمد على
-      // BookingService.defaultStayType)، لكن يفضّل تسجيله عبر Logging
-      // بدل تجاهله كلياً حتى تقدروا تكتشفوا الأعطال بالسيرفر.
+    } catch (e, st) {
+      // الفترات ثانوية: عند الفشل تبقى فترة "يوم كامل" (default) وحدها.
+      reportError(e, st, context: 'booking_stay_types');
     } finally {
       if (mounted) setState(() => _stayTypesLoading = false);
     }
   }
 
+  /// هل الفترة [stayType] متاحة باليوم المختار؟ (مطابقة booking_slots)
+  bool _isPeriodAvailable(String stayType) =>
+      _date == null ||
+      isDayAvailableForStayType(_date!, stayType: stayType, slots: _daySlots);
+
+  /// بعد تغيّر اليوم أو الفترات أو التوفر: تبقى الفترة المختارة إن كانت
+  /// متاحة، وإن كانت هناك فترة متاحة واحدة فقط تُختار تلقائياً، وإلا يختار
+  /// الضيف بنفسه.
+  void _reconcileSelectedPeriod() {
+    final current = _selectedStayType;
+    if (current != null &&
+        _periods.any((p) => p.stayType == current) &&
+        _isPeriodAvailable(current)) {
+      return;
+    }
+    final available =
+        _periods.where((p) => _isPeriodAvailable(p.stayType)).toList();
+    _selectedStayType = available.length == 1 ? available.single.stayType : null;
+  }
+
   Future<void> _onStayTypeSelected(String stayType) async {
     if (stayType == _selectedStayType) return;
+    if (!_isPeriodAvailable(stayType)) {
+      _showSnack('هذه الفترة محجوزة في اليوم المختار');
+      return;
+    }
     // ✅ إصلاح: رقم الطلب لم يكن يتغيّر إلا بعد انتظار تسعير الشهر، فطلب
     // سعر قديم (لنوع الإقامة السابق) كان يستطيع الردّ في هذه الفجوة ويُظهر
     // سعراً قديماً على نوع الإقامة الجديد. نُبطله فوراً ونبدأ الحساب مباشرة.
@@ -255,18 +286,29 @@ class _BookingScreenState extends State<BookingScreen> {
       _selectedStayType = stayType;
       _serverCalculated = false;
       _serverTotalPrice = null;
-      _priceLoading = _checkIn != null && _checkOut != null && _nights > 0;
+      _priceLoading = _hasSelection;
     });
     final monthFuture = _loadMonthPricing(_visibleMonth);
-    if (_checkIn != null && _checkOut != null && _nights > 0) {
-      await _fetchServerPrice();
-    }
+    if (_hasSelection) await _fetchServerPrice();
     await monthFuture;
+  }
+
+  void _onDaySelected(DateTime selected) {
+    _priceRequestId++;
+    setState(() {
+      _date = dayOnly(selected);
+      _serverCalculated = false;
+      _serverTotalPrice = null;
+      _availabilityError = null;
+      _isAvailable = true;
+      _reconcileSelectedPeriod();
+    });
+    if (_hasSelection) _fetchServerPrice();
   }
 
   Future<void> _loadMonthPricing(DateTime month) async {
     final requestId = ++_monthPricingRequestId;
-    final stayTypeForThisRequest = _selectedStayType;
+    final stayTypeForThisRequest = _pricingStayType;
 
     try {
       final pricing = await ChaletPricingService.instance.getMonthPricing(
@@ -351,20 +393,18 @@ class _BookingScreenState extends State<BookingScreen> {
   void _onGuestsChanged() {
     _guestsDebounce?.cancel();
     _guestsDebounce = Timer(const Duration(milliseconds: 500), () {
-      if (_checkIn != null && _checkOut != null && _nights > 0) {
-        _fetchServerPrice();
-      }
+      if (_hasSelection) _fetchServerPrice();
     });
   }
 
   Future<void> _confirm() async {
     if (_loading) return;
-    if (_checkIn == null || _checkOut == null) {
-      _showSnack('يرجى تحديد تواريخ الوصول والمغادرة');
+    if (_date == null) {
+      _showSnack('يرجى اختيار تاريخ الحجز');
       return;
     }
-    if (_nights < 1) {
-      _showSnack('يجب أن تكون مدة الإقامة ليلة واحدة على الأقل');
+    if (_selectedStayType == null) {
+      _showSnack('يرجى اختيار الفترة');
       return;
     }
 
@@ -381,7 +421,7 @@ class _BookingScreenState extends State<BookingScreen> {
       if (_availabilityError != null) {
         _showSnack(_availabilityError!);
       } else {
-        _showSnack('يرجى التأكد من التواريخ المتاحة قبل الحجز');
+        _showSnack('يرجى التأكد من أن الفترة متاحة قبل الحجز');
       }
       return;
     }
@@ -425,7 +465,7 @@ class _BookingScreenState extends State<BookingScreen> {
         paymentMethod: _paymentMethod,
         notes: _notesCtrl.text.isEmpty ? null : _notesCtrl.text,
         totalPrice: _serverTotalPrice!,
-        stayType: _selectedStayType,
+        stayType: _selectedStayType!,
       );
 
       if (mounted) _showSuccessDialog(booking);
@@ -455,17 +495,16 @@ class _BookingScreenState extends State<BookingScreen> {
 
       if (isConflict) {
         await _fetchBookedDates();
-        // التواريخ المختارة التي صارت غير متاحة تُفرَّغ ليعيد الضيف الاختيار.
-        if (_rangeHasUnavailableDay()) {
-          if (mounted) {
-            setState(() {
-              _checkIn = null;
-              _checkOut = null;
-              _selectingCheckIn = true;
-              _serverCalculated = false;
-              _serverTotalPrice = null;
-            });
-          }
+        if (!mounted) return;
+        // الفترة التي صارت غير متاحة تُفرَّغ ليختار الضيف فترة أو يوماً آخر.
+        if (!_isPeriodAvailable(_selectedStayType!)) {
+          setState(() {
+            _selectedStayType = null;
+            _serverCalculated = false;
+            _serverTotalPrice = null;
+            _reconcileSelectedPeriod();
+          });
+          if (_hasSelection) await _fetchServerPrice();
         } else {
           await _fetchServerPrice();
         }
@@ -482,25 +521,16 @@ class _BookingScreenState extends State<BookingScreen> {
       if (!mounted) return;
       setState(() {
         _daySlots = slots;
+        _reconcileSelectedPeriod();
       });
-    } catch (_) {}
+    } catch (e, st) {
+      reportError(e, st, context: 'booking_day_slots');
+    }
   }
 
-  bool _rangeHasUnavailableDay() => rangeHasUnavailableDayForStayType(
-        _checkIn,
-        _checkOut,
-        stayType: _selectedStayType,
-        slots: _daySlots,
-      );
-
-  /// قاعدة التفعيل الوحيدة للتقويم، حسب نوع الإقامة المختار حالياً.
-  bool _isDayEnabled(DateTime day) => !isDayDisabledForStaySlot(
-        day,
-        slots: _daySlots,
-        stayType: _selectedStayType,
-        checkIn: _checkIn,
-        selectingEnd: !_selectingCheckIn && _checkIn != null,
-      );
+  /// اليوم قابل للاختيار إن كانت فيه فترة واحدة على الأقل متاحة.
+  bool _isDayEnabled(DateTime day) => _periods.any((p) =>
+      isDayAvailableForStayType(day, stayType: p.stayType, slots: _daySlots));
 
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -522,10 +552,11 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _shareOnWhatsApp(BookingModel booking) async {
     final bookingCode = _bookingCode(booking);
     final text = Uri.encodeComponent(
-      'تم تأكيد حجزي في ${_chaletModel?.name ?? ''} 🎉\n'
+      'حجزت في ${_chaletModel?.name ?? ''} 🎉\n'
       'رقم الحجز: $bookingCode\n'
-      'من ${booking.checkIn.day}/${booking.checkIn.month}/${booking.checkIn.year} '
-      'إلى ${booking.checkOut.day}/${booking.checkOut.month}/${booking.checkOut.year}',
+      'التاريخ: ${booking.dateLabel}\n'
+      'الفترة: ${_selectedPeriod?.label ?? booking.periodLabel}'
+      '${_selectedPeriod?.timeLabel == null ? '' : ' (${_selectedPeriod!.timeLabel})'}',
     );
     final uri = Uri.parse('https://wa.me/?text=$text');
 
@@ -696,7 +727,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   const SizedBox(height: 22),
                   _buildDatesSection(),
                   const SizedBox(height: 22),
-                  if (!_stayTypesLoading && _enabledStayTypes.isNotEmpty) ...[
+                  if (!_stayTypesLoading) ...[
                     _buildStayTypeSection(),
                     const SizedBox(height: 22),
                   ],
@@ -706,7 +737,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   const SizedBox(height: 22),
                   _buildNotesSection(),
                   const SizedBox(height: 22),
-                  if (_nights > 0) ...[
+                  if (_hasSelection) ...[
                     _buildPriceSummary(),
                     const SizedBox(height: 16),
                     _buildBookingStatusNotice(),
@@ -951,100 +982,59 @@ class _BookingScreenState extends State<BookingScreen> {
     ]);
   }
 
-  // ===================== DATES =====================
-  static const List<String> _weekdays = [
-    'الاثنين',
-    'الثلاثاء',
-    'الأربعاء',
-    'الخميس',
-    'الجمعة',
-    'السبت',
-    'الأحد'
-  ];
-
-  String _weekdayLabel(DateTime d) => _weekdays[d.weekday - 1];
-
-  static const List<String> _months = [
-    'يناير',
-    'فبراير',
-    'مارس',
-    'أبريل',
-    'مايو',
-    'يونيو',
-    'يوليو',
-    'أغسطس',
-    'سبتمبر',
-    'أكتوبر',
-    'نوفمبر',
-    'ديسمبر'
-  ];
-
-  String _fullDateLabel(DateTime d) =>
-      '${d.day} ${_months[d.month - 1]} ${d.year}';
-
+  // ===================== DATE (يوم واحد) =====================
   Widget _buildDatesSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('اختر التاريخ',
+        const Text('تاريخ الحجز',
             style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
                 color: AppColors.charcoal)),
         const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.sand),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: _bigDateBox(
-                  label: 'تاريخ المغادرة',
-                  date: _checkOut,
-                  onTap: () => setState(() {
-                    _selectingCheckIn = false;
-                    _showCalendar = true;
-                  }),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        GestureDetector(
+          key: const Key('booking_date_box'),
+          onTap: () => setState(() => _showCalendar = !_showCalendar),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.sand),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF6F2E7),
-                    borderRadius: BorderRadius.circular(30),
+                    color: const Color(0xFFF1EEE6),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Row(children: [
-                    Text('$_nights ${_nights == 1 ? 'ليلة' : 'ليالٍ'}',
-                        style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.charcoal)),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.nightlight_round,
-                        size: 13, color: Color(0xFFE0A63C)),
-                  ]),
+                  child: const Icon(Icons.calendar_today_outlined,
+                      size: 18, color: _darkGreen),
                 ),
-              ),
-              Expanded(
-                child: _bigDateBox(
-                  label: 'تاريخ الوصول',
-                  date: _checkIn,
-                  onTap: () => setState(() {
-                    _selectingCheckIn = true;
-                    _showCalendar = true;
-                  }),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _date == null ? 'اختر يوم الحجز' : arabicDayLabel(_date!),
+                    style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: _date == null
+                            ? AppColors.textSecondary
+                            : AppColors.charcoal),
+                  ),
                 ),
-              ),
-            ],
+                Icon(
+                    _showCalendar
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.textSecondary),
+              ],
+            ),
           ),
         ),
         if (_showCalendar) ...[
@@ -1063,17 +1053,12 @@ class _BookingScreenState extends State<BookingScreen> {
               locale: 'ar',
               firstDay: DateTime.now(),
               lastDay: DateTime.now().add(const Duration(days: 365)),
-              focusedDay: _checkIn ?? DateTime.now(),
+              focusedDay: _date ?? DateTime.now(),
+              // يوم واحد فقط: مفعّل إن كانت فيه فترة واحدة متاحة على الأقل.
               enabledDayPredicate: _isDayEnabled,
-              selectedDayPredicate: (day) {
-                if (_selectingCheckIn) return isSameDay(_checkIn, day);
-                return isSameDay(_checkOut, day);
-              },
-              rangeStartDay: _checkIn,
-              rangeEndDay: _checkOut,
+              selectedDayPredicate: (day) => isSameDay(_date, day),
               calendarFormat: CalendarFormat.month,
               rowHeight: 58,
-              rangeSelectionMode: RangeSelectionMode.toggledOn,
               // ✅ إصلاح: هذه البيانات (سعر كل يوم) كانت تُجلب فعلياً
               // بـ_loadMonthPricing وتُرمى بدون استخدام. الآن تُعرض تحت كل
               // يوم — بيانات حقيقية من نفس المصدر المعتمد بحساب السعر
@@ -1084,8 +1069,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 todayBuilder: (context, day, focusedDay) =>
                     _dayCell(day, false, isToday: true),
                 // اليوم غير المتاح يظهر مشطوباً بهدوء بلا ذكر السبب (محجوز
-                // أم محجوب)، والمعطَّل لسبب آخر (ماضٍ أو فترة تعبر يوماً غير
-                // متاح) رمادي فقط.
+                // أم محجوب)، والمعطَّل لسبب آخر (ماضٍ) رمادي فقط.
                 disabledBuilder: (context, day, focusedDay) =>
                     _disabledCell(day),
               ),
@@ -1096,53 +1080,9 @@ class _BookingScreenState extends State<BookingScreen> {
                   _loadMonthPricing(newMonth);
                 }
               },
-              onDaySelected: (selected, focused) {
-                setState(() {
-                  if (_selectingCheckIn) {
-                    _checkIn = selected;
-                    _checkOut = null;
-                    _selectingCheckIn = false;
-                    _serverCalculated = false;
-                  } else if (_checkIn == null) {
-                    // ✅ إصلاح: تأكدت بتشغيل التطبيق فعلياً أن الضغط على مربّع
-                    // "تاريخ المغادرة" أولاً (قبل اختيار أي تاريخ وصول) كان
-                    // يسجّل التاريخ المضغوط كـ"مغادرة" مباشرة (لأن
-                    // `_checkIn ?? DateTime.now()` تجعل أي تاريخ مستقبلي
-                    // "بعد" القيمة الافتراضية) ويُغلق التقويم فوراً — فيبقى
-                    // "تاريخ الوصول" فارغاً للأبد بلا أي رسالة، والمستخدم لا
-                    // يفهم لماذا لا يظهر السعر أو لماذا زر الحجز معطّل.
-                    // بدون تاريخ وصول، أول تاريخ يُضغط دائماً هو تاريخ الوصول.
-                    _checkIn = selected;
-                    _checkOut = null;
-                    _selectingCheckIn = false;
-                  } else {
-                    if (selected.isAfter(_checkIn!)) {
-                      _checkOut = selected;
-                      _showCalendar = false;
-                    } else if (isSameDay(selected, _checkIn)) {
-                      // الحجز بالليالي (قاعدة البيانات تشترط مغادرة بعد الوصول):
-                      // بدل تجاهل الضغطة بصمت، نوضّح للمستخدم السبب.
-                      _showSnack(
-                          'يجب أن يكون تاريخ المغادرة بعد تاريخ الوصول بيوم على الأقل');
-                    } else {
-                      _checkIn = selected;
-                      _checkOut = null;
-                      _selectingCheckIn = false;
-                    }
-                    _serverCalculated = false;
-                  }
-                });
-                if (_checkIn != null && _checkOut != null) {
-                  _fetchServerPrice();
-                }
-              },
+              onDaySelected: (selected, focused) => _onDaySelected(selected),
               calendarStyle: const CalendarStyle(
                 selectedDecoration:
-                    BoxDecoration(color: _darkGreen, shape: BoxShape.circle),
-                rangeHighlightColor: AppColors.primaryPale,
-                rangeStartDecoration:
-                    BoxDecoration(color: _darkGreen, shape: BoxShape.circle),
-                rangeEndDecoration:
                     BoxDecoration(color: _darkGreen, shape: BoxShape.circle),
                 todayDecoration: BoxDecoration(
                     color: AppColors.accent, shape: BoxShape.circle),
@@ -1158,53 +1098,6 @@ class _BookingScreenState extends State<BookingScreen> {
           ),
         ],
       ],
-    );
-  }
-
-  Widget _bigDateBox({
-    required String label,
-    DateTime? date,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Text(label,
-              style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12,
-                  color: AppColors.textSecondary)),
-          const SizedBox(height: 8),
-          Text(date != null ? _weekdayLabel(date) : '—',
-              style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.charcoal)),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(date != null ? _fullDateLabel(date) : 'اختر التاريخ',
-                  style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11,
-                      color: AppColors.textSecondary)),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1EEE6),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(Icons.calendar_today_outlined,
-                    size: 12, color: _darkGreen),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 
@@ -1328,30 +1221,52 @@ class _BookingScreenState extends State<BookingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('نوع الحجز',
+        const Text('الفترة',
             style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
                 color: AppColors.charcoal)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            for (final type in _enabledStayTypes) ...[
-              Expanded(child: _stayTypeCard(type)),
-              if (type != _enabledStayTypes.last) const SizedBox(width: 10),
-            ],
-          ],
+        const SizedBox(height: 4),
+        Text(
+          _date == null
+              ? 'اختر يوم الحجز أولاً لمعرفة الفترات المتاحة'
+              : 'الفترات المتاحة ليوم ${arabicDayLabel(_date!, withYear: false)}',
+          style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 12,
+              color: AppColors.textSecondary),
         ),
+        const SizedBox(height: 12),
+        // بطاقتان بكل صف: أسماء الفترات ("يوم كامل - صباحي") وأوقاتها لا
+        // تتسع لأربع بطاقات بعرض هاتف.
+        LayoutBuilder(builder: (context, constraints) {
+          final width = (constraints.maxWidth - 10) / 2;
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final p in _periods)
+                SizedBox(
+                  width: _periods.length == 1 ? constraints.maxWidth : width,
+                  child: _stayTypeCard(p),
+                ),
+            ],
+          );
+        }),
       ],
     );
   }
 
-  Widget _stayTypeCard(ChaletStayTypeConfig config) {
-    final selected = _selectedStayType == config.type.dbValue;
+  Widget _stayTypeCard(BookingPeriod period) {
+    final selected = _selectedStayType == period.stayType;
+    final available = _isPeriodAvailable(period.stayType);
 
-    return GestureDetector(
-      onTap: () => _onStayTypeSelected(config.type.dbValue),
+    return Opacity(
+      opacity: available ? 1 : 0.45,
+      child: GestureDetector(
+      key: Key('period_${period.stayType}'),
+      onTap: available ? () => _onStayTypeSelected(period.stayType) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
@@ -1377,7 +1292,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Flexible(
-                      child: Text(config.type.label,
+                      child: Text(period.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1389,7 +1304,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                   : AppColors.charcoal)),
                     ),
                     const SizedBox(width: 4),
-                    Icon(config.type.icon,
+                    Icon(period.icon,
                         size: 15,
                         color:
                             selected ? Colors.white : const Color(0xFFE0A63C)),
@@ -1397,7 +1312,9 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${config.checkinTime.format(context)} - ${config.checkoutTime.format(context)}',
+                  available
+                      ? (period.timeLabel ?? 'طوال اليوم')
+                      : 'محجوزة بهذا اليوم',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
@@ -1405,7 +1322,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       fontFamily: 'Cairo',
                       fontSize: 10,
                       color: selected
-                          ? Colors.white.withOpacity(0.85)
+                          ? Colors.white.withValues(alpha: 0.85)
                           : AppColors.textSecondary),
                 ),
               ],
@@ -1424,6 +1341,7 @@ class _BookingScreenState extends State<BookingScreen> {
               ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1698,7 +1616,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 color: AppColors.charcoal)),
         const SizedBox(height: 12),
         _payOption('cash', Icons.money_rounded, AppStrings.cashOnArrival,
-            'ادفع نقداً عند وصولك للشاليه'),
+            'ادفع نقداً في الشاليه يوم الحجز'),
         const SizedBox(height: 8),
         _payOption('online', Icons.credit_card_rounded,
             AppStrings.onlinePayment, 'ادفع إلكترونياً بأمان عبر التطبيق',
@@ -1797,7 +1715,12 @@ class _BookingScreenState extends State<BookingScreen> {
           child: Column(
             children: [
               _priceRow(
-                  'السعر الأساسي (يومي)', AppCurrency.formatPrice(total)),
+                  'سعر ${_selectedPeriod?.label ?? 'الفترة'}',
+                  AppCurrency.formatPrice(total)),
+              const SizedBox(height: 6),
+              _priceRow(
+                  arabicDayLabel(_date!, withYear: false),
+                  _selectedPeriod?.timeLabel ?? 'طوال اليوم'),
               const SizedBox(height: 12),
               const Divider(),
               const SizedBox(height: 4),
@@ -1876,7 +1799,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 child: Column(children: [
                   Text(
                     _paymentMethod == 'cash'
-                        ? 'الدفع عند الوصول'
+                        ? 'الدفع في الشاليه'
                         : AppStrings.onlinePayment,
                     style: const TextStyle(
                         fontFamily: 'Cairo',

@@ -18,11 +18,9 @@ class PaymentReviewScreen extends StatelessWidget {
     return '${f.format(amount)} ₪';
   }
 
-  String _formatDatesRange() {
-    final inFmt = DateFormat('d MMMM', 'ar');
-    final outFmt = DateFormat('d MMMM', 'ar');
-    return '${inFmt.format(booking.checkIn)} - ${outFmt.format(booking.checkOut)}';
-  }
+  /// الحجز يوم واحد: تاريخ الحجز فقط (check_out = اليوم التالي دائماً).
+  String _formatDatesRange() =>
+      DateFormat('EEEE d MMMM', 'ar').format(booking.checkIn);
 
   @override
   Widget build(BuildContext context) {
@@ -62,8 +60,7 @@ class PaymentReviewScreen extends StatelessWidget {
                 name: booking.chaletName,
                 location: booking.chaletLocation,
                 datesLabel: _formatDatesRange(),
-                guestsLabel:
-                    '${booking.nightsCount} ليالي - ${booking.guestsCount} ضيف',
+                guestsLabel: '${booking.guestsCount} ضيف',
               ),
               const SizedBox(height: PaymentSpacing.sectionGap),
               Text('ملخص الدفع', style: PaymentTextStyles.sectionTitle),
@@ -78,11 +75,7 @@ class PaymentReviewScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     SummaryRow(
-                      label: 'سعر الليلة الواحدة',
-                      value: _formatCurrency(booking.pricePerNight),
-                    ),
-                    SummaryRow(
-                      label: '${booking.nightsCount} ليالي',
+                      label: 'سعر الفترة',
                       value: _formatCurrency(booking.subtotal),
                     ),
                     SummaryRow(

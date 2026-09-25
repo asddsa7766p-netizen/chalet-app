@@ -1,12 +1,13 @@
 // lib/presentation/screens/owner/owner_external_screen.dart
 //
 // الحجوزات اليدوية: حجوزات يدخلها صاحب الشاليه بنفسه (زبون كلّمه بالتلفون
-// أو وجاهياً) حتى تنحجز التواريخ ولا يحجزها أحد من التطبيق. تعمل لأي شاليه
+// أو وجاهياً) حتى تنحجز الفترة ولا يحجزها أحد من التطبيق. تعمل لأي شاليه
 // يملكه المالك. المسار `/owner-external` بقي كما هو.
 
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../data/models/booking_period.dart';
 import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
@@ -51,9 +52,11 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
       // القادمة أولاً (الأقرب فالأبعد)، ثم المنتهية (الأحدث فالأقدم).
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-      final upcoming = manual.where((b) => !b.checkOut.isBefore(today)).toList()
-        ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
-      final past = manual.where((b) => b.checkOut.isBefore(today)).toList()
+      // المنتهي = مضى آخر يوم محجوز فيه (check_out هو اليوم التالي).
+      final upcoming =
+          manual.where((b) => !b.lastBookedDay.isBefore(today)).toList()
+            ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
+      final past = manual.where((b) => b.lastBookedDay.isBefore(today)).toList()
         ..sort((a, b) => b.checkIn.compareTo(a.checkIn));
 
       if (!mounted) return;
@@ -74,7 +77,7 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
     final saved = await openManualBookingSheet(context);
     if (!mounted) return;
     if (saved) {
-      _showSnack('تم حجز التواريخ');
+      _showSnack('تم حجز الفترة');
       _load();
     }
   }
@@ -169,7 +172,7 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
           padding: EdgeInsets.symmetric(horizontal: 32),
           child: Center(
               child: Text(
-                  'اضغط "حجز يدوي" لتحجز تواريخ لزبون كلّمك بالتلفون أو وجاهياً',
+                  'اضغط "حجز يدوي" لتحجز يوماً وفترة لزبون كلّمك بالتلفون أو وجاهياً',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       fontFamily: 'Cairo',
@@ -177,8 +180,6 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
                       color: AppColors.textMuted))),
         ),
       ]);
-
-  String _fmt(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
   Widget _bookingTile(BookingModel b) {
     final guest = b.manualGuest;
@@ -233,11 +234,17 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
                         fontSize: 12,
                         color: AppColors.textSecondary)),
                 const SizedBox(height: 2),
-                Text(
-                    '${_fmt(b.checkIn)} → ${_fmt(b.checkOut)} · ${b.nightsCount} ليالٍ · ${b.guestsCount} ضيوف',
+                Text('${b.dateLabel} · ${b.guestsCount} ضيوف',
                     style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 11.5,
+                        color: AppColors.textSecondary)),
+                const SizedBox(height: 2),
+                Text(b.periodWithTime,
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.textSecondary)),
                 if (guest.note != null) ...[
                   const SizedBox(height: 3),

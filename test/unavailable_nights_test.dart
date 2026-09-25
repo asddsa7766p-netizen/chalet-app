@@ -134,7 +134,7 @@ void main() {
       final msg = translateSupabaseError(
           'PostgrestException(message: Booking conflict: availability unavailable, code: P0001)');
       expect(msg, unavailableDatesMessage);
-      expect(msg, 'بعض الأيام المختارة غير متاحة للحجز. اختر تواريخ أخرى.');
+      expect(msg, 'هذا اليوم غير متاح للحجز. اختر يوماً آخر.');
       expect(msg.contains('محجوز'), isFalse);
       // محايدة: لا تكشف أن المالك هو من حجب.
       expect(msg.contains('مالك'), isFalse);
@@ -145,8 +145,9 @@ void main() {
           unavailableDatesMessage);
     });
 
-    test('تعارض التداخل العادي لا يتغيّر', () {
-      const overlap = 'هذا التاريخ محجوز، جرب تواريخ تانية';
+    test('تعارض فترة محجوزة', () {
+      const overlap = 'هذه الفترة محجوزة، جرّب فترة أو يوماً آخر';
+      expect(periodTakenMessage, overlap);
       expect(translateSupabaseError('Booking conflict: overlapping dates'),
           overlap);
       expect(

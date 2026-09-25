@@ -54,13 +54,14 @@ class AppStrings {
 
   // Chalet Detail
   static const String bookNow = 'احجز الآن';
-  static const String perNight = 'ليلة';
+  /// price_per_night يُعرض كسعر ابتدائي (السعر الفعلي حسب اليوم والفترة).
+  static const String priceFrom = 'السعر يبدأ من';
   static const String overview = 'نظرة عامة';
   static const String amenities = 'المميزات';
   static const String reviews = 'التقييمات والتعليقات';
   static const String location = 'الموقع';
-  static const String checkIn = 'تاريخ الوصول';
-  static const String checkOut = 'تاريخ المغادرة';
+  static const String bookingDate = 'تاريخ الحجز';
+  static const String period = 'الفترة';
   static const String guests = 'عدد الضيوف';
   static const String pool = 'مسبح';
   static const String wifi = 'واي فاي';
@@ -73,9 +74,8 @@ class AppStrings {
   // Booking
   static const String bookingDetails = 'تفاصيل الحجز';
   static const String totalPrice = 'السعر الإجمالي';
-  static const String nights = 'ليالٍ';
   static const String paymentMethod = 'طريقة الدفع';
-  static const String cashOnArrival = 'نقداً عند الوصول';
+  static const String cashOnArrival = 'نقداً في الشاليه';
   static const String onlinePayment = 'دفع إلكتروني';
   static const String confirmBooking = 'تأكيد الحجز';
   static const String bookingSuccess = 'تم الحجز بنجاح!';

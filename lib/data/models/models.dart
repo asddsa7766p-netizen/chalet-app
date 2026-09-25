@@ -78,6 +78,12 @@ class BookingModel {
   final String? externalGuestName;
   final String? externalGuestPhone;
 
+  /// وقت بداية/نهاية فترة الحجز كما ضبطها المالك ("HH:MM:SS")، من
+  /// chalets.chalet_stay_types المضمَّنة بالاستعلام. null إن لم تُجلب أو
+  /// كانت الفترة 'default' (يوم كامل بلا أوقات).
+  final String? periodStart;
+  final String? periodEnd;
+
   const BookingModel({
     required this.id,
     required this.chaletId,
@@ -100,11 +106,23 @@ class BookingModel {
     this.source = 'app',
     this.externalGuestName,
     this.externalGuestPhone,
+    this.periodStart,
+    this.periodEnd,
   });
 
+  /// عدد الأيام المحجوزة (1 لكل حجز جديد؛ أكثر للحجوزات القديمة الممتدة).
   int get nightsCount => nightsBetween(checkIn, checkOut);
 
   factory BookingModel.fromJson(Map<String, dynamic> json) {
+    final stayType = json['stay_type'] as String? ?? 'default';
+    // إعداد الفترة المطابقة لنوع إقامة هذا الحجز (إن ضُمِّنت أنواع الشاليه).
+    final types = json['chalets']?['chalet_stay_types'];
+    Map? period;
+    if (types is List) {
+      for (final t in types) {
+        if (t is Map && t['stay_type'] == stayType) period = t;
+      }
+    }
     return BookingModel(
       id: json['id'] as String,
       chaletId: json['chalet_id'] as String,
@@ -126,10 +144,12 @@ class BookingModel {
       guestName: json['profiles']?['full_name'] as String?,
       guestPhone: json['profiles']?['phone'] as String?,
       guestAvatar: json['profiles']?['avatar_url'] as String?,
-      stayType: json['stay_type'] as String? ?? 'default',
+      stayType: stayType,
       source: json['source'] as String? ?? 'app',
       externalGuestName: json['guest_name'] as String?,
       externalGuestPhone: json['guest_phone'] as String?,
+      periodStart: period?['checkin_time'] as String?,
+      periodEnd: period?['checkout_time'] as String?,
     );
   }
 

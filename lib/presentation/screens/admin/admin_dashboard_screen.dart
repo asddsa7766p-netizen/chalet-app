@@ -435,7 +435,7 @@ class _OverviewTabState extends State<_OverviewTab> {
           const Padding(
             padding: EdgeInsets.only(top: 4, bottom: 12),
             child: Text(
-              'المدى يطبَّق على الحجوزات والإيرادات حسب تاريخ الوصول.',
+              'المدى يطبَّق على الحجوزات والإيرادات حسب تاريخ الحجز.',
               style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 11,
@@ -696,7 +696,7 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
                               fontWeight: FontWeight.w900,
                               color: AppColors.textPrimary)),
                       const SizedBox(height: 4),
-                      Text('$city · ₪${price.toStringAsFixed(0)}/ليلة',
+                      Text('$city · يبدأ من ₪${price.toStringAsFixed(0)}',
                           style: const TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 12,

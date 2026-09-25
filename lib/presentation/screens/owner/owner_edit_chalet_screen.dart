@@ -1497,13 +1497,13 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
         _field(
           fieldKey: 'price_per_night',
           ctrl: _price,
-          label: 'السعر الافتراضي لليلة',
+          label: 'السعر الأساسي (يبدأ من)',
           type: const TextInputType.numberWithOptions(decimal: true),
         ),
         const SizedBox(height: 8),
         const Text(
-          'هذا السعر يظهر للضيوف في البحث وصفحة الشاليه، ويُطبَّق على أي ليلة '
-          'ليس لها سعر يوم أو سعر خاص بنوع الإقامة. لتسعير أيام أو أنواع '
+          'يظهر للضيوف كـ"السعر يبدأ من" في البحث وصفحة الشاليه، ويُطبَّق على أي '
+          'يوم ليس له سعر يوم أو سعر خاص بالفترة. لتسعير أيام أو فترات '
           'محددة استخدم أسعار الأيام.',
           key: ValueKey('priceHelp'),
           style: TextStyle(

@@ -473,7 +473,7 @@ class _ChaletCard extends StatelessWidget {
                       ],
                       const SizedBox(height: 6),
                       Text(
-                        '₪${price.toStringAsFixed(0)} / ليلة',
+                        'يبدأ من ₪${price.toStringAsFixed(0)}',
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 14,

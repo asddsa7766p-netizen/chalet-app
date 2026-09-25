@@ -128,11 +128,11 @@ void main() {
       expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
     });
 
-    testWidgets('التسميات: المنطقة/الحي والسعر الافتراضي لليلة',
+    testWidgets('التسميات: المنطقة/الحي والسعر الأساسي (يبدأ من)',
         (tester) async {
       await pumpEditScreen(tester, _fake());
       expect(find.text('المنطقة/الحي'), findsWidgets);
-      expect(find.text('السعر الافتراضي لليلة'), findsWidgets);
+      expect(find.text('السعر الأساسي (يبدأ من)'), findsWidgets);
       expect(find.text('العنوان التفصيلي (اختياري)'), findsWidgets);
     });
 
@@ -140,10 +140,10 @@ void main() {
         (tester) async {
       await pumpEditScreen(tester, _fake());
       expect(
-        find.textContaining('يظهر للضيوف في البحث وصفحة الشاليه'),
+        find.textContaining('في البحث وصفحة الشاليه'),
         findsOneWidget,
       );
-      expect(find.textContaining('ليس لها سعر يوم أو سعر خاص بنوع الإقامة'),
+      expect(find.textContaining('ليس له سعر يوم أو سعر خاص بالفترة'),
           findsOneWidget);
       expect(_k('openPricing'), findsOneWidget);
     });

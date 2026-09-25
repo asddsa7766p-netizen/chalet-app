@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/pricing_constants.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../data/models/booking_period.dart';
 import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
@@ -44,7 +45,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
   Future<void> _addManualBooking() async {
     final saved = await openManualBookingSheet(context);
     if (!mounted || !saved) return;
-    _showSnack('تم حجز التواريخ');
+    _showSnack('تم حجز الفترة');
     _load();
   }
 
@@ -92,17 +93,6 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
-  }
-
-  /// "3 - 7 مارس"، أو "30 مارس - 2 أبريل" حين يعبر الحجز شهرين.
-  String _dateRangeLabel(DateTime checkIn, DateTime checkOut) {
-    if (checkIn.year == checkOut.year && checkIn.month == checkOut.month) {
-      return '${checkIn.day} - ${checkOut.day} ${_monthName(checkIn.month)}';
-    }
-    final yearSuffix =
-        checkIn.year == checkOut.year ? '' : ' ${checkOut.year}';
-    return '${checkIn.day} ${_monthName(checkIn.month)} - '
-        '${checkOut.day} ${_monthName(checkOut.month)}$yearSuffix';
   }
 
   void _showSnack(String msg, {bool isError = false}) {
@@ -195,16 +185,13 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                   ? _buildErrorState()
                   : _bookings.isEmpty
                       ? _buildEmptyState()
-                      : GridView.builder(
+                      // ListView (لا شبكة بنسبة ثابتة): ارتفاع البطاقة يتبع
+                      // محتواها، فلا يفيض سطر الفترة أو النص المكبّر.
+                      : ListView.separated(
                           padding: const EdgeInsets.all(16),
                           itemCount: _bookings.length,
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 1,
-                            mainAxisSpacing: 14,
-                            crossAxisSpacing: 14,
-                            childAspectRatio: 1.35,
-                          ),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 14),
                           itemBuilder: (context, i) =>
                               _bookingCard(_bookings[i]),
                         ),
@@ -345,13 +332,33 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                               const Icon(Icons.calendar_month_rounded,
                                   size: 14),
                               const SizedBox(width: 6),
-                              Text(
-                                _dateRangeLabel(b.checkIn, b.checkOut),
-                                style: const TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.textSecondary,
+                              Expanded(
+                                child: Text(
+                                  b.dateLabel,
+                                  style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(Icons.schedule_rounded, size: 14),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  b.periodWithTime,
+                                  style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
                               ),
                             ],
@@ -670,36 +677,5 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
         ),
       ],
     );
-  }
-
-  String _monthName(int month) {
-    switch (month) {
-      case 1:
-        return 'يناير';
-      case 2:
-        return 'فبراير';
-      case 3:
-        return 'مارس';
-      case 4:
-        return 'أبريل';
-      case 5:
-        return 'مايو';
-      case 6:
-        return 'يونيو';
-      case 7:
-        return 'يوليو';
-      case 8:
-        return 'أغسطس';
-      case 9:
-        return 'سبتمبر';
-      case 10:
-        return 'أكتوبر';
-      case 11:
-        return 'نوفمبر';
-      case 12:
-        return 'ديسمبر';
-      default:
-        return '';
-    }
   }
 }

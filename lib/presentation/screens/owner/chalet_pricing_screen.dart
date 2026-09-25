@@ -973,8 +973,9 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'فعّل أي نوع بدك، وحدد وقت الوصول/المغادرة، وسعر احتياطي '
-            'للأيام التي بلا سعر (زي: إقامة صباحية، إقامة مسائية، يوم كامل...)',
+            'كل فترة مفعّلة يحجزها الضيف ليوم واحد. حدد وقت بداية ونهاية '
+            'الفترة، وسعراً احتياطياً للأيام التي بلا سعر (زي: إقامة صباحية، '
+            'إقامة مسائية، يوم كامل...)',
             style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 12,
@@ -1051,7 +1052,7 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
               children: [
                 Expanded(
                   child: _timeTile(
-                    label: 'الوصول',
+                    label: 'بداية الفترة',
                     time: _draftCheckin[type]!,
                     onTap: () => _pickTime(type: type, isCheckin: true),
                   ),
@@ -1059,7 +1060,7 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _timeTile(
-                    label: 'المغادرة',
+                    label: 'نهاية الفترة',
                     time: _draftCheckout[type]!,
                     onTap: () => _pickTime(type: type, isCheckin: false),
                   ),
