@@ -129,6 +129,7 @@ extension _CityPickerSheet on _HomeTabState {
       },
     );
 
+    if (!mounted) return;
     if (result != null) {
       _setState(() => _hasSelectedCity = true);
       unawaited(_persistCityPreference(result));
