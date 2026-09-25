@@ -19,17 +19,19 @@ extension _SearchFiltersSheet on _SearchScreenState {
     bool draftBbq = _hasBbq;
     bool draftParking = _hasParking;
 
-    final minCtrl = TextEditingController(
-        text: draftMin == null ? '' : draftMin.toStringAsFixed(0));
-    final maxCtrl = TextEditingController(
-        text: draftMax == null ? '' : draftMax.toStringAsFixed(0));
-
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return StatefulBuilder(builder: (context, setSheetState) {
+        // متحكما السعر يملكهما _SheetPriceControllers فيُحرَّران عند إزالة
+        // الورقة من الشجرة فعلاً (بعد حركة الإغلاق)، لا فور اكتمال هذا
+        // الـ Future والورقة ما زالت تُرسم.
+        return _SheetPriceControllers(
+            initialMin: draftMin,
+            initialMax: draftMax,
+            builder: (minCtrl, maxCtrl) =>
+                StatefulBuilder(builder: (context, setSheetState) {
           return Padding(
             padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -250,12 +252,9 @@ extension _SearchFiltersSheet on _SearchScreenState {
               ),
             ),
           );
-        });
+        }));
       },
     );
-
-    minCtrl.dispose();
-    maxCtrl.dispose();
   }
 
   Widget _sheetSectionLabel(String text) => Text(
@@ -267,4 +266,39 @@ extension _SearchFiltersSheet on _SearchScreenState {
           color: AppColors.textSecondary,
         ),
       );
+}
+
+/// يملك متحكمي نص السعر الأدنى/الأعلى لورقة الفلاتر ويحرّرهما بـ dispose()
+/// الخاص به، أي حين تُزال الورقة من الشجرة بعد انتهاء حركة إغلاقها.
+class _SheetPriceControllers extends StatefulWidget {
+  const _SheetPriceControllers({
+    required this.initialMin,
+    required this.initialMax,
+    required this.builder,
+  });
+
+  final double? initialMin;
+  final double? initialMax;
+  final Widget Function(
+      TextEditingController minCtrl, TextEditingController maxCtrl) builder;
+
+  @override
+  State<_SheetPriceControllers> createState() => _SheetPriceControllersState();
+}
+
+class _SheetPriceControllersState extends State<_SheetPriceControllers> {
+  late final _min = TextEditingController(text: _text(widget.initialMin));
+  late final _max = TextEditingController(text: _text(widget.initialMax));
+
+  static String _text(double? v) => v == null ? '' : v.toStringAsFixed(0);
+
+  @override
+  void dispose() {
+    _min.dispose();
+    _max.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_min, _max);
 }
