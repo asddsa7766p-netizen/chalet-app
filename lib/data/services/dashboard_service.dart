@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/error_reporter.dart';
 
 // Supabase client
 final supabase = Supabase.instance.client;
@@ -25,25 +26,28 @@ extension OwnerDashboardRangeX on OwnerDashboardRange {
   /// الاعتماد على فروقات توقيت أو منطقة زمنية معقدة (نستخدم تاريخ اليوم
   /// المحلي للجهاز كأساس، وهو نفس الأساس الذي كانت تعتمده الـ SQL views
   /// السابقة عبر CURRENT_DATE في قاعدة البيانات).
-  (DateTime start, DateTime end) get dateRange {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+  (DateTime start, DateTime end) get dateRange => dateRangeFor(DateTime.now());
+
+  /// [dateRange] مع "الآن" قابل للتمرير (للاختبارات).
+  ///
+  /// كل الحسابات بتواريخ تقويمية `DateTime(y, m, d ± n)` لا بـ `Duration(days:)`:
+  /// الأخيرة تطرح 24 ساعة بالضبط، فبعد يوم تغيير التوقيت (23 أو 25 ساعة)
+  /// تقع على اليوم الخطأ.
+  (DateTime start, DateTime end) dateRangeFor(DateTime now) {
+    final y = now.year, m = now.month, d = now.day;
+    final today = DateTime(y, m, d);
 
     switch (this) {
       case OwnerDashboardRange.today:
         return (today, today);
       case OwnerDashboardRange.yesterday:
-        final yesterday = today.subtract(const Duration(days: 1));
+        final yesterday = DateTime(y, m, d - 1);
         return (yesterday, yesterday);
       case OwnerDashboardRange.last7Days:
-        return (today.subtract(const Duration(days: 6)), today);
+        return (DateTime(y, m, d - 6), today);
       case OwnerDashboardRange.lastMonth:
-        final firstOfThisMonth = DateTime(today.year, today.month, 1);
-        final firstOfLastMonth =
-            DateTime(firstOfThisMonth.year, firstOfThisMonth.month - 1, 1);
-        final lastOfLastMonth =
-            firstOfThisMonth.subtract(const Duration(days: 1));
-        return (firstOfLastMonth, lastOfLastMonth);
+        // اليوم 0 من الشهر الحالي = آخر يوم بالشهر الماضي.
+        return (DateTime(y, m - 1, 1), DateTime(y, m, 0));
     }
   }
 }
@@ -92,8 +96,8 @@ class OwnerDashboardStats {
     required this.byChaletRevenue,
   });
 
-  /// إحصائيات فاضية، تُستخدم كحالة افتراضية آمنة بدل null عند فشل التحميل،
-  /// لتفادي الحاجة لفحص null في كل مكان بالواجهة.
+  /// إحصائيات فاضية، لغير المسجّل فقط. فشل التحميل لا يُرجعها بل يُرمى، حتى
+  /// لا تظهر أصفار كأنها بيانات حقيقية.
   factory OwnerDashboardStats.empty() => const OwnerDashboardStats(
         totalBookings: 0,
         totalRevenue: 0,
@@ -148,6 +152,9 @@ class DashboardService {
   static DashboardService get instance => _instance ??= DashboardService._();
   DashboardService._();
 
+  /// سقف أمان لصفوف استعلام الإحصائيات (أطول نطاق = شهر واحد).
+  static const statsRowsLimit = 5000;
+
   /// إحصائيات لوحة تحكم المالك.
   ///
   /// ⚠️ تعديل بنيوي مهم عن النسخة السابقة: لم تعد هذه الدالة تعتمد على
@@ -169,25 +176,29 @@ class DashboardService {
     if (ownerId == null) return OwnerDashboardStats.empty();
 
     final (start, end) = range.dateRange;
-    // end يُحسب كنهاية اليوم (حتى لحظة قبل منتصف الليل التالي) ليشمل كل
-    // حجوزات اليوم الأخير ضمن النطاق.
-    final endExclusive = end.add(const Duration(days: 1));
+    // اليوم التالي لآخر يوم بالنطاق (تقويمياً، لا +24 ساعة) حتى يشمل كل
+    // حجوزات اليوم الأخير.
+    final endExclusive = nextDay(end);
 
-    List<dynamic> rows;
-    try {
-      rows = await supabase
-          .from('bookings')
-          .select(
-            'id, chalet_id, check_in, check_out, total_price, status, cancelled_by, '
-            'chalets!inner(id, name, owner_id, booking_type)',
-          )
-          .eq('chalets.owner_id', ownerId)
-          .gte('check_in', start.toIso8601String().split('T').first)
-          .lt('check_in', endExclusive.toIso8601String().split('T').first);
-    } catch (_) {
-      // فشل الاستعلام (مثلاً مشكلة شبكة) يُعامل كإحصائيات فاضية بدل رمي
-      // الخطأ لأعلى، حتى تبقى الواجهة قابلة للعرض بحالة آمنة.
-      return OwnerDashboardStats.empty();
+    // فشل الاستعلام يُرمى للمستدعي: اللوحة والتقارير تعرضان "تعذر التحميل"
+    // مع إعادة المحاولة. (كان يُرجع إحصائيات فاضية، فتظهر أصفار تبدو حقيقية.)
+    final List<dynamic> rows = await supabase
+        .from('bookings')
+        .select(
+          'id, chalet_id, check_in, check_out, total_price, status, cancelled_by, '
+          'chalets!inner(id, name, owner_id, booking_type)',
+        )
+        .eq('chalets.owner_id', ownerId)
+        .gte('check_in', start.toIso8601String().split('T').first)
+        .lt('check_in', endExclusive.toIso8601String().split('T').first)
+        .limit(statsRowsLimit);
+    if (rows.length >= statsRowsLimit) {
+      // لا يُتوقَّع بلوغه (أطول نطاق شهر)، لكن إن حدث فالأرقام ناقصة: يُسجَّل.
+      reportError(
+        StateError('owner stats hit row limit $statsRowsLimit'),
+        StackTrace.current,
+        context: 'dashboard.owner_stats_limit',
+      );
     }
 
     int totalBookingsSpot = 0;
