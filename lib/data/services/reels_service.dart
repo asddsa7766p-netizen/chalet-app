@@ -16,7 +16,9 @@ class ReelsService {
   Future<List<ReelModel>> fetchReels() async {
     final data = await _supabase
         .from('reels')
-        .select('*, chalets(*)')
+        // inner join: فيديو لشاليه محذوف أو مخفي لا يُعرض (لا يمكن فتح تفاصيله).
+        .select('*, chalets!inner(*)')
+        .isFilter('chalets.deleted_at', null)
         .order('created_at', ascending: false)
         .limit(reelsPageSize);
 

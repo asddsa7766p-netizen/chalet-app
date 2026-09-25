@@ -9,6 +9,7 @@ import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/notification_service.dart';
+import '../../widgets/common/paged_list.dart';
 import 'manual_booking_actions.dart';
 import 'manual_booking_sheet.dart';
 import 'owner_booking_actions.dart';
@@ -25,7 +26,10 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
   bool _loading = true;
   bool _actionLoading = false;
   String? _error;
-  List<BookingModel> _bookings = [];
+  final _pager = PagedList<BookingModel>(
+      (page) => BookingService.instance.getIncomingBookings(page: page),
+      pageSize: BookingService.bookingsPageSize);
+  List<BookingModel> get _bookings => _pager.items;
   // ✅ إصلاح: نفس نمط تحميل unreadCount المستخدم في owner_dashboard_screen.dart
   // (Problem #2)، حتى تعرض شارة الإشعارات في OwnerBottomNav هنا العدد
   // الحقيقي بدل الاعتماد على القيمة الافتراضية صفر.
@@ -57,24 +61,34 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
     try {
       // الحجوزات هي الطلب الأساسي؛ عدّاد الإشعارات ثانوي ولا يُسقط القائمة
       // إن فشل (نفس نمط _init() بـ owner_calendar_screen.dart).
-      final bookings = await BookingService.instance.getIncomingBookings();
+      final fresh = await _pager.reset();
       final unread = await NotificationService.instance
           .getUnreadCount()
           .catchError((_) => _unreadCount);
-      if (!mounted) return;
+      if (!mounted || !fresh) return;
       setState(() {
-        _bookings = bookings;
         _unreadCount = unread;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _bookings = [];
+        _pager.items = [];
+        _pager.hasMore = false;
         _loading = false;
         _error = 'تعذر تحميل الحجوزات، حاول مرة أخرى';
       });
     }
+  }
+
+  Future<void> _loadMore() async {
+    setState(() {});
+    try {
+      await _pager.loadMore();
+    } catch (_) {
+      _showSnack('تعذر تحميل المزيد، حاول مرة أخرى', isError: true);
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _onConfirm(String bookingId) => _decide(
@@ -189,11 +203,13 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                       // محتواها، فلا يفيض سطر الفترة أو النص المكبّر.
                       : ListView.separated(
                           padding: const EdgeInsets.all(16),
-                          itemCount: _bookings.length,
+                          itemCount: _bookings.length + 1,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 14),
-                          itemBuilder: (context, i) =>
-                              _bookingCard(_bookings[i]),
+                          itemBuilder: (context, i) => i == _bookings.length
+                              ? LoadMoreFooter(
+                                  pager: _pager, onLoadMore: _loadMore)
+                              : _bookingCard(_bookings[i]),
                         ),
             ),
       // ✅ إصلاح: إضافة نفس الشريط السفلي المستخدم بلوحة التحكم و

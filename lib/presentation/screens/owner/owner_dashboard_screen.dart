@@ -39,7 +39,8 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
   List<BookingModel> _upcomingBookings = [];
   int _pendingCount = 0;
   // فشل جلب الحجوزات وحده: القسم يقول ذلك صراحة بدل "لا توجد حجوزات".
-  bool _bookingsFailed = false;
+  bool _upcomingFailed = false;
+  bool _pendingFailed = false;
 
   // بانر "أكمل الإعداد" — قابل للإخفاء يدويًا من المستخدم لهذه الجلسة،
   // ويظهر فقط إذا كان المالك لا يملك أي شاليه بعد فعليًا (_hasChalets).
@@ -72,9 +73,15 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
     final unreadF = NotificationService.instance
         .getUnreadCount()
         .catchError((_) => _unreadCount);
-    final bookingsF = BookingService.instance
-        .getIncomingBookings()
+    // "الحجوزات القادمة" (قيد الانتظار أو مؤكدة، وصول اليوم أو بعده، الأقرب
+    // أولاً) وعدد الطلبات المعلّقة: استعلامان على السيرفر بدل جلب كل الحجوزات.
+    final upcomingF = BookingService.instance
+        .getUpcomingIncomingBookings(limit: 3)
         .then<List<BookingModel>?>((b) => b)
+        .catchError((_) => null);
+    final pendingF = BookingService.instance
+        .countPendingIncomingBookings()
+        .then<int?>((c) => c)
         .catchError((_) => null);
     final chaletsF = ChaletService.instance
         .getOwnerChalets(ownerId)
@@ -84,33 +91,19 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
       final stats = await statsF;
       final profile = await profileF;
       final unread = await unreadF;
-      final allBookings = await bookingsF;
+      final upcoming = await upcomingF;
+      final pending = await pendingF;
       final chalets = await chaletsF;
       if (!mounted) return;
-
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      // ✅ "الحجوزات القادمة" الحقيقية: قيد الانتظار أو مؤكدة، بتاريخ
-      // وصول اليوم أو لاحقًا، مرتبة بالأقرب أولًا — بدل بطاقة CTA ثابتة.
-      final upcoming = (allBookings ?? const <BookingModel>[])
-          .where((b) =>
-              (b.status == BookingStatus.pending ||
-                  b.status == BookingStatus.confirmed) &&
-              !b.checkIn.isBefore(today))
-          .toList()
-        ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
 
       setState(() {
         _profile = profile;
         _stats = stats;
         _unreadCount = unread;
-        _bookingsFailed = allBookings == null;
-        if (allBookings != null) {
-          _upcomingBookings = upcoming.take(3).toList();
-          _pendingCount = allBookings
-              .where((b) => b.status == BookingStatus.pending)
-              .length;
-        }
+        _upcomingFailed = upcoming == null;
+        _pendingFailed = pending == null;
+        if (upcoming != null) _upcomingBookings = upcoming;
+        if (pending != null) _pendingCount = pending;
         // عند الفشل لا نفترض "لا شاليهات" (كان سيُظهر بانر الإعداد خطأً).
         if (chalets != null) _hasChalets = chalets.isNotEmpty;
         _loading = false;
@@ -491,7 +484,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
           icon: Icons.access_time_rounded,
           iconColor: const Color(0xFFC9A24B),
           title: 'طلبات قيد الانتظار',
-          value: _bookingsFailed ? '—' : '$_pendingCount',
+          value: _pendingFailed ? '—' : '$_pendingCount',
           footer: 'طلب',
           onTap: _pendingCount > 0 ? () => context.go('/owner-bookings') : null,
         ),
@@ -614,7 +607,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
                       size: 32, color: AppColors.textHint),
                   const SizedBox(height: 8),
                   Text(
-                      _bookingsFailed
+                      _upcomingFailed
                           ? 'تعذر تحميل الحجوزات القادمة'
                           : 'لا توجد حجوزات قادمة حالياً',
                       style: const TextStyle(

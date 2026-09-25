@@ -11,6 +11,7 @@ import '../../../data/models/booking_period.dart';
 import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
+import '../../widgets/common/paged_list.dart';
 import 'manual_booking_actions.dart';
 import 'manual_booking_sheet.dart';
 
@@ -24,7 +25,26 @@ class OwnerExternalScreen extends StatefulWidget {
 class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
   bool _loading = true;
   String? _error;
-  List<BookingModel> _bookings = [];
+  // القادمة أولاً (الأقرب فالأبعد)، ثم المنتهية (الأحدث فالأقدم)؛ الفرز
+  // والتقسيم على السيرفر، وكل قسم مرقّم بصفحاته.
+  final _upcoming = PagedList<BookingModel>(
+      (page) =>
+          BookingService.instance.getManualBookings(upcoming: true, page: page),
+      pageSize: BookingService.bookingsPageSize);
+  final _past = PagedList<BookingModel>(
+      (page) =>
+          BookingService.instance.getManualBookings(upcoming: false, page: page),
+      pageSize: BookingService.bookingsPageSize);
+
+  /// عناصر القائمة: حجوزات القادمة، زر مزيدها، ثم المنتهية وزر مزيدها.
+  List<Widget Function()> get _rows => [
+        for (final b in _upcoming.items) () => _bookingTile(b),
+        if (_upcoming.hasMore) () => _footer(_upcoming),
+        for (final b in _past.items) () => _bookingTile(b),
+        if (_past.hasMore) () => _footer(_past),
+      ];
+
+  bool get _isEmpty => _upcoming.items.isEmpty && _past.items.isEmpty;
 
   @override
   void initState() {
@@ -46,24 +66,9 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
       return;
     }
     try {
-      final all = await BookingService.instance.getIncomingBookings();
-      final manual = all.where((b) => b.isManual).toList();
-
-      // القادمة أولاً (الأقرب فالأبعد)، ثم المنتهية (الأحدث فالأقدم).
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      // المنتهي = مضى آخر يوم محجوز فيه (check_out هو اليوم التالي).
-      final upcoming =
-          manual.where((b) => !b.lastBookedDay.isBefore(today)).toList()
-            ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
-      final past = manual.where((b) => b.lastBookedDay.isBefore(today)).toList()
-        ..sort((a, b) => b.checkIn.compareTo(a.checkIn));
-
-      if (!mounted) return;
-      setState(() {
-        _bookings = [...upcoming, ...past];
-        _loading = false;
-      });
+      final fresh = await Future.wait([_upcoming.reset(), _past.reset()]);
+      if (!mounted || fresh.contains(false)) return;
+      setState(() => _loading = false);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -72,6 +77,19 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
       });
     }
   }
+
+  Widget _footer(PagedList<BookingModel> pager) => LoadMoreFooter(
+        pager: pager,
+        onLoadMore: () async {
+          setState(() {});
+          try {
+            await pager.loadMore();
+          } catch (_) {
+            _showSnack('تعذر تحميل المزيد، حاول مرة أخرى', isError: true);
+          }
+          if (mounted) setState(() {});
+        },
+      );
 
   Future<void> _addManualBooking() async {
     final saved = await openManualBookingSheet(context);
@@ -118,15 +136,19 @@ class _OwnerExternalScreenState extends State<OwnerExternalScreen> {
                 color: AppColors.primary,
                 child: _error != null
                     ? _buildError()
-                    : _bookings.isEmpty
+                    : _isEmpty
                         ? _buildEmpty()
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                            itemCount: _bookings.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (_, i) => _bookingTile(_bookings[i]),
-                          ),
+                        : Builder(builder: (_) {
+                            final rows = _rows;
+                            return ListView.separated(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                              itemCount: rows.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (_, i) => rows[i](),
+                            );
+                          }),
               ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _addManualBooking,

@@ -17,6 +17,8 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
   bool _loading = true;
   String? _error;
   OwnerDashboardStats? _stats;
+  // عدّاد جيل: تبديل المدى بسرعة كان يعرض نتيجة طلب أقدم وصل متأخراً.
+  int _gen = 0;
 
   @override
   void initState() {
@@ -25,6 +27,7 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
   }
 
   Future<void> _load() async {
+    final gen = ++_gen;
     setState(() {
       _loading = true;
       _error = null;
@@ -32,13 +35,13 @@ class _OwnerReportsScreenState extends State<OwnerReportsScreen> {
     try {
       final stats =
           await DashboardService.instance.getOwnerDashboardStats(range: _range);
-      if (!mounted) return;
+      if (!mounted || gen != _gen) return;
       setState(() {
         _stats = stats;
         _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || gen != _gen) return;
       setState(() {
         _loading = false;
         _error = 'تعذر تحميل التقارير';

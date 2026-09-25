@@ -53,9 +53,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _loadStats() async {
     setState(() => _loadingStats = true);
     try {
-      final bookings = await BookingService.instance.getMyBookings();
       final completed =
-          bookings.where((b) => b.status == BookingStatus.completed).length;
+          await BookingService.instance.countMyBookings('completed');
       final favState = ref.read(favoritesProvider).valueOrNull;
       final hasApproved = await _fetchHasApprovedChalet();
       int unread = 0;

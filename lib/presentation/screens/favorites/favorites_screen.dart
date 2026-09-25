@@ -11,6 +11,7 @@ import '../../../data/providers/favorites_provider.dart';
 import '../../../data/models/booking_period.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../widgets/common/common_widgets.dart';
+import '../../widgets/common/paged_list.dart';
 
 // ============================================
 // FAVORITES SCREEN
@@ -248,7 +249,15 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     ['completed'],
     ['cancelled', 'rejected'],
   ];
-  Map<int, List<BookingModel>> _bookingsMap = {};
+  // كل تبويب يُفلتر على السيرفر ويُرقَّم بصفحاته (كانت كل الحجوزات تُجلب
+  // دفعة واحدة بلا حد ثم تُوزَّع محلياً).
+  late final _pagers = [
+    for (final statuses in _statuses)
+      PagedList<BookingModel>(
+          (page) => BookingService.instance
+              .getMyBookings(statuses: statuses, page: page),
+          pageSize: BookingService.bookingsPageSize),
+  ];
   bool _loading = true;
   // ✅ إصلاح: فشل التحميل كان يُعرض كأنه "لا يوجد حجوزات" بكل التبويبات.
   bool _loadError = false;
@@ -273,17 +282,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       _loadError = false;
     });
     try {
-      final all = await BookingService.instance.getMyBookings();
-      final map = <int, List<BookingModel>>{};
-      for (int i = 0; i < _statuses.length; i++) {
-        map[i] =
-            all.where((b) => _statuses[i].contains(b.status.name)).toList();
-      }
-      if (mounted) {
-        setState(() {
-          _bookingsMap = map;
-          _loading = false;
-        });
+      final fresh = await Future.wait([for (final p in _pagers) p.reset()]);
+      if (mounted && !fresh.contains(false)) {
+        setState(() => _loading = false);
       }
     } catch (_) {
       if (mounted) {
@@ -293,6 +294,22 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
         });
       }
     }
+  }
+
+  Future<void> _loadMore(PagedList<BookingModel> pager) async {
+    setState(() {});
+    try {
+      await pager.loadMore();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذر تحميل المزيد، حاول مرة أخرى',
+              style: TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _cancel(String bookingId, int tabIdx) async {
@@ -399,7 +416,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           : TabBarView(
               controller: _tabController,
               children: List.generate(_tabs.length, (i) {
-                final bookings = _bookingsMap[i] ?? [];
+                final pager = _pagers[i];
+                final bookings = pager.items;
                 if (bookings.isEmpty) {
                   // قابلة للسحب للتحديث حتى وهي فارغة (كانت Center ثابتة
                   // بلا أي طريقة لإعادة التحميل).
@@ -439,14 +457,19 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                   onRefresh: _load,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: bookings.length,
-                    itemBuilder: (_, j) => _BookingCard(
-                      booking: bookings[j],
-                      onCancel: bookings[j].status == BookingStatus.pending ||
-                              bookings[j].status == BookingStatus.confirmed
-                          ? () => _cancel(bookings[j].id, i)
-                          : null,
-                    ),
+                    itemCount: bookings.length + 1,
+                    itemBuilder: (_, j) => j == bookings.length
+                        ? LoadMoreFooter(
+                            pager: pager, onLoadMore: () => _loadMore(pager))
+                        : _BookingCard(
+                            booking: bookings[j],
+                            onCancel: bookings[j].status ==
+                                        BookingStatus.pending ||
+                                    bookings[j].status ==
+                                        BookingStatus.confirmed
+                                ? () => _cancel(bookings[j].id, i)
+                                : null,
+                          ),
                   ),
                 );
               }),

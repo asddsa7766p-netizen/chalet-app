@@ -352,7 +352,8 @@ class ChaletService {
           .from('chalets')
           .select('*')
           .eq('is_available', true)
-          .eq('is_approved', true);
+          .eq('is_approved', true)
+          .isFilter('deleted_at', null);
 
       if (city != null && city.isNotEmpty && city != AppStrings.allCities) {
         query = query.eq('city', city);
@@ -418,6 +419,7 @@ class ChaletService {
           .select('*')
           .eq('is_available', true)
           .eq('is_approved', true)
+          .isFilter('deleted_at', null)
           .order('rating', ascending: false)
           .limit(limit);
       return (data as List).map((e) => ChaletModel.fromJson(e)).toList();
@@ -594,6 +596,9 @@ class ChaletService {
     }
   }
 
+  /// سقف أمان لقائمة شاليهات المالك (بالواقع بضعة شاليهات لكل مالك).
+  static const ownerChaletsLimit = 200;
+
   /// Get the raw, owner-scoped chalet list used by the owner chalets screen.
   /// This keeps the same table, filters, selected columns and ordering as the
   /// original screen query, while returning the same Map-shaped rows the UI
@@ -606,7 +611,11 @@ class ChaletService {
             'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count, max_guests',
           )
           .eq('owner_id', ownerId)
-          .order('created_at', ascending: false);
+          // الحذف من المالك "ناعم" (trigger يضبط deleted_at بدل الحذف)، فالشاليه
+          // المحذوف يبقى بالجدول ولا يجب أن يظهر بأي قائمة.
+          .isFilter('deleted_at', null)
+          .order('created_at', ascending: false)
+          .limit(ownerChaletsLimit);
 
       return (data as List).cast<Map<String, dynamic>>();
     } catch (e) {
@@ -727,26 +736,97 @@ class BookingService {
   /// بشاليهات المالك، مع بيانات الضيف (full_name / phone / avatar_url) من
   /// جدول profiles عبر JOIN — RLS يسمح بقراءتها للحجوزات المرتبطة فعليًا
   /// بشاليهات المالك، بغض النظر عن حالة الحجز.
-  Future<List<BookingModel>> getIncomingBookings() async {
+  ///
+  /// مرقّمة بصفحات [bookingsPageSize] (الأحدث إنشاءً أولاً).
+  Future<List<BookingModel>> getIncomingBookings({int page = 0}) async {
     final userId = _auth.currentUser?.id;
     if (userId == null) return [];
 
     try {
-      final data = await supabase
+      final data = await _incomingQuery(userId)
+          .order('created_at', ascending: false)
+          .range(_pageStart(page), _pageEnd(page));
+      return _toBookings(data);
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  /// أقرب حجوزات المالك القادمة (قيد الانتظار أو مؤكدة، وصول اليوم أو بعده).
+  Future<List<BookingModel>> getUpcomingIncomingBookings({int limit = 3}) async {
+    final userId = _auth.currentUser?.id;
+    if (userId == null) return [];
+
+    try {
+      final data = await _incomingQuery(userId)
+          .inFilter('status', ['pending', 'confirmed'])
+          .gte('check_in', _isoDate(DateTime.now()))
+          .order('check_in', ascending: true)
+          .limit(limit);
+      return _toBookings(data);
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  /// عدد طلبات الحجز بانتظار قرار المالك (عدّ على السيرفر، بلا جلب الصفوف).
+  Future<int> countPendingIncomingBookings() async {
+    final userId = _auth.currentUser?.id;
+    if (userId == null) return 0;
+
+    try {
+      final res = await supabase
+          .from('bookings')
+          .select('id, chalets!inner(owner_id)')
+          .eq('chalets.owner_id', userId)
+          .eq('status', 'pending')
+          .count(CountOption.exact);
+      return res.count;
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  /// الحجوزات اليدوية (source = 'external') لشاليهات المالك، مقسومة على آخر
+  /// يوم محجوز (check_out هو اليوم التالي له): القادمة بالأقرب أولاً،
+  /// والمنتهية بالأحدث أولاً. كل قسم مرقّم بصفحات [bookingsPageSize].
+  Future<List<BookingModel>> getManualBookings({
+    required bool upcoming,
+    int page = 0,
+  }) async {
+    final userId = _auth.currentUser?.id;
+    if (userId == null) return [];
+
+    final today = _isoDate(DateTime.now());
+    try {
+      final base = _incomingQuery(userId).eq('source', 'external');
+      final data = await (upcoming
+              ? base.gt('check_out', today).order('check_in', ascending: true)
+              : base.lte('check_out', today).order('check_in', ascending: false))
+          .range(_pageStart(page), _pageEnd(page));
+      return _toBookings(data);
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  static const bookingsPageSize = 30;
+  static int _pageStart(int page) => page * bookingsPageSize;
+  static int _pageEnd(int page) => _pageStart(page) + bookingsPageSize - 1;
+  static String _isoDate(DateTime d) => d.toIso8601String().split('T').first;
+  static List<BookingModel> _toBookings(dynamic data) => (data as List)
+      .map((e) => BookingModel.fromJson(e as Map<String, dynamic>))
+      .toList();
+
+  PostgrestFilterBuilder<PostgrestList> _incomingQuery(String ownerId) =>
+      supabase
           .from('bookings')
           .select(
             '*, chalets!inner(name, city, owner_id, images, '
             '$bookingPeriodColumns), '
             'profiles(full_name, phone, avatar_url)',
           )
-          .eq('chalets.owner_id', userId)
-          .order('created_at', ascending: false);
-
-      return (data as List).map((e) => BookingModel.fromJson(e)).toList();
-    } catch (e) {
-      throw Exception(_translateSupabaseError(e));
-    }
-  }
+          .eq('chalets.owner_id', ownerId);
 
   /// Confirm booking (owner action)
   Future<void> confirmIncomingBooking(String bookingId) =>
@@ -772,8 +852,12 @@ class BookingService {
     if (rows.isEmpty) throw Exception(bookingNotUpdatedMessage);
   }
 
-  /// Get my bookings (for customer)
-  Future<List<BookingModel>> getMyBookings() async {
+  /// حجوزات الزبون بالحالات [statuses]، مرقّمة بصفحات [bookingsPageSize]
+  /// (الأحدث إنشاءً أولاً).
+  Future<List<BookingModel>> getMyBookings({
+    required List<String> statuses,
+    int page = 0,
+  }) async {
     final userId = _auth.currentUser?.id;
     if (userId == null) return [];
 
@@ -782,9 +866,28 @@ class BookingService {
           .from('bookings')
           .select('*, chalets(name, city, images, $bookingPeriodColumns)')
           .eq('user_id', userId)
-          .order('created_at', ascending: false);
+          .inFilter('status', statuses)
+          .order('created_at', ascending: false)
+          .range(_pageStart(page), _pageEnd(page));
+      return _toBookings(data);
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
 
-      return (data as List).map((e) => BookingModel.fromJson(e)).toList();
+  /// عدد حجوزات الزبون بحالة معيّنة (عدّ على السيرفر).
+  Future<int> countMyBookings(String status) async {
+    final userId = _auth.currentUser?.id;
+    if (userId == null) return 0;
+
+    try {
+      final res = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', status)
+          .count(CountOption.exact);
+      return res.count;
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }
@@ -871,19 +974,28 @@ class FavoritesService {
 
   final _auth = AuthService.instance;
 
+  /// سقف قائمة المفضلة (الأحدث أولاً).
+  static const favoritesLimit = 100;
+
   Future<List<ChaletModel>> getFavorites() async {
     final userId = _auth.currentUser?.id;
     if (userId == null) return [];
 
     try {
+      // inner join: مفضلة لشاليه محذوف أو مخفي (RLS لا يعيده لغير مالكه) كانت
+      // تعود بـ chalets = null فيسقط التحويل ويفشل تحميل المفضلة كلها.
       final data = await supabase
           .from('favorites')
-          .select('chalets(*)')
-          .eq('user_id', userId);
+          .select('chalets!inner(*)')
+          .eq('user_id', userId)
+          .isFilter('chalets.deleted_at', null)
+          .order('created_at', ascending: false)
+          .limit(favoritesLimit);
 
       return (data as List)
-          .map(
-              (e) => ChaletModel.fromJson(e['chalets'] as Map<String, dynamic>))
+          .map((e) => e['chalets'])
+          .whereType<Map<String, dynamic>>()
+          .map(ChaletModel.fromJson)
           .toList();
     } catch (e) {
       throw Exception(_translateSupabaseError(e));

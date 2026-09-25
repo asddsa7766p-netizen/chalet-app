@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/services/admin_service.dart';
+import '../../widgets/common/paged_list.dart';
 import '../../../data/services/services.dart' show AuthService;
 
 /// لوحة تحكم الأدمن الشاملة — makan
@@ -236,67 +237,6 @@ Widget _errorView(String error, VoidCallback onRetry) {
           child: const Text('إعادة المحاولة',
               style: TextStyle(fontFamily: 'Cairo', color: AppColors.primary))),
     ]),
-  );
-}
-
-/// قائمة مرقّمة بالصفحات: الصفحة الأولى عند [reset]، والتالية بـ [loadMore]
-/// ما دامت آخر صفحة ممتلئة.
-class _Pager {
-  _Pager(this._fetch);
-
-  final Future<List<Map<String, dynamic>>> Function(int page) _fetch;
-
-  List<Map<String, dynamic>> items = [];
-  bool hasMore = false;
-  bool loadingMore = false;
-  int _page = 0;
-  int _gen = 0;
-
-  /// يرجع false إن سُبق بطلب أحدث (نتيجته تُهمل).
-  Future<bool> reset() async {
-    final gen = ++_gen;
-    final first = await _fetch(0);
-    if (gen != _gen) return false;
-    _page = 0;
-    items = first;
-    hasMore = first.length == AdminService.pageSize;
-    return true;
-  }
-
-  Future<void> loadMore() async {
-    if (!hasMore || loadingMore) return;
-    final gen = _gen;
-    loadingMore = true;
-    try {
-      final next = await _fetch(_page + 1);
-      if (gen != _gen) return;
-      _page++;
-      items = [...items, ...next];
-      hasMore = next.length == AdminService.pageSize;
-    } finally {
-      loadingMore = false;
-    }
-  }
-}
-
-Widget _loadMoreFooter(_Pager pager, VoidCallback onLoadMore) {
-  if (!pager.hasMore) return const SizedBox.shrink();
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Center(
-      child: pager.loadingMore
-          ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.primary))
-          : TextButton(
-              key: const Key('admin_load_more'),
-              onPressed: onLoadMore,
-              child: const Text('تحميل المزيد',
-                  style: TextStyle(
-                      fontFamily: 'Cairo', color: AppColors.primary))),
-    ),
   );
 }
 
@@ -532,8 +472,9 @@ class _ChaletApprovalsTab extends StatefulWidget {
 }
 
 class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
-  final _pager =
-      _Pager((page) => AdminService.instance.getPendingChalets(page: page));
+  final _pager = PagedList<Map<String, dynamic>>(
+      (page) => AdminService.instance.getPendingChalets(page: page),
+      pageSize: AdminService.pageSize);
   bool _loading = true;
   String? _error;
   bool _actionLoading = false;
@@ -655,7 +596,9 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
         itemCount: chalets.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) {
-          if (i == chalets.length) return _loadMoreFooter(_pager, _loadMore);
+          if (i == chalets.length) {
+            return LoadMoreFooter(pager: _pager, onLoadMore: _loadMore);
+          }
           final c = chalets[i];
           final name = (c['name'] as String?)?.trim().isNotEmpty == true
               ? c['name'] as String
@@ -772,8 +715,10 @@ class _UsersTab extends StatefulWidget {
 }
 
 class _UsersTabState extends State<_UsersTab> {
-  late final _Pager _pager = _Pager((page) =>
-      AdminService.instance.getUsers(page: page, search: _searchQuery));
+  late final _pager = PagedList<Map<String, dynamic>>(
+      (page) =>
+          AdminService.instance.getUsers(page: page, search: _searchQuery),
+      pageSize: AdminService.pageSize);
   bool _loading = true;
   String? _error;
   String _searchQuery = '';
@@ -922,7 +867,7 @@ class _UsersTabState extends State<_UsersTab> {
           itemCount: users.length + 1,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (context, i) => i == users.length
-              ? _loadMoreFooter(_pager, _loadMore)
+              ? LoadMoreFooter(pager: _pager, onLoadMore: _loadMore)
               : _userTile(users[i]),
         ),
       );

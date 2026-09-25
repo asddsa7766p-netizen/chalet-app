@@ -159,3 +159,21 @@
 - `flutter pub get` نجح؛ تحدّثت ملفات تسجيل الإضافات المولَّدة لـ macOS و Windows تلقائياً.
 
 **البوابة:** analyze: No issues found. test: 355 نجاح.
+
+### 8هـ — الشاليهات المحذوفة + الحدود وترقيم الصفحات + _gen
+(تحقق من القاعدة الحية: الحذف من المالك يمر بـ trigger `prevent_hard_delete_chalet` فيصير `deleted_at = now(), is_available = false` (الأدمن وحده يحذف فعلياً)؛ سياسة `chalets_select_unified` **لا** تستبعد `deleted_at`، والمالك يستطيع إعادة `is_available=true` لاحقاً — فالفلتر بالعميل ضروري. `favorites.created_at` و`bookings.source` ('app'/'external') موجودان.)
+- **المحذوفة لا تظهر:** `.isFilter('deleted_at', null)` بـ `getChalets` (الرئيسية/البحث/الخريطة)، `getFeaturedChalets`، `getOwnerChalets` (شاليهاتي، لوحة المالك، التقويم، الحجز اليدوي، حسابي). المفضلة والريلز: `chalets!inner` + فلتر `chalets.deleted_at`.
+- **عطل مُصلَح بالمفضلة:** مفضلة لشاليه مخفي كانت ترجع `chalets = null` فيسقط `as Map` ويفشل تحميل المفضلة كلها.
+- **ودجة مشتركة جديدة** `widgets/common/paged_list.dart`: `PagedList<T>` (صفحات + عدّاد جيل) و`LoadMoreFooter` — هي `_Pager` الخاصة بلوحة الأدمن بعد تعميمها؛ الأدمن صار يستخدمها (تطبيق واحد).
+- `BookingService` (صفحات 30):
+  - `getIncomingBookings({page})` ← "إدارة الحجوزات" بزر "تحميل المزيد".
+  - `getUpcomingIncomingBookings(limit: 3)` + `countPendingIncomingBookings()` (عدّ بالسيرفر) ← لوحة المالك (كانت تجلب كل الحجوزات لتعرض 3 وعدداً). فشل كل منهما مستقل (`_upcomingFailed`/`_pendingFailed`).
+  - `getManualBookings({upcoming, page})` ← الحجوزات اليدوية: `source='external'` والتقسيم على السيرفر (قادمة: `check_out > اليوم` بالأقرب؛ منتهية: الأحدث)، قسمان مرقّمان.
+  - `getMyBookings({statuses, page})` ← "حجوزاتي": كل تبويب يُفلتر على السيرفر وله صفحاته (كانت تُجلب كلها ثم تُوزَّع).
+  - `countMyBookings(status)` ← عدّاد "المكتملة" بحسابي.
+- المفضلة `.limit(100)`، شاليهات المالك `.limit(200)` (سقف أمان).
+- **محدودة أصلاً ولم تتغير:** التقويم (نافذة تواريخ)، إحصائيات المالك (أقصى مدى شهر)، جداول الأسعار (لكل شاليه)، قوائم الأدمن (مرقّمة من المرحلة 3)، الإشعارات (100)، الريلز (50)، الخريطة (1000 — العلامات تحتاج المجموعة كاملة؛ سقف ثابت مقصود).
+- `owner_reports_screen`: عدّاد `_gen` — تبديل المدى بسرعة لم يعد يعرض نتيجة طلب أقدم.
+- اختبار جديد: `paged_list_test.dart` (3).
+
+**البوابة:** analyze: No issues found. test: 358 نجاح.
