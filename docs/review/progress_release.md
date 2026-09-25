@@ -230,3 +230,26 @@
 ⚠️ حادثة وحيدة: أمر تقسيم models.dart نُفّذ مرتين (الأول بالرد الذي قاطعه "اكمل")، فالثاني كتب فوق ملفات الأجزاء بمحتوى فارغ. لم يُفقد شيء: models.dart لم يكن مُلتزماً، استُرجع من git وأُعيد التقسيم مرة واحدة؛ والسكربت صار يرفض الكتابة فوق ملف موجود أو نطاق خارج الملف.
 
 كل commit: analyze نظيف + 369 نجاح.
+
+### تقسيم الشاشات الكبيرة (تكملة المرحلة 9)
+كل commit: analyze نظيف + 369 نجاح. الأرقام = أسطر الملف الرئيسي بعد التقسيم + الأجزاء.
+
+| commit | الملف (قبل) | بعد |
+|---|---|---|
+| `2997448` | owner_calendar_widgets (1161)، owner_calendar_screen (1199) | widgets: 19 + calendar_day_cell 414، owner_day_panel 574، range_action_bar 155؛ screen: 833 + calendar_month_grid 291، calendar_chalet_selector 89 |
+| `55c08bc` | admin_dashboard_screen (1025) | 245 + overview_tab 224، chalet_approvals_tab 244، users_tab 319 |
+| `a43f187` | profile_screen (840) | 755 + edit_profile_sheet 88 |
+| `032e97d` | manual_booking_sheet (1004) | 556 + manual_booking_models 97، manual_booking_sections 364 |
+| `092deb4` | owner_dashboard_screen (986) | 568 + widgets/dashboard_upcoming_section 213، dashboard_actions_section 215 |
+| `d29cb14` | chalet_pricing_screen (1587) | 916 + date_override_dialog 77، stay_type_card 275، weekday_prices_section 211، date_overrides_section 124 |
+| `3d28a9d` | owner_edit_chalet_screen (1646) | 850 + edit_chalet_sections 398، edit_chalet_location_media 412 (جزءان بدل واحد بالجدول، حتى لا يقترب جزء من 800) |
+| `ed0042e` | search_screen (1023) | 762 + search_filters_sheet 270 |
+| `3881da8` | home_tab (1281) | 296 + widgets/city_picker_sheet 145، home_header 292، home_sections 566 |
+| `ac20f7a` | chalet_detail_screen (1608) | 627 + widgets/chalet_detail_header 266 (إضافي على الجدول)، chalet_detail_sections 384، chalet_reviews_section 157، review_item 87، full_screen_gallery 108 |
+| `d7e3d73` | booking_screen (1853) | 638 + widgets/booking_success_dialog 157، booking_header 189 (إضافي)، booking_calendar_section 367، booking_form_sections 313، booking_price_summary 214 |
+
+**التعديلات النصية الوحيدة داخل المنقول** (كلها بلا أثر سلوكي): `setState(` ← `_setState(` بالأجزاء (عددها = عدد تحذيرات analyzer بالضبط، وفُحص أن لا `StatefulBuilder` يُظلّل اسم `setState` بأي جزء — ورقة فلاتر البحث تستخدم `setSheetState` فلم تُلمس)؛ والثوابت `static` المستخدمة بالأجزاء صارت مؤهَّلة باسم الكلاس (`_BookingScreenState._darkGreen` …).
+
+**⛔ لم يُقسَّم (تراجع حسب القاعدة):** `owner_add_chalet_screen.dart` (1332). بعد تقسيمه فشل اختبار واحد: `chalet_edit_screen_test` ← "تسمية location موحّدة على المنطقة/الحي"، لأن الاختبار **يقرأ نص الملف الرئيسي** ويبحث عن `label: 'المنطقة/الحي'` الذي انتقل لجزء الخطوات. لا تغيير سلوك، لكن حسب القاعدة استُرجع الملف كما هو. الحل المقترح (بانتظار موافقتك): يقرأ الاختبار الملف الرئيسي + أجزاءه، ثم يُعاد التقسيم (727 + add_chalet_steps 436 + add_chalet_widgets 180).
+
+**النتيجة:** 138 ملف dart بـ lib/؛ لا ملف > 916 سطراً عدا شاشة الإضافة؛ أربعة بين 800 و916 (pricing 916، edit 850، calendar 833 — منطقها المتشابك يبقى بالـ State — والإضافة).
