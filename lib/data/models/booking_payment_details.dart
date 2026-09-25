@@ -1,6 +1,7 @@
-/// يمثل بيانات الحجز المطلوب دفعها، وهو الكائن يلي بيتنقل بين شاشات الدفع.
-/// عبّي هالكائن من شاشة "مراجعة الحجز" الموجودة عندك بالتطبيق قبل ما توصل
-/// لأول شاشة بهالفلو (PaymentReviewScreen).
+/// بيانات الحجز المطلوب دفعها (يوم واحد + فترة)، تتنقل بين شاشات الدفع.
+///
+/// السعر من السيرفر فقط (calculate_chalet_stay_price عبر شاشة الحجز): لا
+/// ضريبة ولا رسوم محسوبة بالتطبيق — الإجمالي = سعر الفترة + الإضافات.
 class BookingPaymentDetails {
   final String bookingId;
   final String chaletName;
@@ -8,14 +9,14 @@ class BookingPaymentDetails {
   final String chaletImageUrl;
   final DateTime checkIn;
   final DateTime checkOut;
-  final int nightsCount;
   final int guestsCount;
-  final double pricePerNight;
-  final double subtotal; // سعر الليالي مجتمعة قبل الإضافات والضريبة
-  final double extrasTotal; // الإضافات
-  final double taxAndFeesPercent; // مثال: 5 تعني 5%
-  final double totalAmount; // الإجمالي الكلي شامل الضريبة والرسوم
-  final String? userEmail; // لإرسال تأكيد الحجز
+
+  /// اسم الفترة المحجوزة ("إقامة صباحية"...).
+  final String periodLabel;
+
+  /// سعر الفترة كما حسبه السيرفر.
+  final double subtotal;
+  final double extrasTotal;
 
   const BookingPaymentDetails({
     required this.bookingId,
@@ -24,17 +25,13 @@ class BookingPaymentDetails {
     required this.chaletImageUrl,
     required this.checkIn,
     required this.checkOut,
-    required this.nightsCount,
     required this.guestsCount,
-    required this.pricePerNight,
+    required this.periodLabel,
     required this.subtotal,
-    required this.extrasTotal,
-    required this.taxAndFeesPercent,
-    required this.totalAmount,
-    this.userEmail,
+    this.extrasTotal = 0,
   });
 
-  double get taxAndFeesAmount => totalAmount - subtotal - extrasTotal;
+  double get totalAmount => subtotal + extrasTotal;
 }
 
 /// بيانات بطاقة الدفع المُدخلة من المستخدم بشاشة إدخال البطاقة.
@@ -43,14 +40,12 @@ class CardPaymentInput {
   final String cardHolderName;
   final String expiryMonthYear; // MM/YY
   final String cvv;
-  final bool saveCardForLater;
 
   const CardPaymentInput({
     required this.cardNumber,
     required this.cardHolderName,
     required this.expiryMonthYear,
     required this.cvv,
-    this.saveCardForLater = false,
   });
 }
 

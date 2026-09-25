@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_state_providers.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/support_contact.dart';
 import '../../widgets/common/language_bottom_sheet.dart';
 import '../settings/about_app_screen.dart';
 import '../settings/privacy_security_screen.dart';
@@ -74,16 +75,18 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          _SettingsTile(
-            icon: Icons.help_outline_rounded,
-            label: AppStrings.help,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const HelpSupportScreen(),
+          // تُخفى حتى تُعتمد بيانات الدعم (AppStrings.supportPhone/Email).
+          if (SupportContact.hasAny)
+            _SettingsTile(
+              icon: Icons.help_outline_rounded,
+              label: AppStrings.help,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const HelpSupportScreen(),
+                ),
               ),
             ),
-          ),
           _SettingsTile(
             icon: Icons.info_outline_rounded,
             label: AppStrings.about,

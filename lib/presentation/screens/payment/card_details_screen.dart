@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 import 'package:makan/data/models/booking_payment_details.dart';
 
 import '../theme/payment_theme.dart';
 import '../widgets/payment_widgets.dart';
 import 'payment_processing_screen.dart';
-import 'package:flutter/material.dart' as flutter_material;
 
 /// شاشة (3): إدخال بيانات البطاقة
 class CardDetailsScreen extends StatefulWidget {
@@ -24,7 +23,6 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
   final _cardHolderController = TextEditingController();
   final _expiryController = TextEditingController();
   final _cvvController = TextEditingController();
-  bool _saveCard = true;
 
   @override
   void dispose() {
@@ -47,7 +45,6 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
       cardHolderName: _cardHolderController.text.trim(),
       expiryMonthYear: _expiryController.text.trim(),
       cvv: _cvvController.text.trim(),
-      saveCardForLater: _saveCard,
     );
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -62,7 +59,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: flutter_material.TextDirection.rtl,
+      textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: PaymentColors.background,
         appBar: const PaymentAppBar(),
@@ -121,7 +118,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                 TextFormField(
                   controller: _cardNumberController,
                   keyboardType: TextInputType.number,
-                  textDirection: flutter_material.TextDirection.ltr,
+                  textDirection: TextDirection.ltr,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(16),
@@ -158,7 +155,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                           TextFormField(
                             controller: _expiryController,
                             keyboardType: TextInputType.number,
-                            textDirection: flutter_material.TextDirection.ltr,
+                            textDirection: TextDirection.ltr,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                               LengthLimitingTextInputFormatter(4),
@@ -185,7 +182,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                             controller: _cvvController,
                             keyboardType: TextInputType.number,
                             obscureText: true,
-                            textDirection: flutter_material.TextDirection.ltr,
+                            textDirection: TextDirection.ltr,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                               LengthLimitingTextInputFormatter(4),
@@ -206,17 +203,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: PaymentColors.primaryDark,
-                  value: _saveCard,
-                  onChanged: (v) => setState(() => _saveCard = v),
-                  title: Text('حفظ البطاقة لاستخدامها لاحقاً',
-                      style: PaymentTextStyles.body),
-                  subtitle: Text('يمكنك حذف البطاقة في أي وقت',
-                      style: PaymentTextStyles.bodySecondary),
-                ),
-                const SizedBox(height: 12),
+                // أُخفي خيار "حفظ البطاقة": لا يوجد أي حفظ فعلي للبطاقات.
                 Container(
                   padding: const EdgeInsets.all(PaymentSpacing.cardPadding),
                   decoration: BoxDecoration(
@@ -250,7 +237,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintTextDirection: flutter_material.TextDirection.ltr,
+      hintTextDirection: TextDirection.ltr,
       filled: true,
       fillColor: PaymentColors.cardBackground,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

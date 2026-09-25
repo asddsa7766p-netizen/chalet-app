@@ -137,15 +137,6 @@ class _BookingScreenState extends State<BookingScreen> {
       _serverCalculated &&
       _hasSelection;
 
-  /// UI-level confirmation availability.
-  /// For online payments we allow proceeding to the payment flow even if
-  /// server-side price calculation is still pending (mock payment path).
-  bool get _canConfirmForUI {
-    if (_paymentMethod == 'online') {
-      return _isAvailable && _hasSelection;
-    }
-    return _canConfirm;
-  }
 
   Future<void> _fetchServerPrice() async {
     if (!_hasSelection) return;
@@ -408,16 +399,9 @@ class _BookingScreenState extends State<BookingScreen> {
       return;
     }
 
-    // ✅ إصلاح: الزر بالأسفل يُفعَّل حسب _canConfirmForUI (يسمح بالمتابعة
-    // للدفع الإلكتروني حتى لو السعر لسا بيتحسب)، لكن _confirm() كانت
-    // تتحقق دايماً من _canConfirm الأصرم (يتطلب سعر جاهز من السيرفر).
-    // النتيجة: بحالة الدفع الإلكتروني، المستخدم يضغط زر يبدو مفعّل
-    // ويطلع له خطأ "تأكد من التواريخ" رغم عدم وجود مشكلة فعلية.
-    // الحل: نفس شرط التفعيل يُستخدم بالتحقق الفعلي عند الإرسال.
-    final effectiveCanConfirm =
-        _paymentMethod == 'online' ? _canConfirmForUI : _canConfirm;
-
-    if (!effectiveCanConfirm) {
+    // الدفع النقدي والإلكتروني كلاهما يحتاج سعر السيرفر للفترة (لا سعر
+    // يُحسب بالتطبيق)، فنفس الشرط يفعّل الزر ويُتحقق منه هنا.
+    if (!_canConfirm) {
       if (_availabilityError != null) {
         _showSnack(_availabilityError!);
       } else {
@@ -449,6 +433,8 @@ class _BookingScreenState extends State<BookingScreen> {
           'checkIn': _checkIn!,
           'checkOut': _checkOut!,
           'guestsCount': _guests,
+          'totalPrice': _serverTotalPrice!,
+          'periodLabel': _selectedPeriod?.label ?? '',
         });
       } catch (_) {
         _showSnack('تعذر فتح بوابة الدفع');
@@ -1824,7 +1810,7 @@ class _BookingScreenState extends State<BookingScreen> {
               child: SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  onPressed: _canConfirmForUI && !_loading ? _confirm : null,
+                  onPressed: _canConfirm && !_loading ? _confirm : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _darkGreen,
                     foregroundColor: Colors.white,

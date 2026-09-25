@@ -6,6 +6,13 @@ class AppStrings {
   static const String appTagline = 'بيتك بعيداً عن البيت';
   static const String appNameEn = 'Makan';
 
+  // Support — المصدر الوحيد لبيانات التواصل بكل التطبيق. فارغة حتى تُعتمد
+  // القيم الرسمية؛ أي زر/بطاقة تواصل تُخفى تلقائياً ما دامت القيمة فارغة
+  // (انظر core/utils/support_contact.dart).
+  /// رقم واتساب/هاتف الدعم بالصيغة الدولية بلا مسافات، مثل +9705XXXXXXXX.
+  static const String supportPhone = '';
+  static const String supportEmail = '';
+
   // Onboarding
   static const String onboarding1Title =
       'اكتشف أجمل الشاليهات\nفي أروع المواقع';

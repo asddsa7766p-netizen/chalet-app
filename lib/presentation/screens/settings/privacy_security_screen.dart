@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/support_contact.dart';
 
 class PrivacySecurityScreen extends StatelessWidget {
   const PrivacySecurityScreen({super.key});
@@ -229,16 +230,18 @@ class PrivacySecurityScreen extends StatelessWidget {
                   ],
                 ),
 
-                const SizedBox(height: 12),
-
-                _sectionCard(
-                  icon: Icons.phone_outlined,
-                  title: '6. تواصل معنا',
-                  bullets: const [
-                    '📞 +972 52-965-0635',
-                    '📧 support@yourapp.com',
-                  ],
-                ),
+                // بيانات التواصل من AppStrings فقط، والقسم يُخفى ما دامت فارغة.
+                if (SupportContact.hasAny) ...[
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    icon: Icons.phone_outlined,
+                    title: '6. تواصل معنا',
+                    bullets: [
+                      if (SupportContact.hasPhone) '📞 ${SupportContact.phone}',
+                      if (SupportContact.hasEmail) '📧 ${SupportContact.email}',
+                    ],
+                  ),
+                ],
 
                 const SizedBox(height: 18),
 

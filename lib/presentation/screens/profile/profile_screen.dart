@@ -5,6 +5,7 @@ import 'package:makan/presentation/screens/profile/profile_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/error_reporter.dart';
+import '../../../core/utils/support_contact.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
@@ -437,18 +438,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 10),
-                  _menuRow(
-                    icon: Icons.support_agent_rounded,
-                    iconBg: Colors.white.withOpacity(0.8),
-                    iconColor: AppColors.textSecondary,
-                    label: 'الدعم الفني',
-                    trailingText: null,
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const HelpSupportScreen())),
-                  ),
+                  // تُخفى حتى تُعتمد بيانات الدعم (AppStrings.supportPhone/Email).
+                  if (SupportContact.hasAny) ...[
+                    const SizedBox(height: 10),
+                    _menuRow(
+                      icon: Icons.support_agent_rounded,
+                      iconBg: Colors.white.withValues(alpha: 0.8),
+                      iconColor: AppColors.textSecondary,
+                      label: 'الدعم الفني',
+                      trailingText: null,
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const HelpSupportScreen())),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   _menuRow(
                     icon: Icons.settings_rounded,

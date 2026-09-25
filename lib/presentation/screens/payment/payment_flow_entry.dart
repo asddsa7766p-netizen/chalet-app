@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
-import '../../../core/utils/date_utils.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/models/booking_payment_details.dart';
 import 'payment_review_screen.dart';
 
-/// نقطة الدخول الصحيحة لفلو الدفع، تُستدعى من app_router.dart
+/// نقطة الدخول الصحيحة لفلو الدفع، تُستدعى من app_router.dart.
+///
+/// [totalPrice] هو سعر الفترة كما حسبه السيرفر بشاشة الحجز — لا يُعاد حسابه
+/// هنا ولا تُضاف له أي عمولة/رسوم (كانت تُضاف 5% وهمية تخالف السعر المحفوظ).
 Widget buildPaymentFlow({
   required ChaletModel chalet,
   required DateTime checkIn,
   required DateTime checkOut,
   required int guestsCount,
-  double extrasTotal = 0,
-  double taxAndFeesPercent = 5,
-  String? userEmail,
+  required double totalPrice,
+  required String periodLabel,
 }) {
-  final nights = nightsBetween(checkIn, checkOut);
-  final subtotal = chalet.pricePerNight * nights;
-  final taxAndFees = (subtotal + extrasTotal) * (taxAndFeesPercent / 100);
-  final total = subtotal + extrasTotal + taxAndFees;
-
   final booking = BookingPaymentDetails(
     bookingId: 'PAY-${DateTime.now().millisecondsSinceEpoch}',
     chaletName: chalet.name,
@@ -26,14 +22,9 @@ Widget buildPaymentFlow({
     chaletImageUrl: chalet.coverImage,
     checkIn: checkIn,
     checkOut: checkOut,
-    nightsCount: nights,
     guestsCount: guestsCount,
-    pricePerNight: chalet.pricePerNight,
-    subtotal: subtotal,
-    extrasTotal: extrasTotal,
-    taxAndFeesPercent: taxAndFeesPercent,
-    totalAmount: total,
-    userEmail: userEmail,
+    periodLabel: periodLabel,
+    subtotal: totalPrice,
   );
 
   return PaymentReviewScreen(booking: booking);

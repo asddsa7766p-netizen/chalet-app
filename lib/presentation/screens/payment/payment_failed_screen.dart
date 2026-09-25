@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:makan/data/models/booking_payment_details.dart';
 import 'package:makan/data/services/payment_gateway.dart';
 
+import '../../../core/utils/support_contact.dart';
 import '../theme/payment_theme.dart';
 import '../widgets/payment_widgets.dart';
 import 'payment_method_screen.dart';
@@ -125,18 +126,19 @@ class PaymentFailedScreen extends StatelessWidget {
                     );
                   },
                 ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: () {
-                    // TODO: اربطها بقناة الدعم الفعلية (واتساب/شات/اتصال)
-                  },
-                  icon: const Icon(Icons.headset_mic_outlined,
-                      size: 18, color: PaymentColors.textSecondary),
-                  label: Text(
-                    'تحتاج مساعدة؟',
-                    style: PaymentTextStyles.bodySecondary,
+                // يظهر فقط إن عُرّفت بيانات الدعم (AppStrings.supportPhone/Email).
+                if (SupportContact.hasAny) ...[
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: SupportContact.open,
+                    icon: const Icon(Icons.headset_mic_outlined,
+                        size: 18, color: PaymentColors.textSecondary),
+                    label: Text(
+                      'تحتاج مساعدة؟',
+                      style: PaymentTextStyles.bodySecondary,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

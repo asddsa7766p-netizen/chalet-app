@@ -182,6 +182,8 @@ class AppRouter {
           if (extra['checkIn'] is! DateTime) return '/home';
           if (extra['checkOut'] is! DateTime) return '/home';
           if (extra['guestsCount'] is! int) return '/home';
+          if (extra['totalPrice'] is! double) return '/home';
+          if (extra['periodLabel'] is! String) return '/home';
           return null;
         },
         builder: (context, state) {
@@ -191,6 +193,8 @@ class AppRouter {
             checkIn: extra['checkIn'] as DateTime,
             checkOut: extra['checkOut'] as DateTime,
             guestsCount: extra['guestsCount'] as int,
+            totalPrice: extra['totalPrice'] as double,
+            periodLabel: extra['periodLabel'] as String,
           );
         },
       ),

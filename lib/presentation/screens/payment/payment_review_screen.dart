@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:makan/data/models/booking_payment_details.dart';
 
 import '../theme/payment_theme.dart';
 import '../widgets/payment_widgets.dart';
 import 'payment_method_screen.dart';
-import 'package:flutter/material.dart' as flutter_material;
 
 /// شاشة (1): مراجعة الحجز وملخص الدفع قبل اختيار طريقة الدفع
 class PaymentReviewScreen extends StatelessWidget {
@@ -25,7 +24,7 @@ class PaymentReviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: flutter_material.TextDirection.rtl,
+      textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: PaymentColors.background,
         appBar: const PaymentAppBar(),
@@ -75,18 +74,14 @@ class PaymentReviewScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     SummaryRow(
-                      label: 'سعر الفترة',
+                      label: 'سعر ${booking.periodLabel}',
                       value: _formatCurrency(booking.subtotal),
                     ),
-                    SummaryRow(
-                      label: 'الإضافات',
-                      value: _formatCurrency(booking.extrasTotal),
-                    ),
-                    SummaryRow(
-                      label:
-                          'الضريبة والرسوم (${booking.taxAndFeesPercent.toStringAsFixed(0)}%)',
-                      value: _formatCurrency(booking.taxAndFeesAmount),
-                    ),
+                    if (booking.extrasTotal > 0)
+                      SummaryRow(
+                        label: 'الإضافات',
+                        value: _formatCurrency(booking.extrasTotal),
+                      ),
                     const Divider(height: 24, color: PaymentColors.borderLight),
                     SummaryRow(
                       label: 'الإجمالي الكلي',

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:makan/data/models/booking_payment_details.dart';
 
+import '../home/main_screen.dart' show goToMainTab;
 import '../theme/payment_theme.dart';
-import '../widgets/payment_widgets.dart';
-import 'package:flutter/material.dart' as flutter_material;
 
 /// شاشة (4): تأكيد نجاح الحجز والدفع
 class PaymentSuccessScreen extends StatelessWidget {
@@ -30,7 +29,7 @@ class PaymentSuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: flutter_material.TextDirection.rtl,
+      textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: PaymentColors.primaryDarker,
         body: SafeArea(
@@ -138,22 +137,6 @@ class PaymentSuccessScreen extends StatelessWidget {
                               style: PaymentTextStyles.amountLarge),
                         ],
                       ),
-                      if (booking.userEmail != null) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Icon(Icons.email_outlined,
-                                size: 14, color: PaymentColors.textSecondary),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'تم إرسال تأكيد الحجز إلى بريدك الإلكتروني: ${booking.userEmail}',
-                                style: PaymentTextStyles.bodySecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -162,9 +145,8 @@ class PaymentSuccessScreen extends StatelessWidget {
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: وجّه لشاشة تفاصيل الحجز الفعلية بالمشروع
-                    },
+                    // "حجوزاتي" هي شاشة تفاصيل حجوزات المستخدم بالتطبيق.
+                    onPressed: () => goToMainTab(context, 3),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
@@ -178,52 +160,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                         )),
                   ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          // TODO: مشاركة تفاصيل الحجز
-                        },
-                        icon: const Icon(Icons.ios_share,
-                            color: Colors.white, size: 18),
-                        label: Text('مشاركة',
-                            style: PaymentTextStyles.body
-                                .copyWith(color: Colors.white)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white38),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(PaymentSpacing.radiusMd),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          // TODO: إضافة الحجز لتقويم الجهاز
-                        },
-                        icon: const Icon(Icons.calendar_today_outlined,
-                            color: Colors.white, size: 16),
-                        label: Text('إضافة للتقويم',
-                            style: PaymentTextStyles.body
-                                .copyWith(color: Colors.white)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white38),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(PaymentSpacing.radiusMd),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // أُخفي زرّا "مشاركة" و"إضافة للتقويم": لم يكن لهما أي تنفيذ.
               ],
             ),
           ),

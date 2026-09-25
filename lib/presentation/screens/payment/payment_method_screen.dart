@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:makan/data/models/booking_payment_details.dart';
 
+import '../../../core/utils/support_contact.dart';
 import '../theme/payment_theme.dart';
 import '../widgets/payment_widgets.dart';
 import 'card_details_screen.dart';
@@ -111,19 +112,13 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
               const _BenefitRow(
                   icon: Icons.event_available_outlined,
                   text: 'إلغاء مجاني وفق سياسة المكان'),
-              const _BenefitRow(
-                  icon: Icons.headset_mic_outlined,
-                  text: 'دعم متواصل على مدار الساعة'),
-              const _BenefitRow(
-                  icon: Icons.verified_user_outlined, text: 'حجز آمن 100%'),
-              const _BenefitRow(
-                  icon: Icons.event_available_outlined,
-                  text: 'إلغاء مجاني وفق سياسة المكان'),
-              const _BenefitRow(
-                  icon: Icons.headset_mic_outlined,
-                  text: 'دعم متواصل على مدار الساعة'),
-              const SizedBox(height: 32), // ← جديد
-              const Center(child: BrandLogo(logoSize: 56)), // ← جديد
+              // لا وعد بدعم متواصل ما دامت قنوات الدعم غير معرَّفة.
+              if (SupportContact.hasAny)
+                const _BenefitRow(
+                    icon: Icons.headset_mic_outlined,
+                    text: 'دعم متواصل على مدار الساعة'),
+              const SizedBox(height: 32),
+              const Center(child: BrandLogo(logoSize: 56)),
             ],
           ),
         ),
