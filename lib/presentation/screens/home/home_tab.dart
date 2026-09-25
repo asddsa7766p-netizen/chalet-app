@@ -299,7 +299,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Material(
                       color: selected
-                          ? AppColors.primary.withOpacity(0.08)
+                          ? AppColors.primary.withValues(alpha: 0.08)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
@@ -586,9 +586,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                     ),
                   ),
                 ),
-                Positioned.fill(
+                const Positioned.fill(
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
                           Color(0xB3000000),
@@ -685,7 +685,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: AppColors.accentLight.withOpacity(0.35),
+                    color: AppColors.accentLight.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Icon(
@@ -868,12 +868,12 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: AppColors.border.withOpacity(0.15)),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.15)),
         ),
         child: Column(
           children: [
@@ -908,7 +908,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -928,7 +928,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.95),
+                        color: Colors.white.withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -1058,10 +1058,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'بالقرب منك',
                 style: TextStyle(
                   fontFamily: 'Cairo',
@@ -1070,7 +1070,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   color: AppColors.primary,
                 ),
               ),
-              const Text(
+              Text(
                 'بناءً على موقعك الحالي',
                 style: TextStyle(
                   fontFamily: 'Cairo',
@@ -1110,10 +1110,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border.withOpacity(0.15)),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.15)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -1184,7 +1184,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.08),
+                        color: AppColors.primary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -1228,7 +1228,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               color: Theme.of(context).cardColor,
               shape: BoxShape.circle,
               border: Border.all(
-                  color: AppColors.accent.withOpacity(0.2), width: 2),
+                  color: AppColors.accent.withValues(alpha: 0.2), width: 2),
             ),
             child: const Icon(Icons.wifi_off_rounded,
                 size: 40, color: Colors.grey),

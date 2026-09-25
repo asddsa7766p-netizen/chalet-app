@@ -962,9 +962,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         width: 34,
         height: 34,
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
+          color: AppColors.primary.withValues(alpha: 0.1),
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.primaryLight.withOpacity(0.3)),
+          border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
         ),
         child: Icon(icon, color: AppColors.primary, size: 16),
       ),
@@ -985,7 +985,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primaryPale.withOpacity(0.4)
+              ? AppColors.primaryPale.withValues(alpha: 0.4)
               : AppColors.cream,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(

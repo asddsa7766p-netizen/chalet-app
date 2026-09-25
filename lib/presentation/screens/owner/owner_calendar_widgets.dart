@@ -95,7 +95,7 @@ class _CellPainter extends CustomPainter {
   final bool faded;
 
   Color _f(Color c) =>
-      faded ? Color.alphaBlend(c.withOpacity(0.42), Colors.white) : c;
+      faded ? Color.alphaBlend(c.withValues(alpha: 0.42), Colors.white) : c;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -259,7 +259,7 @@ class CalendarDayCell extends StatelessWidget {
                         ),
                       ),
                       if (icon != null)
-                        Icon(icon, size: 13, color: ink.withOpacity(0.92)),
+                        Icon(icon, size: 13, color: ink.withValues(alpha: 0.92)),
                       if (roomy && label != null)
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 52),
@@ -984,7 +984,7 @@ class OwnerDayPanel extends StatelessWidget {
             foregroundColor: color,
             minimumSize: const Size(0, 48),
             side: BorderSide(
-                color: onTap == null ? AppColors.border : color.withOpacity(0.6)),
+                color: onTap == null ? AppColors.border : color.withValues(alpha: 0.6)),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -1069,7 +1069,7 @@ class RangeActionBar extends StatelessWidget {
         border: const Border(top: BorderSide(color: AppColors.border)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, -3)),
         ],

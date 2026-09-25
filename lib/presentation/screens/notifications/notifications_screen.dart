@@ -82,7 +82,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         centerTitle: true,
-        title: Text(
+        title: const Text(
           AppStrings.allNotifications,
           style: TextStyle(
             fontFamily: 'Cairo',
@@ -97,7 +97,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: TextButton(
                 onPressed: () => _runAndReload(
                     () => NotificationService.instance.markAllAsRead()),
-                child: Text(
+                child: const Text(
                   AppStrings.markAllRead,
                   style: TextStyle(
                     fontFamily: 'Cairo',
@@ -149,7 +149,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                           .markAsRead(n.id));
                                 },
                               ))
-                          .toList(),
+                          ,
                       const SizedBox(height: 28),
                     ],
                   ),
@@ -159,16 +159,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildEmpty() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.notifications_off_rounded,
             size: 64,
             color: AppColors.sand,
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           Text(
             'لا توجد إشعارات',
             style: TextStyle(
@@ -241,7 +241,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       decoration: BoxDecoration(
         color: selected
             ? AppColors.primary
-            : AppColors.textPrimary.withOpacity(0.05),
+            : AppColors.textPrimary.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -315,28 +315,28 @@ class _NotificationCard extends StatelessWidget {
 
     switch (type) {
       case 'offer':
-        iconBg = AppColors.primary.withOpacity(0.10);
+        iconBg = AppColors.primary.withValues(alpha: 0.10);
         iconColor = AppColors.primary;
         icon = Icons.celebration_rounded;
         break;
       case 'payment':
       case 'payment_confirmed':
-        iconBg = AppColors.primary.withOpacity(0.10);
+        iconBg = AppColors.primary.withValues(alpha: 0.10);
         iconColor = AppColors.primary;
         icon = Icons.payments_rounded;
         break;
       case 'booking_confirmed':
-        iconBg = AppColors.primary.withOpacity(0.10);
+        iconBg = AppColors.primary.withValues(alpha: 0.10);
         iconColor = AppColors.primary;
         icon = Icons.check_circle_rounded;
         break;
       case 'reminder':
-        iconBg = AppColors.primary.withOpacity(0.10);
+        iconBg = AppColors.primary.withValues(alpha: 0.10);
         iconColor = AppColors.primary;
         icon = Icons.notifications_active_rounded;
         break;
       default:
-        iconBg = AppColors.primary.withOpacity(0.10);
+        iconBg = AppColors.primary.withValues(alpha: 0.10);
         iconColor = AppColors.primary;
         icon = Icons.notifications_rounded;
     }
@@ -355,14 +355,14 @@ class _NotificationCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isUnread
-                  ? AppColors.primary.withOpacity(0.35)
+                  ? AppColors.primary.withValues(alpha: 0.35)
                   : AppColors.border,
               width: 1,
             ),
             boxShadow: isUnread
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 20,
                       offset: const Offset(0, 4),
                     ),
@@ -410,7 +410,7 @@ class _NotificationCard extends StatelessWidget {
                             fontFamily: 'Cairo',
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary.withOpacity(0.9),
+                            color: AppColors.textSecondary.withValues(alpha: 0.9),
                           ),
                         ),
                       ],
@@ -419,7 +419,7 @@ class _NotificationCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         notification.body!,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 13,
                           color: AppColors.textSecondary,

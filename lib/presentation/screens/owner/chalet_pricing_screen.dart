@@ -1076,7 +1076,7 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
                 Switch(
                   key: ValueKey('stayToggle_${type.dbValue}'),
                   value: enabled,
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                   onChanged: _savingAll ? null : (v) => _toggleStayType(type, v),
                 ),
             ],

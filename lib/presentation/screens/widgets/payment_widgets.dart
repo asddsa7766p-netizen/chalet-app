@@ -25,7 +25,7 @@ class PrimaryButton extends StatelessWidget {
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: PaymentColors.primaryDark,
-          disabledBackgroundColor: PaymentColors.primaryDark.withOpacity(0.6),
+          disabledBackgroundColor: PaymentColors.primaryDark.withValues(alpha: 0.6),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PaymentSpacing.radiusMd),
           ),
@@ -316,7 +316,7 @@ class BrandLogo extends StatelessWidget {
         ),
         if (showName) ...[
           const SizedBox(height: 10),
-          Text(
+          const Text(
             'مكان',
             style: TextStyle(
               fontFamily: PaymentTextStyles.fontFamily,

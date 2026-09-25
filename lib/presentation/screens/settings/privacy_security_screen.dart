@@ -31,7 +31,7 @@ class PrivacySecurityScreen extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryPale.withOpacity(0.5),
+                    color: AppColors.primaryPale.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppColors.primaryPale),
                   ),
@@ -132,7 +132,7 @@ class PrivacySecurityScreen extends StatelessWidget {
                           width: 74,
                           height: 74,
                           decoration: BoxDecoration(
-                            color: AppColors.accent.withOpacity(0.12),
+                            color: AppColors.accent.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(22),
                             border:
                                 Border.all(color: AppColors.accent, width: 1),

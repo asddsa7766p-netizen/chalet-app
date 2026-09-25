@@ -264,7 +264,7 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 60),
       child: Column(
         children: [
-          Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
+          const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
           const SizedBox(height: 12),
           Text(
             _error ?? 'حدث خطأ',
@@ -287,13 +287,13 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 60),
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 60),
       child: Column(
         children: [
           Icon(Icons.home_work_outlined, size: 56, color: AppColors.textMuted),
-          const SizedBox(height: 14),
-          const Text(
+          SizedBox(height: 14),
+          Text(
             'لا توجد شاليهات بعد',
             style: TextStyle(
                 fontFamily: 'Cairo',
@@ -301,8 +301,8 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
                 fontWeight: FontWeight.w800,
                 color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 6),
-          const Text(
+          SizedBox(height: 6),
+          Text(
             'اضغط "إضافة شاليه جديد" لإضافة أول شاليه لك',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -347,7 +347,7 @@ class _ChaletCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -367,14 +367,14 @@ class _ChaletCard extends StatelessWidget {
                     coverImage,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
-                      color: AppColors.primary.withOpacity(0.06),
+                      color: AppColors.primary.withValues(alpha: 0.06),
                       child: const Icon(Icons.home_work_rounded,
                           color: AppColors.primary, size: 40),
                     ),
                   )
                 else
                   Container(
-                    color: AppColors.primary.withOpacity(0.06),
+                    color: AppColors.primary.withValues(alpha: 0.06),
                     child: const Icon(Icons.home_work_rounded,
                         color: AppColors.primary, size: 40),
                   ),
@@ -385,13 +385,13 @@ class _ChaletCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.92),
+                      color: Colors.white.withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
                           color: (isAvailable && isApproved
                                   ? AppColors.primary
                                   : AppColors.textMuted)
-                              .withOpacity(0.2)),
+                              .withValues(alpha: 0.2)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -503,7 +503,7 @@ class _ChaletCard extends StatelessWidget {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,
                             side: BorderSide(
-                                color: AppColors.primary.withOpacity(0.7)),
+                                color: AppColors.primary.withValues(alpha: 0.7)),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

@@ -114,7 +114,7 @@ class AboutAppScreen extends StatelessWidget {
                         width: 66,
                         height: 66,
                         decoration: BoxDecoration(
-                          color: AppColors.accent.withOpacity(0.12),
+                          color: AppColors.accent.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(22),
                           border: Border.all(color: AppColors.accent, width: 1),
                         ),

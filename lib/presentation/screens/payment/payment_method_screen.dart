@@ -62,7 +62,7 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
           child: ListView(
             padding: const EdgeInsets.all(PaymentSpacing.screenPadding),
             children: [
-              Text('اختر طريقة الدفع', style: PaymentTextStyles.sectionTitle),
+              const Text('اختر طريقة الدفع', style: PaymentTextStyles.sectionTitle),
               const SizedBox(height: 16),
               _MethodOption(
                 isSelected:
@@ -79,9 +79,9 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 title: 'محفظة إلكترونية',
                 onTap: () =>
                     setState(() => _selected = PaymentMethodType.paypal),
-                trailing: Row(
+                trailing: const Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(Icons.account_balance_wallet_outlined,
                         color: Color(0xFF003087)),
                     SizedBox(width: 6),
@@ -94,17 +94,17 @@ class _PaymentMethodScreenState extends State<PaymentMethodScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Row(
+              const Row(
                 children: [
-                  const Icon(Icons.verified_outlined,
+                  Icon(Icons.verified_outlined,
                       size: 14, color: PaymentColors.textSecondary),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   Text('طرق دفع آمنة ومعتمدة',
                       style: PaymentTextStyles.bodySecondary),
                 ],
               ),
               const SizedBox(height: PaymentSpacing.sectionGap),
-              Text('مزايا الحجز مع مكان',
+              const Text('مزايا الحجز مع مكان',
                   style: PaymentTextStyles.sectionTitle),
               const SizedBox(height: 12),
               const _BenefitRow(
@@ -182,7 +182,7 @@ class _CardLogosRow extends StatelessWidget {
   Widget build(BuildContext context) {
     // بدائل نصية بسيطة بدل شعارات الشركات (Visa/Mastercard/mada) لتفادي حقوق الملكية.
     // استبدلها بالأصول الرسمية (assets/icons) الموجودة عندك بالمشروع إن وجدت.
-    return Row(
+    return const Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _MiniLogo(label: 'VISA', color: Color(0xFF1A1F71)),
@@ -205,7 +205,7 @@ class _MiniLogo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(

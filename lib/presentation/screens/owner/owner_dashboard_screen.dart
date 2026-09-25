@@ -31,7 +31,7 @@ class OwnerDashboardScreen extends ConsumerStatefulWidget {
 class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
   int _unreadCount = 0;
 
-  OwnerDashboardRange _range = OwnerDashboardRange.today;
+  final OwnerDashboardRange _range = OwnerDashboardRange.today;
   UserProfile? _profile;
   bool _loading = true;
   String? _error;
@@ -383,18 +383,18 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('أكمل معلومات شاليهك لزيادة الحجوزات',
+                Text('أكمل معلومات شاليهك لزيادة الحجوزات',
                     style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                         color: AppColors.charcoal)),
-                const SizedBox(height: 2),
-                const Text('أضف الصور والأسعار والمرافق لجذب المزيد من الضيوف',
+                SizedBox(height: 2),
+                Text('أضف الصور والأسعار والمرافق لجذب المزيد من الضيوف',
                     style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 11,
@@ -521,7 +521,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: onTap != null
-              ? AppColors.primary.withOpacity(0.35)
+              ? AppColors.primary.withValues(alpha: 0.35)
               : AppColors.sand,
         ),
       ),
@@ -685,7 +685,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
               height: 44,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 image: (b.chaletImage != null && b.chaletImage!.isNotEmpty)
                     ? DecorationImage(
                         image: NetworkImage(b.chaletImage!),
@@ -752,7 +752,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
+                    color: statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(b.status.arabicLabel,

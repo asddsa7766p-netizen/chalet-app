@@ -310,7 +310,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                   _menuRow(
                     icon: Icons.calendar_month_rounded,
-                    iconBg: AppColors.primary.withOpacity(0.15),
+                    iconBg: AppColors.primary.withValues(alpha: 0.15),
                     iconColor: AppColors.primary,
                     label: 'حجوزاتي',
                     trailingText: null,
@@ -319,7 +319,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 10),
                   _menuRow(
                     icon: Icons.favorite_rounded,
-                    iconBg: AppColors.error.withOpacity(0.12),
+                    iconBg: AppColors.error.withValues(alpha: 0.12),
                     iconColor: AppColors.error,
                     label: 'المفضلة',
                     trailingText: null,
@@ -328,7 +328,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 10),
                   _menuRow(
                     icon: Icons.notifications_active_rounded,
-                    iconBg: const Color(0xFF2ECC71).withOpacity(0.15),
+                    iconBg: const Color(0xFF2ECC71).withValues(alpha: 0.15),
                     iconColor: const Color(0xFF2ECC71),
                     label: 'التنبيهات',
                     trailingText:
@@ -357,7 +357,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           gradient: LinearGradient(
                             colors: [
                               AppColors.primary,
-                              AppColors.primary.withOpacity(0.85),
+                              AppColors.primary.withValues(alpha: 0.85),
                             ],
                             begin: Alignment.topRight,
                             end: Alignment.bottomLeft,
@@ -370,7 +370,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               width: 48,
                               height: 48,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(14),
                               ),
                               child: const Icon(Icons.add_home_rounded,
@@ -393,7 +393,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                           fontFamily: 'Cairo',
                                           fontSize: 12,
                                           color:
-                                              Colors.white.withOpacity(0.85))),
+                                              Colors.white.withValues(alpha: 0.85))),
                                 ],
                               ),
                             ),
@@ -411,9 +411,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(2),
-                      color: AppColors.primary.withOpacity(0.08),
+                      color: AppColors.primary.withValues(alpha: 0.08),
                       border: Border.all(
-                          color: AppColors.primary.withOpacity(0.15)),
+                          color: AppColors.primary.withValues(alpha: 0.15)),
                     ),
                   ),
 
@@ -422,7 +422,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                   _menuRow(
                     icon: Icons.language_rounded,
-                    iconBg: Colors.white.withOpacity(0.8),
+                    iconBg: Colors.white.withValues(alpha: 0.8),
                     iconColor: AppColors.primary,
                     label: 'اللغة',
                     trailingText: null,
@@ -456,7 +456,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 10),
                   _menuRow(
                     icon: Icons.settings_rounded,
-                    iconBg: Colors.white.withOpacity(0.8),
+                    iconBg: Colors.white.withValues(alpha: 0.8),
                     iconColor: AppColors.textSecondary,
                     label: 'الإعدادات',
                     trailingText: null,
@@ -497,9 +497,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withOpacity(0.25)),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -513,7 +513,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 4),
           Text(label,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -529,7 +529,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Text(text,
-            style: TextStyle(
+            style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 14,
                 fontWeight: FontWeight.w900,
@@ -567,7 +567,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     decoration: BoxDecoration(
                       color: iconBg,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: iconColor.withOpacity(0.25)),
+                      border: Border.all(color: iconColor.withValues(alpha: 0.25)),
                     ),
                     child: Icon(icon, color: iconColor, size: 22),
                   ),
@@ -619,7 +619,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Stack(children: [
             CircleAvatar(
               radius: 38,
-              backgroundColor: AppColors.primary.withOpacity(0.1),
+              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
               backgroundImage: profile?.avatarUrl != null
                   ? NetworkImage(profile!.avatarUrl!)
                   : null,
@@ -698,10 +698,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8A6D3B).withOpacity(0.1),
+                          color: const Color(0xFF8A6D3B).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: const Color(0xFF8A6D3B).withOpacity(0.4)),
+                              color: const Color(0xFF8A6D3B).withValues(alpha: 0.4)),
                         ),
                         child: const Text('🛡️ أدمن',
                             style: TextStyle(
@@ -715,10 +715,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 3),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: AppColors.primary.withOpacity(0.3)),
+                              color: AppColors.primary.withValues(alpha: 0.3)),
                         ),
                         child: const Text('🏠 مالك شاليه',
                             style: TextStyle(

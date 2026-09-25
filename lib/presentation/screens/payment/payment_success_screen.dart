@@ -76,7 +76,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('رقم الحجز',
+                          const Text('رقم الحجز',
                               style: PaymentTextStyles.bodySecondary),
                           Row(
                             children: [
@@ -131,7 +131,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('الإجمالي المدفوع',
+                          const Text('الإجمالي المدفوع',
                               style: PaymentTextStyles.bodySecondary),
                           Text(_formatCurrency(booking.totalAmount),
                               style: PaymentTextStyles.amountLarge),

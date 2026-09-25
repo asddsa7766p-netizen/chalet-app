@@ -212,7 +212,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
       // للسحب لإعادة المحاولة حتى في حالة الخطأ.
       children: [
         const SizedBox(height: 120),
-        Icon(Icons.error_outline_rounded, size: 56, color: AppColors.error),
+        const Icon(Icons.error_outline_rounded, size: 56, color: AppColors.error),
         const SizedBox(height: 14),
         Center(
           child: Text(
@@ -267,11 +267,11 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border, width: 1),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: AppColors.shadow,
             blurRadius: 10,
-            offset: const Offset(0, 6),
+            offset: Offset(0, 6),
           ),
         ],
       ),
@@ -283,8 +283,8 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
             width: double.infinity,
             decoration: BoxDecoration(
               color: isPending
-                  ? AppColors.accent.withOpacity(0.12)
-                  : statusColor.withOpacity(0.35),
+                  ? AppColors.accent.withValues(alpha: 0.12)
+                  : statusColor.withValues(alpha: 0.35),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(16),
               ),
@@ -370,7 +370,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.06),
+                        color: AppColors.primary.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
@@ -433,7 +433,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.textSecondary,
                             side: BorderSide(
-                              color: AppColors.border.withOpacity(0.9),
+                              color: AppColors.border.withValues(alpha: 0.9),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
@@ -519,9 +519,9 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.background.withOpacity(0.6),
+        color: AppColors.background.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withOpacity(0.7)),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
       ),
       child: Row(
         children: [
@@ -531,7 +531,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
             height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               image: guestAvatar != null && guestAvatar.isNotEmpty
                   ? DecorationImage(
                       image: NetworkImage(guestAvatar),
@@ -583,7 +583,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.accent.withOpacity(0.15),
+                color: AppColors.accent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: const Text('حجز يدوي',
@@ -594,7 +594,7 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                       color: AppColors.charcoal)),
             )
           else
-            Icon(Icons.person_outline_rounded,
+            const Icon(Icons.person_outline_rounded,
                 size: 18, color: AppColors.textMuted),
         ],
       ),
@@ -609,9 +609,9 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.04),
+        color: AppColors.primary.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryPale.withOpacity(0.6)),
+        border: Border.all(color: AppColors.primaryPale.withValues(alpha: 0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

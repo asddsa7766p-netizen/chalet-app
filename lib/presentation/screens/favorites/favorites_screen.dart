@@ -156,7 +156,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
                       background: Container(
                         margin: const EdgeInsets.only(bottom: 14),
                         decoration: BoxDecoration(
-                          color: AppColors.error.withOpacity(0.1),
+                          color: AppColors.error.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         alignment: Alignment.centerRight,
@@ -172,7 +172,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
                             color: AppColors.white,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                                color: AppColors.border.withOpacity(0.6)),
+                                color: AppColors.border.withValues(alpha: 0.6)),
                           ),
                           child: ChaletCard(
                             chalet: _favorites[i],
@@ -483,7 +483,7 @@ class _BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = AppColors.card;
+    const bg = AppColors.card;
     // ✅ إصلاح: البطاقة كانت لا تُظهر نوع الإقامة رغم توفره فعلياً
     // بـBookingModel.stayType، ولا يوجد أي طريقة للانتقال منها لصفحة
     // الشاليه (لا تفاعل عند الضغط إطلاقاً).
@@ -501,7 +501,7 @@ class _BookingCard extends StatelessWidget {
           BoxShadow(
               color: AppColors.shadow, blurRadius: 12, offset: Offset(0, 4)),
         ],
-        border: Border.all(color: AppColors.divider.withOpacity(0.6), width: 1),
+        border: Border.all(color: AppColors.divider.withValues(alpha: 0.6), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,9 +524,9 @@ class _BookingCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _statusColor.withOpacity(0.18),
+                    color: _statusColor.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _statusColor.withOpacity(0.9)),
+                    border: Border.all(color: _statusColor.withValues(alpha: 0.9)),
                   ),
                   child: Text(
                     booking.status.arabicLabel,
@@ -557,7 +557,7 @@ class _BookingCard extends StatelessWidget {
                           placeholder: (context, url) => Container(
                             width: 86,
                             height: 86,
-                            color: AppColors.primaryLight.withOpacity(0.35),
+                            color: AppColors.primaryLight.withValues(alpha: 0.35),
                             child: const Center(
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
@@ -565,7 +565,7 @@ class _BookingCard extends StatelessWidget {
                           errorWidget: (context, url, error) => Container(
                             width: 86,
                             height: 86,
-                            color: AppColors.primaryLight.withOpacity(0.35),
+                            color: AppColors.primaryLight.withValues(alpha: 0.35),
                             child: const Icon(Icons.home_work_rounded,
                                 color: AppColors.textMuted),
                           ),
@@ -573,7 +573,7 @@ class _BookingCard extends StatelessWidget {
                       : Container(
                           width: 86,
                           height: 86,
-                          color: AppColors.primaryLight.withOpacity(0.35),
+                          color: AppColors.primaryLight.withValues(alpha: 0.35),
                           child: const Icon(Icons.home_work_rounded,
                               color: AppColors.textMuted),
                         ),
@@ -783,18 +783,18 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         setState(() => _submitting = false);
         final msg = _ is Exception ? _.toString() : 'error';
         if (msg.contains('already_reviewed')) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Text('لقد قمت بتقييم إقامتك السابقة في هذا الشاليه'),
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('لقد قمت بتقييم إقامتك السابقة في هذا الشاليه'),
             backgroundColor: AppColors.primary,
           ));
         } else if (msg.contains('not_eligible_review')) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Text('لا يمكنك إضافة تقييم قبل إكمال حجز'),
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('لا يمكنك إضافة تقييم قبل إكمال حجز'),
             backgroundColor: AppColors.primary,
           ));
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Text('حدث خطأ أثناء إضافة التقييم'),
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('حدث خطأ أثناء إضافة التقييم'),
             backgroundColor: AppColors.error,
           ));
         }

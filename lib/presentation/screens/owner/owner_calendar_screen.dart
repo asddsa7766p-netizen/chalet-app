@@ -915,7 +915,7 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.error.withOpacity(0.08),
+              color: AppColors.error.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(

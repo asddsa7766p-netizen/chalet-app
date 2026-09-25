@@ -302,7 +302,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
+                color: Colors.green.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -319,7 +319,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ? 'تم إنشاء الحساب! ✅'
                 : 'أهلاً بك في مكان! 🎉',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
@@ -331,7 +331,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ? 'يرجى تأكيد بريدك الإلكتروني عبر الرابط المرسل إليك، ثم تسجيل الدخول.'
                 : 'تم إنشاء حسابك وتسجيل دخولك. يمكنك الآن استكشاف أجمل الشاليهات في فلسطين وحجز إقامتك.',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 14,
                 color: AppColors.textSecondary),

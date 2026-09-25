@@ -237,7 +237,7 @@ class AppRouter {
                 return BookingScreen(chalet: null, chaletId: chaletId);
               }
               // Fallback: no extra — BookingScreen will load from route params if available
-              return BookingScreen(chalet: null);
+              return const BookingScreen(chalet: null);
             },
           ),
           GoRoute(

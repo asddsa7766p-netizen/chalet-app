@@ -11,17 +11,15 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       fontFamily: GoogleFonts.cairo().fontFamily,
-      colorScheme: ColorScheme(
+      colorScheme: const ColorScheme(
         brightness: Brightness.light,
         primary: AppColors.primary,
         secondary: AppColors.accent,
         surface: AppColors.card,
-        background: AppColors.background, // ✅ أبيض
         error: AppColors.error,
         onPrimary: AppColors.white,
         onSecondary: AppColors.textPrimary,
         onSurface: AppColors.textPrimary,
-        onBackground: AppColors.textPrimary,
         onError: AppColors.white,
       ),
       scaffoldBackgroundColor: AppColors.background, // ✅ أبيض
@@ -239,7 +237,6 @@ class AppTheme {
         primary: AppColors.primary,
         secondary: AppColors.accent,
         surface: darkSurface,
-        background: darkBackground,
         error: AppColors.error,
       ),
       scaffoldBackgroundColor: darkBackground,
@@ -356,7 +353,7 @@ class AppTheme {
         type: BottomNavigationBarType.fixed,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.cream.withOpacity(0.15),
+        backgroundColor: AppColors.cream.withValues(alpha: 0.15),
         selectedColor: AppColors.primary,
         labelStyle: const TextStyle(
           fontFamily: 'Cairo',

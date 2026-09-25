@@ -111,7 +111,6 @@ class _BookingScreenState extends State<BookingScreen> {
   // ✅ إصلاح: حالة تحميل/خطأ صريحة لجلب بيانات الشاليه لما توصل الشاشة
   // بـ chaletId فقط (بدون كائن ChaletModel جاهز)، بدل ما تبني الشاشة
   // بواجهة فاضية/مكسورة لحد ما توصل البيانات.
-  bool _chaletLoading = false;
   bool _chaletLoadError = false;
 
   @override
@@ -324,7 +323,6 @@ class _BookingScreenState extends State<BookingScreen> {
     super.initState();
     _chalet = widget.chalet;
     if (_chalet == null && widget.chaletId != null) {
-      _chaletLoading = true;
       _loadChaletById(widget.chaletId!);
     } else {
       _loadStayTypes().then((_) {
@@ -346,7 +344,6 @@ class _BookingScreenState extends State<BookingScreen> {
       if (!mounted) return;
       setState(() {
         _chalet = c;
-        _chaletLoading = false;
         _chaletLoadError = c == null;
       });
       if (c != null) {
@@ -360,7 +357,6 @@ class _BookingScreenState extends State<BookingScreen> {
       // شايف مؤشر تحميل بدون أي تفسير أو طريقة لإعادة المحاولة.
       if (!mounted) return;
       setState(() {
-        _chaletLoading = false;
         _chaletLoadError = true;
       });
     }
@@ -574,7 +570,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 width: 92,
                 height: 92,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryPale.withOpacity(0.10),
+                  color: AppColors.primaryPale.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.check_circle_rounded,
@@ -610,7 +606,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.card,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border.withOpacity(0.8)),
+                  border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
                 ),
                 child: Column(children: [
                   const Text('رقم الحجز الخاص بك',
@@ -763,7 +759,6 @@ class _BookingScreenState extends State<BookingScreen> {
                   return;
                 }
                 setState(() {
-                  _chaletLoading = true;
                   _chaletLoadError = false;
                 });
                 _loadChaletById(widget.chaletId!);
@@ -860,7 +855,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.45),
+                      color: Colors.black.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text('${_chaletModel?.images.length ?? 0} صور',
@@ -1112,7 +1107,7 @@ class _BookingScreenState extends State<BookingScreen> {
               fontFamily: 'Cairo',
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.textHint.withOpacity(0.7),
+              color: AppColors.textHint.withValues(alpha: 0.7),
               decoration: unavailable ? TextDecoration.lineThrough : null,
             ),
           ),
@@ -1125,7 +1120,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 fontFamily: 'Cairo',
                 fontSize: 8,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textHint.withOpacity(0.7),
+                color: AppColors.textHint.withValues(alpha: 0.7),
               ),
             ),
         ],
@@ -1160,7 +1155,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     color: AppColors.accent, shape: BoxShape.circle)
                 : note != null
                     ? BoxDecoration(
-                        color: const Color(0xFFE0A63C).withOpacity(0.15),
+                        color: const Color(0xFFE0A63C).withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                         border:
                             Border.all(color: const Color(0xFFE0A63C)),
@@ -1343,7 +1338,7 @@ class _BookingScreenState extends State<BookingScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: selected ? _darkGreen.withOpacity(0.06) : AppColors.white,
+            color: selected ? _darkGreen.withValues(alpha: 0.06) : AppColors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: selected ? _darkGreen : AppColors.sand,
@@ -1407,9 +1402,7 @@ class _BookingScreenState extends State<BookingScreen> {
               ),
               Radio<String>(
                 value: value,
-                groupValue: _paymentMethod,
-                onChanged:
-                    enabled ? (v) => setState(() => _paymentMethod = v!) : null,
+                enabled: enabled,
                 activeColor: _darkGreen,
               ),
             ],
@@ -1601,12 +1594,23 @@ class _BookingScreenState extends State<BookingScreen> {
                 fontWeight: FontWeight.w800,
                 color: AppColors.charcoal)),
         const SizedBox(height: 12),
-        _payOption('cash', Icons.money_rounded, AppStrings.cashOnArrival,
-            'ادفع نقداً في الشاليه يوم الحجز'),
-        const SizedBox(height: 8),
-        _payOption('online', Icons.credit_card_rounded,
-            AppStrings.onlinePayment, 'ادفع إلكترونياً بأمان عبر التطبيق',
-            enabled: _onlinePaymentEnabled),
+        RadioGroup<String>(
+          groupValue: _paymentMethod,
+          onChanged: (v) {
+            if (v != null) setState(() => _paymentMethod = v);
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _payOption('cash', Icons.money_rounded, AppStrings.cashOnArrival,
+                  'ادفع نقداً في الشاليه يوم الحجز'),
+              const SizedBox(height: 8),
+              _payOption('online', Icons.credit_card_rounded,
+                  AppStrings.onlinePayment, 'ادفع إلكترونياً بأمان عبر التطبيق',
+                  enabled: _onlinePaymentEnabled),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -1728,19 +1732,19 @@ class _BookingScreenState extends State<BookingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.primaryPale.withOpacity(0.35),
+        color: AppColors.primaryPale.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded,
+          Icon(Icons.info_outline_rounded,
               size: 18, color: AppColors.primary),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             child: Text(
               'بعد التأكيد، سيُرسل طلبك للمالك للموافقة عليه. يمكنك متابعة حالة الحجز في أي وقت من صفحة حجوزاتي.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 12,
                 height: 1.6,
@@ -1767,7 +1771,7 @@ class _BookingScreenState extends State<BookingScreen> {
           color: AppColors.background,
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 18,
                 offset: const Offset(0, -4)),
           ],

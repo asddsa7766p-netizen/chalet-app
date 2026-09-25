@@ -11,16 +11,10 @@ void main() {
     expect(find.byType(TextFormField), findsNWidgets(2));
   });
 
-  testWidgets('login screen exposes a clear Google unavailable message',
+  testWidgets('login screen hides Google sign-in while OAuth is not configured',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    final googleButton = find.text('تسجيل الدخول عبر Google');
-    await tester.ensureVisible(googleButton);
-    await tester.tap(googleButton);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(SnackBar), findsOneWidget);
-    expect(find.textContaining('Google غير متاح'), findsOneWidget);
+    expect(find.textContaining('Google'), findsNothing);
   });
 }

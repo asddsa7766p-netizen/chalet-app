@@ -44,12 +44,12 @@ class ReelsService {
 
     final videoBytes = await videoFile.length();
     if (videoBytes > maxVideoBytes) {
-      throw FormatException('File too large');
+      throw const FormatException('File too large');
     }
 
     final thumbBytes = await thumbnailFile.length();
     if (thumbBytes > maxThumbBytes) {
-      throw FormatException('Thumbnail too large');
+      throw const FormatException('Thumbnail too large');
     }
 
     final videoName = videoFile.path.split('/').last;
@@ -64,11 +64,11 @@ class ReelsService {
     final thumbExtLower = thumbExt.toLowerCase();
 
     if (!allowedVideoExt.contains(videoExtLower)) {
-      throw FormatException('Invalid video type');
+      throw const FormatException('Invalid video type');
     }
 
     if (!allowedThumbExt.contains(thumbExtLower)) {
-      throw FormatException('Invalid thumbnail type');
+      throw const FormatException('Invalid thumbnail type');
     }
 
     // Best-effort MIME validation based on file extension.
@@ -80,7 +80,7 @@ class ReelsService {
             : null;
 
     if (inferredVideoMime == null) {
-      throw FormatException('Invalid video type');
+      throw const FormatException('Invalid video type');
     }
 
     try {

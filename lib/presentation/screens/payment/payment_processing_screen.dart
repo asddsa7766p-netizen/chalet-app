@@ -107,7 +107,7 @@ class _PaymentProcessingScreenState extends State<PaymentProcessingScreen> {
             centerTitle: true,
             automaticallyImplyLeading: false,
             title:
-                Text('جارٍ معالجة الدفع', style: PaymentTextStyles.screenTitle),
+                const Text('جارٍ معالجة الدفع', style: PaymentTextStyles.screenTitle),
           ),
           body: SafeArea(
             child: Padding(
@@ -126,7 +126,7 @@ class _PaymentProcessingScreenState extends State<PaymentProcessingScreen> {
                     ),
                   ),
                   const SizedBox(height: 28),
-                  Text('جاري معالجة الدفع...',
+                  const Text('جاري معالجة الدفع...',
                       style: PaymentTextStyles.sectionTitle),
                   const SizedBox(height: 40),
                   Container(
@@ -141,10 +141,10 @@ class _PaymentProcessingScreenState extends State<PaymentProcessingScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('معلومات مهمة',
+                        const Text('معلومات مهمة',
                             style: PaymentTextStyles.sectionTitle),
                         const SizedBox(height: 8),
-                        Text(
+                        const Text(
                           'قد تستغرق عملية الدفع بضع ثوانٍ. لا تغلق، لم يتم خصم أي مبلغ حتى الآن.',
                           style: PaymentTextStyles.bodySecondary,
                         ),

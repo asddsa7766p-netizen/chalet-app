@@ -132,7 +132,7 @@ class AuthHeader extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Image.asset('assets/images/onboarding_bg.jpg', fit: BoxFit.cover),
-          Container(color: Colors.black.withOpacity(0.05)),
+          Container(color: Colors.black.withValues(alpha: 0.05)),
           Center(
             child: Image.asset('assets/images/logo.png',
                 width: 110, height: 110, fit: BoxFit.contain),
@@ -288,7 +288,7 @@ class AuthGradientButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: AuthColors.darkGreen.withOpacity(0.3),
+              color: AuthColors.darkGreen.withValues(alpha: 0.3),
               blurRadius: 14,
               offset: const Offset(0, 6))
         ],

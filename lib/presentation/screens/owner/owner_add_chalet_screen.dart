@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +10,6 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/number_utils.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/location_service.dart';
-import '../../../data/models/models.dart';
 import '../../../data/models/chalet_model.dart';
 
 import '../../widgets/common/common_widgets.dart';
@@ -29,7 +27,6 @@ class OwnerAddChaletScreen extends ConsumerStatefulWidget {
 
 class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
   static const Color _darkGreen = Color(0xFF3D5228);
-  static const Color _gold = Color(0xFFC9A24B);
 
   final _step1FormKey = GlobalKey<FormState>();
   final _step4FormKey = GlobalKey<FormState>();
@@ -481,7 +478,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
-            value: _cities.contains(_cityCtrl.text.trim())
+            initialValue: _cities.contains(_cityCtrl.text.trim())
                 ? _cityCtrl.text.trim()
                 : _cities.first,
             decoration: InputDecoration(
@@ -645,10 +642,10 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
             onTap: _saving ? null : _pickImages,
           ),
           const SizedBox(height: 14),
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.star_rounded, size: 14, color: Colors.red),
-              const SizedBox(width: 4),
+              Icon(Icons.star_rounded, size: 14, color: Colors.red),
+              SizedBox(width: 4),
               Text('إضافة صورة واحدة على الأقل إجباري',
                   style: TextStyle(
                       fontFamily: 'Cairo',
@@ -723,7 +720,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
             ),
           if (allCount > 0) const SizedBox(height: 14),
           Text('$allCount / 8 صور',
-              style: TextStyle(
+              style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 12,
                   color: AppColors.textHint)),
@@ -799,7 +796,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
-            value: _bookingType,
+            initialValue: _bookingType,
             decoration: InputDecoration(
               labelText: 'نوع الحجز',
               prefixIcon:

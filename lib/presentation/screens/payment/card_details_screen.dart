@@ -86,7 +86,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
                         'شامل الضريبة والرسوم',
                         style: PaymentTextStyles.bodySecondary,
                       ),
@@ -112,9 +112,9 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
             child: ListView(
               padding: const EdgeInsets.all(PaymentSpacing.screenPadding),
               children: [
-                Text('بيانات البطاقة', style: PaymentTextStyles.sectionTitle),
+                const Text('بيانات البطاقة', style: PaymentTextStyles.sectionTitle),
                 const SizedBox(height: 16),
-                _FieldLabel('رقم البطاقة'),
+                const _FieldLabel('رقم البطاقة'),
                 TextFormField(
                   controller: _cardNumberController,
                   keyboardType: TextInputType.number,
@@ -128,13 +128,14 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                       suffixIcon: const Icon(Icons.credit_card_outlined)),
                   validator: (v) {
                     final digits = (v ?? '').replaceAll(' ', '');
-                    if (digits.length != 16)
+                    if (digits.length != 16) {
                       return 'رقم البطاقة يجب أن يتكون من 16 رقم';
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
-                _FieldLabel('الاسم على البطاقة'),
+                const _FieldLabel('الاسم على البطاقة'),
                 TextFormField(
                   controller: _cardHolderController,
                   textCapitalization: TextCapitalization.characters,
@@ -151,7 +152,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _FieldLabel('تاريخ الانتهاء'),
+                          const _FieldLabel('تاريخ الانتهاء'),
                           TextFormField(
                             controller: _expiryController,
                             keyboardType: TextInputType.number,
@@ -177,7 +178,7 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _FieldLabel('رمز التحقق (CVV)'),
+                          const _FieldLabel('رمز التحقق (CVV)'),
                           TextFormField(
                             controller: _cvvController,
                             keyboardType: TextInputType.number,
@@ -192,8 +193,9 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                                   const Icon(Icons.help_outline, size: 18),
                             ),
                             validator: (v) {
-                              if (v == null || v.length < 3)
+                              if (v == null || v.length < 3) {
                                 return 'رمز غير صالح';
+                              }
                               return null;
                             },
                           ),
@@ -212,11 +214,11 @@ class _CardDetailsScreenState extends State<CardDetailsScreen> {
                         BorderRadius.circular(PaymentSpacing.radiusMd),
                     border: Border.all(color: PaymentColors.borderLight),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Icon(Icons.lock_outline,
+                      Icon(Icons.lock_outline,
                           color: PaymentColors.primaryDark),
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'بياناتك مشفرة وآمنة، نستخدم تشفير عالي المستوى لحماية معلوماتك أثناء عملية الدفع.',

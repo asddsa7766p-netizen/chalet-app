@@ -112,3 +112,18 @@
 - الاختبارات: `booking_period_test` جديد، وإعادة كتابة اختبارات ورقة الحجز اليدوي لنموذج اليوم الواحد، وتحديث اختبارات التقويم (بطاقتان بيوم واحد، امتداد المسائي الكامل) والنصوص.
 
 **البوابة:** analyze 230 (0 جديد مقارنة بالمرحلة 4). test: 339 نجاح.
+
+## المرحلة 8: صفر كود ميت وصفر ملاحظات — 🔄 جارية
+
+### 8أ — الملاحظات (215 ← 0)
+- `.withOpacity(x)` ← `.withValues(alpha: x)`: 97 موضعاً بـ 22 ملفاً (كل الوسائط أرقام حرفية، استبدال آلي بلا تغيير سلوك).
+- `dart fix` لرموز آمنة فقط: `prefer_const_*`، الأقواس، `unnecessary_import`، `unnecessary_to_list_in_spreads`، `prefer_final_fields` (≈63 إصلاحاً).
+- يدوياً:
+  - `app_theme`: حُذفت `background`/`onBackground` المهجورة من ColorScheme (لا شيء بالتطبيق يقرؤها، و`scaffoldBackgroundColor` مضبوط صراحة بالثيمين، فلا تغيير لوني).
+  - `login_screen`: الراوتر يُلتقط مرة واحدة قبل التنقّل (كان `context.push` داخل microtask بعد `context.go` يستخدم context شاشة أُزيلت، ونفس الشيء بعد await بالمفضلة)؛ فشل المفضلة المعلّقة ← `reportError`.
+  - **زر Google أُخفي:** الدالة كانت ترمي `UnimplementedError` دائماً (لا OAuth مضبوط) — حُذف الزر ودالته وحالته وفاصل "أو" بشاشة الدخول؛ لا حاجة لـ `google_logo.png`. الاختبار صار "الزر غير ظاهر".
+  - `booking_screen`: `RadioGroup` بدل `groupValue/onChanged` المهجورين (خيار الدفع الإلكتروني المعطّل عبر `Radio.enabled`)؛ حُذف `_chaletLoading` (يُكتب ولا يُقرأ).
+  - `DropdownButtonFormField.value` ← `initialValue` (3 مواضع؛ بـ SDK 3.35.7 `value` يُمرَّر حرفياً لـ `initialValue`، فالسلوك مطابق)؛ `Switch.activeColor` ← `activeThumbColor`.
+  - `owner_add_chalet_screen`: حُذف `_gold` واستيراد models غير المستخدمَين.
+
+**البوابة:** analyze: No issues found. test: 351 نجاح.

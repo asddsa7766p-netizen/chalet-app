@@ -1254,7 +1254,7 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
           key: _fieldKeys['city'],
           child: DropdownButtonFormField<String>(
             key: const ValueKey('field_city'),
-            value: cities.contains(_city) ? _city : null,
+            initialValue: cities.contains(_city) ? _city : null,
             isExpanded: true,
             decoration: InputDecoration(
               labelText: 'المدينة',

@@ -62,7 +62,7 @@ class PaymentReviewScreen extends StatelessWidget {
                 guestsLabel: '${booking.guestsCount} ضيف',
               ),
               const SizedBox(height: PaymentSpacing.sectionGap),
-              Text('ملخص الدفع', style: PaymentTextStyles.sectionTitle),
+              const Text('ملخص الدفع', style: PaymentTextStyles.sectionTitle),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(PaymentSpacing.cardPadding),
@@ -92,12 +92,12 @@ class PaymentReviewScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.lock_outline,
+                  Icon(Icons.lock_outline,
                       size: 14, color: PaymentColors.textSecondary),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   Text('لن يتم خصم أي مبلغ قبل تأكيد الدفع',
                       style: PaymentTextStyles.bodySecondary),
                 ],
@@ -115,7 +115,7 @@ class PaymentReviewScreen extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: PaymentColors.background,
                         shape: BoxShape.circle,
                       ),
@@ -123,13 +123,13 @@ class PaymentReviewScreen extends StatelessWidget {
                           color: PaymentColors.primaryDark, size: 20),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('لماذا نحمي بياناتك؟',
                               style: PaymentTextStyles.sectionTitle),
-                          const SizedBox(height: 4),
+                          SizedBox(height: 4),
                           Text(
                             'نتم جميع عمليات الدفع عبر بوابات دفع آمنة ومعتمدة ونضمن سرية بياناتك ولا نحتفظ بمعلومات بطاقتك.',
                             style: PaymentTextStyles.bodySecondary,

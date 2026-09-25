@@ -56,7 +56,7 @@ class PaymentFailedScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
+                const Text(
                   'لم يتم إتمام العملية، يرجى المحاولة مرة أخرى',
                   style: PaymentTextStyles.bodySecondary,
                   textAlign: TextAlign.center,
@@ -70,7 +70,7 @@ class PaymentFailedScreen extends StatelessWidget {
                     borderRadius:
                         BorderRadius.circular(PaymentSpacing.radiusMd),
                     border:
-                        Border.all(color: PaymentColors.error.withOpacity(0.3)),
+                        Border.all(color: PaymentColors.error.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,7 +133,7 @@ class PaymentFailedScreen extends StatelessWidget {
                     onPressed: SupportContact.open,
                     icon: const Icon(Icons.headset_mic_outlined,
                         size: 18, color: PaymentColors.textSecondary),
-                    label: Text(
+                    label: const Text(
                       'تحتاج مساعدة؟',
                       style: PaymentTextStyles.bodySecondary,
                     ),

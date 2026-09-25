@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:makan/presentation/screens/auth/auth_shared.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/error_reporter.dart';
 import '../../../data/services/services.dart';
 import '../home/main_screen.dart' show goToMainTab;
 
@@ -17,7 +18,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _loading = false;
-  bool _googleLoading = false;
   bool _obscure = true;
 
   @override
@@ -36,28 +36,27 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       // بعد نجاح تسجيل الدخول، استكمل أي إجراء معلّق كان محفوظاً قبل الطلب من المستخدم بتسجيل الدخول.
+      // الراوتر يُلتقط مرة واحدة: بعد go('/home') تُزال هذه الشاشة ويصبح context غير صالح
+      // داخل microtask أو بعد await.
+      final router = GoRouter.of(context);
       final pending = AuthRedirectService.consumePendingAction();
       if (pending != null) {
         switch (pending.type) {
           case 'open_booking':
             final chaletId = pending.data['chaletId'] as String?;
+            router.go('/home');
             if (chaletId != null) {
-              context.go('/home');
               Future.microtask(() =>
-                  context.push('/home/booking', extra: {'chaletId': chaletId}));
-            } else {
-              context.go('/home');
+                  router.push('/home/booking', extra: {'chaletId': chaletId}));
             }
             break;
           case 'open_reviews':
             final chaletId = pending.data['chaletId'] as String?;
             final chaletName = pending.data['chaletName'] as String? ?? '';
+            router.go('/home');
             if (chaletId != null) {
-              context.go('/home');
               Future.microtask(() =>
-                  context.push('/home/reviews/$chaletId', extra: chaletName));
-            } else {
-              context.go('/home');
+                  router.push('/home/reviews/$chaletId', extra: chaletName));
             }
             break;
           case 'toggle_favorite':
@@ -65,13 +64,13 @@ class _LoginScreenState extends State<LoginScreen> {
             if (chaletId != null) {
               try {
                 await FavoritesService.instance.toggleFavorite(chaletId);
-              } catch (_) {
-                // ⚠️ فشل صامت مقصود: تبديل المفضلة ثانوي هنا، لا نريد وقف تدفق تسجيل الدخول لأجله.
-                // لكن يفضّل تسجيله عبر أداة Logging/Crashlytics بدل تجاهله كلياً.
+              } catch (e, st) {
+                // تبديل المفضلة ثانوي هنا: لا نوقف تدفق تسجيل الدخول لأجله، لكن نسجّله.
+                reportError(e, st, context: 'login.pending_toggle_favorite');
               }
-              context.go('/home/chalet/$chaletId');
+              router.go('/home/chalet/$chaletId');
             } else {
-              context.go('/home');
+              router.go('/home');
             }
             break;
           case 'open_tab':
@@ -79,15 +78,14 @@ class _LoginScreenState extends State<LoginScreen> {
             goToMainTab(context, idx);
             break;
           case 'open_notifications':
-            final router = GoRouter.of(context);
             router.go('/home');
             Future.microtask(() => router.push('/notifications'));
             break;
           default:
-            context.go('/home');
+            router.go('/home');
         }
       } else {
-        context.go('/home');
+        router.go('/home');
       }
     } catch (e) {
       // ✅ إصلاح: رسالة خطأ تعكس نوع المشكلة الفعلي (بيانات خاطئة/شبكة/إلخ)
@@ -95,23 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) _showError(friendlyAuthError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loginWithGoogle() async {
-    setState(() => _googleLoading = true);
-    try {
-      // Google auth is intentionally not enabled in this build.
-      // We do not fake a successful login.
-      throw UnimplementedError('Google OAuth is not configured');
-    } on UnimplementedError {
-      if (!mounted) return;
-      _showError('تسجيل الدخول عبر Google غير متاح حالياً. سيتم تفعيله لاحقاً');
-    } catch (_) {
-      if (!mounted) return;
-      _showError('تعذّر تسجيل الدخول عبر Google');
-    } finally {
-      if (mounted) setState(() => _googleLoading = false);
     }
   }
 
@@ -211,11 +192,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         loading: _loading,
                         onTap: _login,
                       ),
-                      const SizedBox(height: 20),
-                      const AuthDivider(),
-                      const SizedBox(height: 20),
-                      _googleBtn(),
-                      const SizedBox(height: 20),
+                      // تسجيل الدخول عبر Google غير مفعّل بهذا الإصدار (لا OAuth مضبوط)،
+                      // فلا يُعرض زره بدل زر يُظهر رسالة "غير متاح".
+                      const SizedBox(height: 24),
                       Center(
                         child: GestureDetector(
                           onTap: () => context.push('/auth/register'),
@@ -248,44 +227,4 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
-  Widget _googleBtn() => SizedBox(
-        height: 52,
-        child: OutlinedButton(
-          onPressed: _googleLoading ? null : _loginWithGoogle,
-          style: OutlinedButton.styleFrom(
-            side: const BorderSide(color: AuthColors.fieldBorder),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          child: _googleLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2.2, color: AuthColors.darkGreen))
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // ✅ إصلاح: أيقونة Google محلية (asset) بدل تحميلها من الإنترنت
-                    // في كل مرة (أبطأ، يفشل بدون إنترنت، وفيه استدعاء خارجي غير ضروري).
-                    // ⚠️ ضِف asset باسم assets/images/google_logo.png في pubspec.yaml.
-                    Image.asset(
-                      'assets/images/google_logo.png',
-                      width: 18,
-                      height: 18,
-                      errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.g_mobiledata, size: 22),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text('تسجيل الدخول عبر Google',
-                        style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary)),
-                  ],
-                ),
-        ),
-      );
 }

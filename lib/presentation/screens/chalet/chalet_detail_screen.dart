@@ -466,7 +466,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                                 decoration: BoxDecoration(
                                   color: _currentImage == i
                                       ? Colors.white
-                                      : Colors.white.withOpacity(0.5),
+                                      : Colors.white.withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               ),
@@ -486,7 +486,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                               begin: Alignment.bottomCenter,
                               end: Alignment.topCenter,
                               colors: [
-                                Colors.black.withOpacity(0.4),
+                                Colors.black.withValues(alpha: 0.4),
                                 Colors.transparent
                               ],
                             ),
@@ -1227,7 +1227,9 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       PendingAuthAction('open_reviews', {
                         'chaletId': widget.chaletId,
                         'chaletName': _chalet?.name ?? ''
-                      }))) return;
+                      }))) {
+                    return;
+                  }
                   context.push('/home/reviews/${widget.chaletId}',
                       extra: _chalet?.name);
                 },
@@ -1347,7 +1349,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
         color: AppColors.card,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 20,
               offset: const Offset(0, -4))
         ],
@@ -1385,7 +1387,9 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                 if (!requireAuth(
                     context,
                     PendingAuthAction(
-                        'open_booking', {'chaletId': chalet.id}))) return;
+                        'open_booking', {'chaletId': chalet.id}))) {
+                  return;
+                }
                 context.push('/home/booking', extra: {'chaletId': chalet.id});
               },
               style: ElevatedButton.styleFrom(
