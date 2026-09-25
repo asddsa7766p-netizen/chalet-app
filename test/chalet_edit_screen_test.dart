@@ -40,6 +40,16 @@ FakeChaletEditDataSource _fake({Map<String, dynamic>? overrides}) =>
       row: sampleChaletRow(overrides: overrides ?? const {}),
     );
 
+/// نص المكتبة [path] كاملاً: الملف نفسه ثم كل ملف تعلنه بـ `part '...';`.
+String _librarySource(String path) {
+  final main = File(path).readAsStringSync();
+  final dir = File(path).parent.path;
+  final parts = RegExp(r"^part '([^']+)';", multiLine: true)
+      .allMatches(main)
+      .map((m) => File('$dir/${m.group(1)}').readAsStringSync());
+  return [main, ...parts].join('\n');
+}
+
 void main() {
   setUpAll(loadArabicTestFont);
 
@@ -919,9 +929,10 @@ void main() {
 
   // ==========================================================
   group('شاشة الإضافة (فحص المصدر: تعديل نصي وإخفاء حقلين)', () {
-    final src =
-        File('lib/presentation/screens/owner/chalet_form/owner_add_chalet_screen.dart')
-            .readAsStringSync();
+    // الشاشة مكتبة واحدة موزّعة على ملف رئيسي وملفات part، فالفحص على نصها
+    // كاملاً (الرئيسي + كل part يعلنه) لا على الملف الرئيسي وحده.
+    final src = _librarySource(
+        'lib/presentation/screens/owner/chalet_form/owner_add_chalet_screen.dart');
 
     test('حقلا الوديعة والحد الأدنى للليالي غير موجودين', () {
       expect(src.contains('مبلغ الوديعة'), isFalse);
