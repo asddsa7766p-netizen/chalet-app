@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/number_utils.dart';
 import '../../../data/models/chalet_model.dart';
 import '../../../data/services/services.dart';
 import '../../widgets/common/common_widgets.dart';
@@ -263,7 +264,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       hint: 'سعر أدنى',
                                       keyboardType: TextInputType.number,
                                       onChanged: (v) => draftMin =
-                                          double.tryParse(v.trim()),
+                                          parseLocalizedDouble(v),
                                     ),
                                   ),
                                   const SizedBox(width: 10),
@@ -274,7 +275,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                       hint: 'سعر أعلى',
                                       keyboardType: TextInputType.number,
                                       onChanged: (v) => draftMax =
-                                          double.tryParse(v.trim()),
+                                          parseLocalizedDouble(v),
                                     ),
                                   ),
                                 ],

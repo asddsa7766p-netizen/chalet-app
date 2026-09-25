@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/utils/number_utils.dart';
 import '../../../data/models/booking_period.dart';
 import '../../../data/services/chalet_slot_availability.dart';
 import '../../../data/services/pricing_service.dart';
@@ -88,14 +89,11 @@ String? validateManualGuestName(String? value) {
 
 /// يحوّل نص السعر لرقم (يقبل الأرقام العربية-الهندية وفاصلة عشرية "،" أو ",").
 double? parseManualPrice(String? value) {
-  var raw = (value ?? '').trim();
+  final raw = (value ?? '').trim();
   if (raw.isEmpty) return null;
-  const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
-  for (var i = 0; i < arabicDigits.length; i++) {
-    raw = raw.replaceAll(arabicDigits[i], '$i');
-  }
-  raw = raw.replaceAll('،', '.').replaceAll(',', '.').replaceAll(' ', '');
-  return double.tryParse(raw);
+  // الفاصلة (، أو ,) هنا عشرية، كما يكتبها المالك عادةً بالسعر.
+  return parseLocalizedDouble(
+      raw.replaceAll('،', '.').replaceAll(',', '.').replaceAll(' ', ''));
 }
 
 /// السيرفر يرفض السعر ≤ 0 (لا حجز مجاني)، فنرفضه هنا برسالة واضحة.

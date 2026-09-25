@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/number_utils.dart';
 import '../../../data/services/pricing_service.dart';
 import 'base_price_notice.dart';
 import 'effective_price_panel.dart';
@@ -57,7 +58,7 @@ class _PriceField {
   bool get dirty => text != savedText;
 
   double? get _parsed {
-    final v = double.tryParse(text);
+    final v = parseLocalizedDouble(text);
     if (v == null || (!allowNegative && v < 0)) return null;
     return v;
   }
@@ -82,7 +83,8 @@ class _PriceField {
   /// بعد حفظ ناجح للنص [savedFromText] (ربما تغيّر الحقل أثناء الحفظ).
   void markSaved(String savedFromText) {
     savedText = savedFromText;
-    savedValue = savedFromText.isEmpty ? null : double.tryParse(savedFromText);
+    savedValue =
+        savedFromText.isEmpty ? null : parseLocalizedDouble(savedFromText);
   }
 
   void reset() {
@@ -91,6 +93,82 @@ class _PriceField {
 }
 
 enum _LeaveChoice { save, discard, stay }
+
+typedef _DateOverrideInput = ({String price, String note});
+
+/// حوار "سعر خاص لتاريخ محدد": يرجع النصين عند الحفظ، أو null عند الإلغاء.
+class _DateOverrideDialog extends StatefulWidget {
+  const _DateOverrideDialog({required this.date, required this.scopeLabel});
+
+  final DateTime date;
+  final String scopeLabel;
+
+  @override
+  State<_DateOverrideDialog> createState() => _DateOverrideDialogState();
+}
+
+class _DateOverrideDialogState extends State<_DateOverrideDialog> {
+  final _price = TextEditingController();
+  final _note = TextEditingController();
+
+  @override
+  void dispose() {
+    _price.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.date;
+    return AlertDialog(
+      title: const Text('سعر خاص لتاريخ محدد',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${d.year}/${d.month}/${d.day}',
+            style:
+                const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.scopeLabel,
+            style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _price,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'السعر لهذا اليوم'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _note,
+            decoration: const InputDecoration(
+                labelText: 'ملاحظة (اختياري، مثلاً: عيد الفطر)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop<_DateOverrideInput>(
+              context, (price: _price.text.trim(), note: _note.text.trim())),
+          child: const Text('حفظ'),
+        ),
+      ],
+    );
+  }
+}
 
 class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
   static const String _defaultKey = ChaletPricingService.defaultStayType;
@@ -460,7 +538,7 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
       return false;
     }
     final baseText = base.text;
-    final baseValue = baseText.isEmpty ? null : double.tryParse(baseText);
+    final baseValue = baseText.isEmpty ? null : parseLocalizedDouble(baseText);
     final checkin = _draftCheckin[type]!;
     final checkout = _draftCheckout[type]!;
 
@@ -500,7 +578,7 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
   }) async {
     final initial = isCheckin ? _draftCheckin[type]! : _draftCheckout[type]!;
     final picked = await showTimePicker(context: context, initialTime: initial);
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     setState(() {
       if (isCheckin) {
         _draftCheckin[type] = picked;
@@ -537,7 +615,8 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
         await _ds.setWeekdayPrice(
           chaletId: widget.chaletId,
           weekday: day,
-          price: double.parse(text),
+          // الحقل صالح هنا (field.invalid فُحص أعلاه).
+          price: parseLocalizedDouble(text)!,
           stayType: key,
         );
       }
@@ -598,63 +677,20 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
     );
     if (pickedDate == null || !mounted) return;
 
-    final priceController = TextEditingController();
-    final noteController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
+    // الحوار يملك حقوله ويتخلّص منها بنفسه (كانت تُنشأ هنا ولا تُحرَّر أبداً).
+    final result = await showDialog<_DateOverrideInput>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('سعر خاص لتاريخ محدد',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${pickedDate.year}/${pickedDate.month}/${pickedDate.day}',
-              style: const TextStyle(
-                  fontFamily: 'Cairo', fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _selectedEditingType == _defaultKey
-                  ? 'لكل أنواع الإقامة (عام)'
-                  : 'لنوع: ${ChaletStayType.fromDb(_selectedEditingType).label}',
-              style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12,
-                  color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'السعر لهذا اليوم'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: noteController,
-              decoration: const InputDecoration(
-                  labelText: 'ملاحظة (اختياري، مثلاً: عيد الفطر)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('حفظ'),
-          ),
-        ],
+      builder: (_) => _DateOverrideDialog(
+        date: pickedDate,
+        scopeLabel: _selectedEditingType == _defaultKey
+            ? 'لكل أنواع الإقامة (عام)'
+            : 'لنوع: ${ChaletStayType.fromDb(_selectedEditingType).label}',
       ),
     );
 
-    if (confirmed != true) return;
+    if (result == null || !mounted) return;
 
-    final price = double.tryParse(priceController.text.trim());
+    final price = parseLocalizedDouble(result.price);
     if (price == null || price < 0) {
       _showSnack('سعر غير صحيح', isError: true);
       return;
@@ -667,9 +703,7 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
         chaletId: widget.chaletId,
         date: pickedDate,
         price: price,
-        note: noteController.text.trim().isEmpty
-            ? null
-            : noteController.text.trim(),
+        note: result.note.isEmpty ? null : result.note,
         stayType: key,
       );
       final overrides =
@@ -692,6 +726,7 @@ class _ChaletPricingScreenState extends State<ChaletPricingScreen> {
         date: item.date,
         stayType: _selectedEditingType,
       );
+      if (!mounted) return;
       setState(() {
         _dateOverrides.removeWhere((o) => o.date == item.date);
       });

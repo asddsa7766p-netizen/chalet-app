@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/number_utils.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/location_service.dart';
 import '../../../data/models/models.dart';
@@ -259,45 +260,6 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
     });
   }
 
-  Future<List<String>> _uploadNewImages(String chaletId) async {
-    final uploadedUrls = <String>[];
-
-    for (int i = 0; i < _newImages.length; i++) {
-      final xFile = _newImages[i];
-
-      String ext = 'jpg';
-      final path = xFile.path.toLowerCase();
-      if (!path.startsWith('blob:') && path.contains('.')) {
-        final candidate =
-            path.split('.').last.replaceAll(RegExp(r'[^a-z]'), '');
-        if (['jpg', 'jpeg', 'png', 'webp'].contains(candidate)) {
-          ext = candidate == 'jpeg' ? 'jpg' : candidate;
-        }
-      }
-
-      final contentType = ext == 'png'
-          ? 'image/png'
-          : ext == 'webp'
-              ? 'image/webp'
-              : 'image/jpeg';
-
-      final fileName =
-          'chalets/$chaletId/${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
-
-      try {
-        final bytes = i < _newImageBytes.length && _newImageBytes[i].isNotEmpty
-            ? _newImageBytes[i]
-            : await xFile.readAsBytes();
-
-        if (bytes.isEmpty) continue;
-      } catch (_) {
-        continue;
-      }
-    }
-
-    return uploadedUrls;
-  }
-
   void _removeNewImage(int index) {
     setState(() {
       _newImages.removeAt(index);
@@ -337,7 +299,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
       'owner_id': ownerId,
       'name': _nameCtrl.text.trim(),
       'description': _descCtrl.text.trim(),
-      'price_per_night': double.tryParse(_pricePerNightCtrl.text.trim()) ?? 0,
+      'price_per_night': parseLocalizedDouble(_pricePerNightCtrl.text) ?? 0,
       'location': (() {
         final loc = _locationCtrl.text.trim();
         if (loc.isNotEmpty) return loc;
@@ -350,7 +312,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
       // ضغط "استخدم موقعي الحالي" ونجح جلب GPS.
       'latitude': _latitude,
       'longitude': _longitude,
-      'max_guests': int.tryParse(_maxGuestsCtrl.text.trim()) ?? 1,
+      'max_guests': parseLocalizedInt(_maxGuestsCtrl.text) ?? 1,
       'bedrooms': _bedrooms,
       'bathrooms': _bathrooms,
       'has_pool': _pool,
@@ -511,7 +473,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
             prefixIcon: Icons.group_outlined,
             keyboardType: TextInputType.number,
             validator: (v) {
-              final val = int.tryParse(v?.trim() ?? '');
+              final val = parseLocalizedInt(v);
               if (val == null || val <= 0) return 'أدخل رقم صحيح';
               if (val > 200) return 'رقم غير منطقي';
               return null;
@@ -830,7 +792,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
             prefixIcon: Icons.attach_money_rounded,
             keyboardType: TextInputType.number,
             validator: (v) {
-              final val = double.tryParse(v?.trim() ?? '');
+              final val = parseLocalizedDouble(v);
               if (val == null || val <= 0) return 'أدخل رقم أكبر من صفر';
               return null;
             },
@@ -943,13 +905,23 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
     setState(() => _currentStep = _currentStep - 1);
   }
 
+  /// الرجوع (زر النظام أو سهم الأعلى): خطوة للخلف داخل المعالج، ومن
+  /// الخطوة الأولى خروج من الشاشة (بتأكيد إن وُجدت تعديلات).
+  Future<void> _handleBack() async {
+    if (_currentStep > 0 && !_saving) {
+      _handleStepCancel();
+      return;
+    }
+    await _handleScreenBack();
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        await _handleScreenBack();
+        await _handleBack();
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF7F4EC),
@@ -984,7 +956,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
       child: Row(
         children: [
           GestureDetector(
-            onTap: _saving ? null : _handleScreenBack,
+            onTap: _saving ? null : _handleBack,
             child: const CircleAvatar(
               radius: 18,
               backgroundColor: Colors.white,
@@ -1091,6 +1063,29 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
       ),
       child: Row(
         children: [
+          if (_currentStep > 0) ...[
+            SizedBox(
+              height: 52,
+              child: OutlinedButton(
+                key: const Key('add_chalet_prev_step'),
+                onPressed: _saving ? null : _handleStepCancel,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.sand),
+                  backgroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('السابق',
+                    style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.charcoal)),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: SizedBox(
               height: 52,
@@ -1323,7 +1318,7 @@ class _NumberFieldInputState extends State<_NumberFieldInput> {
           textAlign: TextAlign.start,
           keyboardType: TextInputType.number,
           onChanged: (s) {
-            final val = int.tryParse(s.trim()) ?? widget.min;
+            final val = parseLocalizedInt(s) ?? widget.min;
             final clamped = val.clamp(widget.min, widget.max);
             widget.onChanged(clamped);
           },

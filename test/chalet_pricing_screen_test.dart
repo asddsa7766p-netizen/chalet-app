@@ -230,6 +230,17 @@ void main() {
           findsOneWidget);
     });
 
+    testWidgets('أرقام عربية-هندية بحقل السعر مقبولة وتُحفظ كرقم',
+        (tester) async {
+      final ds = FakePricingDataSource();
+      await pumpPricingScreen(tester, ds);
+
+      await _type(tester, 'weekdayField_default_0', '١٥٠٠');
+      expect(find.text('سعر غير صحيح'), findsNothing);
+      await _tap(tester, 'weekdaySave_default_0');
+      expect(ds.log, ['weekday default:0=1500.0']);
+    });
+
     testWidgets('السعر الاحتياطي المكتوب يظهر بالجدول قبل الحفظ',
         (tester) async {
       final ds = FakePricingDataSource(stayTypes: [stayConfig(_morning)]);

@@ -1,3 +1,5 @@
+import '../../../core/utils/number_utils.dart';
+
 /// تحقق مدخلات شاشة تعديل الشاليه (واجهة فقط، لا يعتمد على أي قيد بالقاعدة).
 ///
 /// كل دالة ترجع رسالة خطأ بالعربية، أو null إن كانت القيمة صالحة. الحدود
@@ -22,36 +24,11 @@ class ChaletEditValidation {
   static const double palestineLngMin = 34.0;
   static const double palestineLngMax = 36.5;
 
-  /// يحوّل الأرقام العربية-الهندية والفارسية إلى لاتينية، والفاصلة العشرية
-  /// العربية إلى نقطة (لوحات المفاتيح العربية تكتبها، و`tryParse` يرفضها).
-  static String normalizeDigits(String input) {
-    final b = StringBuffer();
-    for (final unit in input.runes) {
-      if (unit >= 0x0660 && unit <= 0x0669) {
-        b.writeCharCode(0x30 + unit - 0x0660);
-      } else if (unit >= 0x06F0 && unit <= 0x06F9) {
-        b.writeCharCode(0x30 + unit - 0x06F0);
-      } else if (unit == 0x066B) {
-        b.write('.');
-      } else if (unit == 0x066C) {
-        // فاصل الآلاف العربي: يُحذف
-      } else {
-        b.writeCharCode(unit);
-      }
-    }
-    return b.toString();
-  }
-
   /// عدد صحيح فقط (يرفض الكسور والنص). null إن لم يكن صالحاً.
-  static int? parseInt(String input) =>
-      int.tryParse(normalizeDigits(input).trim());
+  static int? parseInt(String input) => parseLocalizedInt(input);
 
   /// رقم عشري منتهٍ (يرفض NaN وInfinity). null إن لم يكن صالحاً.
-  static double? parseNumber(String input) {
-    final v = double.tryParse(normalizeDigits(input).trim());
-    if (v == null || !v.isFinite) return null;
-    return v;
-  }
+  static double? parseNumber(String input) => parseLocalizedDouble(input);
 
   static String? name(String v) {
     final t = v.trim();

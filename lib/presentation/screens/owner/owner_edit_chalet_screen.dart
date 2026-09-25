@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/number_utils.dart';
 import '../../../data/services/location_service.dart';
 import 'chalet_edit_data_source.dart';
 import 'chalet_edit_model.dart';
@@ -208,7 +209,7 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
   // ==========================================================
 
   static String _canon(String s) {
-    final t = ChaletEditValidation.normalizeDigits(s).trim();
+    final t = normalizeDigits(s).trim();
     final v = double.tryParse(t);
     return (v == null || !v.isFinite) ? t : v.toString();
   }

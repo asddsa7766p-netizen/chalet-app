@@ -140,6 +140,14 @@ void main() {
       expect(msg.contains('مالك'), isFalse);
     });
 
+    test('رفض الحجز متعدد الأيام يُعرض بنص السيرفر كما هو', () {
+      const raw = 'PostgrestException(message: الحجز يكون ليوم واحد وفترة '
+          'واحدة فقط, code: 22023, details: null, hint: null)';
+      expect(translateSupabaseError(raw), 'الحجز يكون ليوم واحد وفترة واحدة فقط');
+      expect(translateSupabaseError('code: 23505 الحجز يكون ليوم واحد وفترة واحدة فقط'),
+          singleDayOnlyMessage);
+    });
+
     test('حروف كبيرة وصغيرة لا تهم', () {
       expect(translateSupabaseError('BOOKING CONFLICT: AVAILABILITY UNAVAILABLE'),
           unavailableDatesMessage);

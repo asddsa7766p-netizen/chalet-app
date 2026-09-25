@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'services.dart' show translateSupabaseError;
+
 /// أنواع الإقامة المدعومة — تطابق check constraint بجدول chalet_stay_types
 /// بقاعدة البيانات: ('morning','evening','full_day_morning','full_day_evening').
 ///
@@ -258,54 +260,63 @@ class ChaletPricingService {
     return all.where((t) => t.isEnabled).toList();
   }
 
+  /// كل كتابة أسعار تمرّ من هنا: خطأ القاعدة (صلاحيات/قيود) يصل للمستدعي
+  /// كرسالة عربية واضحة بدل استثناء PostgREST الخام — بيانات مالية حقيقية.
+  Future<void> _write(Future<void> Function() op) async {
+    try {
+      await op();
+    } catch (e) {
+      throw Exception(translateSupabaseError(e));
+    }
+  }
+
   /// يحفظ/يحدّث إعداد نوع إقامة (يفعّله ويحدد أوقاته وسعره الأساسي).
   Future<void> upsertStayType({
     required String chaletId,
     required ChaletStayTypeConfig config,
-  }) async {
-    await _supabase.from('chalet_stay_types').upsert(
-          config.toInsertJson(chaletId),
-          onConflict: 'chalet_id,stay_type',
-        );
-  }
+  }) =>
+      _write(() => _supabase.from('chalet_stay_types').upsert(
+            config.toInsertJson(chaletId),
+            onConflict: 'chalet_id,stay_type',
+          ));
 
   /// يعطّل نوع إقامة (بدون حذف بياناته/أسعاره المرتبطة به).
   Future<void> setStayTypeEnabled({
     required String chaletId,
     required ChaletStayType type,
     required bool isEnabled,
-  }) async {
-    await _supabase
-        .from('chalet_stay_types')
-        .update({
-          'is_enabled': isEnabled,
-          'updated_at': DateTime.now().toIso8601String()
-        })
-        .eq('chalet_id', chaletId)
-        .eq('stay_type', type.dbValue);
-  }
+  }) =>
+      _write(() => _supabase
+          .from('chalet_stay_types')
+          .update({
+            'is_enabled': isEnabled,
+            'updated_at': DateTime.now().toIso8601String()
+          })
+          .eq('chalet_id', chaletId)
+          .eq('stay_type', type.dbValue));
 
   /// يحذف نوع إقامة نهائيًا مع كل أسعاره اليومية/الخاصة المرتبطة به.
   Future<void> deleteStayType({
     required String chaletId,
     required ChaletStayType type,
-  }) async {
-    await _supabase
-        .from('chalet_weekday_prices')
-        .delete()
-        .eq('chalet_id', chaletId)
-        .eq('stay_type', type.dbValue);
-    await _supabase
-        .from('chalet_date_prices')
-        .delete()
-        .eq('chalet_id', chaletId)
-        .eq('stay_type', type.dbValue);
-    await _supabase
-        .from('chalet_stay_types')
-        .delete()
-        .eq('chalet_id', chaletId)
-        .eq('stay_type', type.dbValue);
-  }
+  }) =>
+      _write(() async {
+        await _supabase
+            .from('chalet_weekday_prices')
+            .delete()
+            .eq('chalet_id', chaletId)
+            .eq('stay_type', type.dbValue);
+        await _supabase
+            .from('chalet_date_prices')
+            .delete()
+            .eq('chalet_id', chaletId)
+            .eq('stay_type', type.dbValue);
+        await _supabase
+            .from('chalet_stay_types')
+            .delete()
+            .eq('chalet_id', chaletId)
+            .eq('stay_type', type.dbValue);
+      });
 
   // ==========================================================
   // السعر الأسبوعي (لكل نوع إقامة، أو 'default' للسلوك القديم)
@@ -336,32 +347,30 @@ class ChaletPricingService {
     required int weekday,
     required double price,
     String stayType = defaultStayType,
-  }) async {
-    await _supabase.from('chalet_weekday_prices').upsert(
-      {
-        'chalet_id': chaletId,
-        'weekday': weekday,
-        'stay_type': stayType,
-        'price': price,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      onConflict: 'chalet_id,weekday,stay_type',
-    );
-  }
+  }) =>
+      _write(() => _supabase.from('chalet_weekday_prices').upsert(
+            {
+              'chalet_id': chaletId,
+              'weekday': weekday,
+              'stay_type': stayType,
+              'price': price,
+              'updated_at': DateTime.now().toIso8601String(),
+            },
+            onConflict: 'chalet_id,weekday,stay_type',
+          ));
 
   /// يحذف سعر يوم أسبوع معيّن لنوع إقامة معيّن.
   Future<void> clearWeekdayPrice({
     required String chaletId,
     required int weekday,
     String stayType = defaultStayType,
-  }) async {
-    await _supabase
-        .from('chalet_weekday_prices')
-        .delete()
-        .eq('chalet_id', chaletId)
-        .eq('weekday', weekday)
-        .eq('stay_type', stayType);
-  }
+  }) =>
+      _write(() => _supabase
+          .from('chalet_weekday_prices')
+          .delete()
+          .eq('chalet_id', chaletId)
+          .eq('weekday', weekday)
+          .eq('stay_type', stayType));
 
   // ==========================================================
   // أسعار خاصة بتواريخ محددة (لكل نوع إقامة، أو 'default')
@@ -402,19 +411,19 @@ class ChaletPricingService {
     required double price,
     String? note,
     String stayType = defaultStayType,
-  }) async {
+  }) {
     final dateStr = date.toIso8601String().split('T').first;
-    await _supabase.from('chalet_date_prices').upsert(
-      {
-        'chalet_id': chaletId,
-        'date': dateStr,
-        'stay_type': stayType,
-        'price': price,
-        'note': note,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      onConflict: 'chalet_id,date,stay_type',
-    );
+    return _write(() => _supabase.from('chalet_date_prices').upsert(
+          {
+            'chalet_id': chaletId,
+            'date': dateStr,
+            'stay_type': stayType,
+            'price': price,
+            'note': note,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          onConflict: 'chalet_id,date,stay_type',
+        ));
   }
 
   /// يحذف السعر الخاص لتاريخ معيّن ونوع إقامة معيّن.
@@ -422,14 +431,14 @@ class ChaletPricingService {
     required String chaletId,
     required DateTime date,
     String stayType = defaultStayType,
-  }) async {
+  }) {
     final dateStr = date.toIso8601String().split('T').first;
-    await _supabase
+    return _write(() => _supabase
         .from('chalet_date_prices')
         .delete()
         .eq('chalet_id', chaletId)
         .eq('date', dateStr)
-        .eq('stay_type', stayType);
+        .eq('stay_type', stayType));
   }
 
   // ==========================================================

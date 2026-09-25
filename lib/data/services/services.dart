@@ -21,6 +21,9 @@ final supabase = Supabase.instance.client;
 const unavailableDatesMessage =
     'هذا اليوم غير متاح للحجز. اختر يوماً آخر.';
 
+/// رفض السيرفر لأي حجز ليس يوماً واحداً (enforce_single_day_booking).
+const singleDayOnlyMessage = 'الحجز يكون ليوم واحد وفترة واحدة فقط';
+
 /// تعارض فترة محجوزة (exclusion/overlap بالقاعدة).
 const periodTakenMessage = 'هذه الفترة محجوزة، جرّب فترة أو يوماً آخر';
 
@@ -33,12 +36,19 @@ const bookingPeriodColumns =
 const bookingNotUpdatedMessage =
     'تعذر تحديث الحجز: غير مصرح لك به أو لم يعد موجوداً.';
 
-@visibleForTesting
+/// ترجمة خطأ Supabase لرسالة عربية للمستخدم — للخدمات خارج هذا الملف
+/// (مثل ChaletPricingService) حتى تعرض نفس الرسائل.
 String translateSupabaseError(dynamic error) => _translateSupabaseError(error);
 
 String _translateSupabaseError(dynamic error) {
   final msg = error.toString();
   final normalized = msg.toLowerCase();
+
+  // trigger enforce_single_day_booking (ERRCODE 22023): رسالة السيرفر نفسها
+  // موجّهة للمستخدم، فتُعرض كما هي. تسبق كل الفروع الأخرى.
+  if (msg.contains(singleDayOnlyMessage)) {
+    return singleDayOnlyMessage;
+  }
 
   // يجب أن يسبق فرع "booking conflict" العام أدناه: رسالة الـ trigger
   // "Booking conflict: availability unavailable" تحتويه، وكانت ستُعرض

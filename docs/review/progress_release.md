@@ -65,8 +65,16 @@
 
 **البوابة:** analyze 231 (0 جديد). test: 328 نجاح.
 
-## المرحلة 5 — ⏸ مؤجَّلة في stash
-نُفّذت (normalizeDigits إلى core/utils، try/catch لكتابات الأسعار، dispose وmounted بشاشة الأسعار، حذف _uploadNewImages وزر "السابق" بمعالج إضافة الشاليه) لكن لم تمر بوابتها بعد؛ أوقفها المستخدم لصالح المرحلة 4.5. محفوظة في `stash@{0}` وتُستعاد بعدها.
+## المرحلة 5: التسعير والنماذج — ✅ منتهية (بعد 4.5)
+استُعيدت من الـ stash؛ التعارض الوحيد استيرادان بـ manual_booking_sheet (كلاهما مطلوب).
+- `lib/core/utils/number_utils.dart`: `normalizeDigits` (نُقلت من ChaletEditValidation) + `parseLocalizedInt/Double`؛ مستخدمة بحقول الأسعار والأرقام في: شاشة الأسعار (كل الحقول وحوار السعر الخاص)، إضافة الشاليه (السعر والضيوف والعدّادات)، تعديل الشاليه، البحث (السعر الأدنى/الأعلى)، وسعر الحجز اليدوي.
+- `pricing_service`: كل دوال الكتابة السبع عبر `_write` (try/catch + `translateSupabaseError` الذي صار API عاماً).
+- `chalet_pricing_screen`: حوار السعر الخاص صار StatefulWidget يملك Controllers ويتخلّص منها (كانت تُنشأ ولا تُحرَّر)، وفحص `mounted` بعد الحذف ومنتقي الوقت.
+- `owner_add_chalet_screen`: حُذفت `_uploadNewImages` الميتة (لا مستدعٍ، grep)، وربط `_handleStepCancel`: زر "السابق" بالشريط السفلي، والرجوع (النظام/السهم) يعود خطوة قبل مغادرة المعالج.
+- رسالة السيرفر الجديدة "الحجز يكون ليوم واحد وفترة واحدة فقط" (trigger `enforce_single_day_booking`، ERRCODE 22023) تُعرض كما هي (`singleDayOnlyMessage`، أول فرع بـ `_translateSupabaseError`).
+- اختبارات: `number_utils_test`، أرقام عربية بحقل السعر الأسبوعي تُحفظ، رسالة اليوم الواحد.
+
+**البوابة:** analyze 226 (0 جديد). test: 344 نجاح.
 
 ## المرحلة 4.5: يوم واحد + فترة واحدة — ✅ منتهية
 (تحقق من القاعدة الحية: لا دالة تستخدم min_nights؛ booking_slots وتحقق التداخل والسعر كلها تعمل بـ check_out = اليوم التالي؛ bookings_stay_type_check يقبل 'default'؛ نصوص الإشعارات يولّدها trigger بلا تواريخ فلا تغيير عليها؛ ~16 حجزاً قديماً ممتداً لعدة أيام موجودة فعلاً.)

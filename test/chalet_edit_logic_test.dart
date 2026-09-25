@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:makan/core/utils/number_utils.dart';
 import 'package:makan/presentation/screens/owner/chalet_edit_model.dart';
 import 'package:makan/presentation/screens/owner/chalet_edit_validation.dart';
 
@@ -58,11 +59,11 @@ ChaletEditValues _with(
 void main() {
   group('الأرقام العربية والتحليل', () {
     test('normalizeDigits يحوّل العربية-الهندية والفارسية والفاصلة العشرية', () {
-      expect(V.normalizeDigits('٠١٢٣٤٥٦٧٨٩'), '0123456789');
-      expect(V.normalizeDigits('۰۱۲۳۴۵۶۷۸۹'), '0123456789');
-      expect(V.normalizeDigits('٣٢٫٥'), '32.5');
-      expect(V.normalizeDigits('١٬٢٠٠'), '1200');
-      expect(V.normalizeDigits('abc 12'), 'abc 12');
+      expect(normalizeDigits('٠١٢٣٤٥٦٧٨٩'), '0123456789');
+      expect(normalizeDigits('۰۱۲۳۴۵۶۷۸۹'), '0123456789');
+      expect(normalizeDigits('٣٢٫٥'), '32.5');
+      expect(normalizeDigits('١٬٢٠٠'), '1200');
+      expect(normalizeDigits('abc 12'), 'abc 12');
     });
     test('parseInt يرفض الكسور والنص', () {
       expect(V.parseInt(' ١٠ '), 10);
