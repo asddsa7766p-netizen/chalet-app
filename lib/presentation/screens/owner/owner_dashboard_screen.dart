@@ -442,14 +442,9 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
   Widget _buildStatsGrid() {
     final s = _stats;
 
-    // إجمالي الحجوزات (المؤكدة تقريبًا) = الإجمالي - الملغاة/المرفوضة.
-    // ⚠️ TODO: هذا تقدير مبني على الحقول المتاحة حاليًا فقط، وليس عدّاً
-    // دقيقًا لحالة "مؤكد" فعلية من قاعدة البيانات. لو عندك عمود/دالة
-    // فعلية لعدد الحجوزات "المؤكدة" تحديدًا، استبدل هذا بها.
-    final total = s?.totalBookingsSpot ?? 0;
-    final cancelled =
-        (s?.cancelledByUser ?? 0) + (s?.cancelledOrRejectedByOwner ?? 0);
-    final confirmed = (total - cancelled).clamp(0, total);
+    // عدّ فعلي لحالة confirmed/completed بنطاق اليوم (كان "الإجمالي ناقص
+    // الملغاة"، فيشمل الطلبات المعلّقة).
+    final confirmed = s?.confirmedBookings ?? 0;
 
     return GridView.count(
       crossAxisCount: 2,

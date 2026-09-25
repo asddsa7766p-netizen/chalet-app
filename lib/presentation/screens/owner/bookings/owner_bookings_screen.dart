@@ -412,7 +412,8 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
                 // ✅ عرض فقط (DISPLAY-ONLY): تفاصيل عمولة المنصة للمالك —
                 // لا تُخصم فعليًا من أي مبلغ ولا تغير bookings.total_price.
                 // مخفية للحجز اليدوي: نسبة العمولة لا تنطبق على حجز خارج المنصة.
-                if (!isManual) ...[
+                // ومخفية للكل ما دام kShowPlatformCommission = false.
+                if (kShowPlatformCommission && !isManual) ...[
                   _buildOwnerPriceBreakdown(b),
                   const SizedBox(height: 12),
                 ],

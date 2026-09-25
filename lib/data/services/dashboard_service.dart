@@ -68,6 +68,10 @@ class OwnerDashboardStats {
 
   final double avgDailyBookings;
 
+  /// الحجوزات المؤكدة (confirmed أو completed) بالنطاق — نفس الحجوزات التي
+  /// تُحسب بالإيرادات، بلا المعلّقة ولا الملغاة/المرفوضة.
+  final int confirmedBookings;
+
   /// Per chalet breakdown (legacy)
   final List<OwnerDashboardChaletBreakdown> byChalet;
   final List<OwnerDashboardChaletRevenueBreakdown> byChaletRevenue;
@@ -83,6 +87,7 @@ class OwnerDashboardStats {
     required this.cancelledByUser,
     required this.cancelledOrRejectedRatioPercent,
     required this.avgDailyBookings,
+    required this.confirmedBookings,
     required this.byChalet,
     required this.byChaletRevenue,
   });
@@ -100,6 +105,7 @@ class OwnerDashboardStats {
         cancelledByUser: 0,
         cancelledOrRejectedRatioPercent: 0,
         avgDailyBookings: 0,
+        confirmedBookings: 0,
         byChalet: [],
         byChaletRevenue: [],
       );
@@ -190,6 +196,7 @@ class DashboardService {
     double totalRevenueExternal = 0;
     int cancelledOrRejectedByOwner = 0;
     int cancelledByUser = 0;
+    int confirmedBookings = 0;
 
     // تجميع لكل شاليه: عدد الحجوزات والإيرادات (فقط الحجوزات confirmed أو
     // completed تُحتسب ضمن "الإيرادات"، بما يطابق منطق الـ views السابقة
@@ -226,6 +233,8 @@ class DashboardService {
           cancelledByUser++;
         }
       }
+
+      if (isRevenueCounted) confirmedBookings++;
 
       if (isRevenueCounted && chaletId.isNotEmpty) {
         final agg =
@@ -284,6 +293,7 @@ class DashboardService {
       cancelledByUser: cancelledByUser,
       cancelledOrRejectedRatioPercent: cancelledOrRejectedRatioPercent,
       avgDailyBookings: avgDailyBookings,
+      confirmedBookings: confirmedBookings,
       byChalet: byChalet,
       byChaletRevenue: byChaletRevenue,
     );
