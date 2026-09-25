@@ -212,3 +212,21 @@
 - اختبارات: `account_deletion_test.dart` (10: نجاح، رفض بحجوزات، رفض بشاليهات، إلغاء الحوار، الضيف، الزر معطّل قبل "حذف"، رسائل الخطأ، 3 لحجز محذوف/قائم/يدوي) و`register_terms_link_test.dart`.
 
 **البوابة:** analyze: No issues found. test: 369 نجاح.
+
+## المرحلة 9: ترتيب الملفات — 🔄 جارية (tag `before-phase9` = `c2a8b35`)
+**الآلية:** نقل فقط. النقل بين المجلدات بسكربت يعيد حساب كل import/export نسبي و`package:makan/` بعد `git mv`. التقسيم:
+- الكلاسات المستقلة ← ملفات/مكتبات منفصلة كما هي.
+- ما يتشارك رموزاً خاصة (`_x`) ← ملفات `part` (المكتبة نفسها، بلا أي إعادة تسمية)؛ `services.dart` و`models.dart` صارا مجرد imports + `part` فلا يتغير أي استيراد بالمشروع.
+- الشاشات ذات الـ State الواحد الضخم: دوال `_build…` تُنقل **حرفياً** إلى ملفات `part` كـ extension خاص على الـ State. (الجدول قال "ودجات StatelessWidget"؛ عدلت للآلية الأقل خطراً لأن النص ينتقل كما هو.) extension لا يستطيع استدعاء `setState` المحمي بلا تحذير analyzer (مُثبت باختبار)، فالمنقول يستدعي `_setState` — سطر واحد بالـ State يمرّر لـ `setState`؛ والثوابت `static` التي يحتاجها تصير ثوابت خاصة بمستوى المكتبة.
+
+| commit | ما نُفّذ |
+|---|---|
+| `042b97b` | `unavailable_nights.dart` ← `rpc_caller.dart`؛ `locale_notifier` و`app_state_providers` ← `core/settings/` |
+| `dfe97ed` | `payment_widgets` ← `payment/widgets/`، `payment_theme` ← `payment/` (حُذف مجلدا `screens/widgets` و`screens/theme` الفارغان) |
+| `808a82e` | `owner/` ← `bookings/`، `calendar/`، `chalet_form/`، `pricing/`؛ `owner_notifications_screen` ← `owner/`. اختبار `chalet_edit_screen_test` يقرأ مصدر شاشة الإضافة بمسارها — حُدّث المسار فقط |
+| `0454708` | `favorites_screen` (1088) ← `favorites/` (228) + `bookings/my_bookings_screen.dart` (521) + `reviews/reviews_screen.dart` (375) |
+| `dc35914` | `services.dart` (1204) ← 6 أجزاء (أكبرها booking_service 341)؛ `models.dart` (272) ← 3 أجزاء |
+
+⚠️ حادثة وحيدة: أمر تقسيم models.dart نُفّذ مرتين (الأول بالرد الذي قاطعه "اكمل")، فالثاني كتب فوق ملفات الأجزاء بمحتوى فارغ. لم يُفقد شيء: models.dart لم يكن مُلتزماً، استُرجع من git وأُعيد التقسيم مرة واحدة؛ والسكربت صار يرفض الكتابة فوق ملف موجود أو نطاق خارج الملف.
+
+كل commit: analyze نظيف + 369 نجاح.
