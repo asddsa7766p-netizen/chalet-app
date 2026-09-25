@@ -1,6 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'unavailable_nights.dart' show RpcCaller;
+import 'rpc_caller.dart' show RpcCaller;
 
 /// توفر يوم واحد بشاليه: هل الفترة الصباحية محجوزة، هل الفترة المسائية
 /// محجوزة، وهل اليوم محجوب بالكامل من المالك (بغض النظر عن الحجوزات).

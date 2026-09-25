@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/theme/app_state_providers.dart';
+import '../../../core/settings/app_state_providers.dart';
 
 class LanguageBottomSheet extends ConsumerWidget {
   const LanguageBottomSheet({super.key});

@@ -8,7 +8,7 @@ import '../../core/utils/date_utils.dart';
 import '../models/chalet_model.dart';
 import '../models/models.dart';
 import 'chalet_slot_availability.dart';
-import 'unavailable_nights.dart';
+import 'rpc_caller.dart';
 import '../../core/utils/error_reporter.dart';
 
 // ============================================

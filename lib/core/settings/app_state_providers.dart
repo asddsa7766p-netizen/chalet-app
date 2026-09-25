@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'locale_notifier.dart';
-import 'theme_notifier.dart';
+import '../theme/theme_notifier.dart';
 
 /// Theme + Locale providers.
 ///
