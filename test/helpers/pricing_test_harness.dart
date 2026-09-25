@@ -6,8 +6,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:makan/core/constants/app_colors.dart';
 import 'package:makan/data/services/pricing_service.dart';
-import 'package:makan/presentation/screens/owner/chalet_pricing_screen.dart';
-import 'package:makan/presentation/screens/owner/pricing_data_source.dart';
+import 'package:makan/presentation/screens/owner/pricing/chalet_pricing_screen.dart';
+import 'package:makan/presentation/screens/owner/pricing/pricing_data_source.dart';
 
 /// بيانات تجريبية داخل الاختبار فقط — لا اتصال بقاعدة بيانات ولا بالتطبيق
 /// الحقيقي.

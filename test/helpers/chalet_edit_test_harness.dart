@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:makan/presentation/screens/owner/chalet_edit_data_source.dart';
-import 'package:makan/presentation/screens/owner/owner_edit_chalet_screen.dart';
+import 'package:makan/presentation/screens/owner/chalet_form/chalet_edit_data_source.dart';
+import 'package:makan/presentation/screens/owner/chalet_form/owner_edit_chalet_screen.dart';
 
 import 'pricing_test_harness.dart' show testTheme;
 

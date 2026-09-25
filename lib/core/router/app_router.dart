@@ -15,9 +15,9 @@ import '../../presentation/screens/chalet/chalet_detail_screen.dart';
 import '../../presentation/screens/booking/booking_screen.dart';
 import '../../presentation/screens/owner/owner_dashboard_screen.dart';
 import '../../presentation/screens/owner/owner_chalets_screen.dart';
-import '../../presentation/screens/owner/owner_bookings_screen.dart';
-import '../../presentation/screens/owner/owner_calendar_screen.dart';
-import '../../presentation/screens/owner/owner_external_screen.dart';
+import '../../presentation/screens/owner/bookings/owner_bookings_screen.dart';
+import '../../presentation/screens/owner/calendar/owner_calendar_screen.dart';
+import '../../presentation/screens/owner/bookings/owner_external_screen.dart';
 import '../../presentation/screens/owner/owner_profile_screen.dart';
 import '../../presentation/screens/map/palestine_chalets_map_screen.dart';
 import '../../presentation/screens/notifications/notifications_screen.dart';
@@ -26,9 +26,9 @@ import '../../data/models/models.dart';
 import '../../data/services/services.dart';
 import '../utils/error_reporter.dart';
 
-import '../../presentation/screens/owner/owner_add_chalet_screen.dart';
+import '../../presentation/screens/owner/chalet_form/owner_add_chalet_screen.dart';
 import '../../presentation/screens/admin/admin_dashboard_screen.dart';
-import '../../presentation/screens/notifications/owner_notifications_screen.dart';
+import '../../presentation/screens/owner/owner_notifications_screen.dart';
 import '../../presentation/screens/owner/owner_reports_screen.dart';
 
 class AppRouter {

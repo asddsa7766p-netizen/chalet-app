@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:makan/data/services/pricing_service.dart';
-import 'package:makan/presentation/screens/owner/chalet_pricing_screen.dart';
+import 'package:makan/presentation/screens/owner/pricing/chalet_pricing_screen.dart';
 
 import 'helpers/pricing_test_harness.dart';
 

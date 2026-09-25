@@ -1,4 +1,4 @@
-import '../../../data/services/pricing_service.dart';
+import '../../../../data/services/pricing_service.dart';
 
 /// واجهة رفيعة بين شاشة تسعير المالك وخدمة التسعير.
 ///

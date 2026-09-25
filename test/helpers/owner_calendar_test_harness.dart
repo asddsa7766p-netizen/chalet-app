@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:makan/data/models/models.dart';
 import 'package:makan/data/services/chalet_slot_availability.dart';
 import 'package:makan/data/services/pricing_service.dart';
-import 'package:makan/presentation/screens/owner/owner_calendar_data_source.dart';
-import 'package:makan/presentation/screens/owner/owner_calendar_screen.dart';
+import 'package:makan/presentation/screens/owner/calendar/owner_calendar_data_source.dart';
+import 'package:makan/presentation/screens/owner/calendar/owner_calendar_screen.dart';
 
 import 'pricing_test_harness.dart';
 

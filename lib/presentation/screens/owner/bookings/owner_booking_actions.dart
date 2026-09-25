@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../data/services/services.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../data/services/services.dart';
 
 typedef BookingAction = Future<void> Function(String bookingId);
 

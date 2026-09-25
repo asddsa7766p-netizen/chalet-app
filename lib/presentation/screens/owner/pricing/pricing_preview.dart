@@ -1,4 +1,4 @@
-import '../../../data/services/pricing_service.dart';
+import '../../../../data/services/pricing_service.dart';
 
 /// حساب "السعر الفعلي" لعرضه بشاشة تسعير المالك (عرض فقط).
 ///

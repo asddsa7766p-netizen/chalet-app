@@ -5,8 +5,8 @@ import 'package:makan/data/models/manual_booking.dart';
 import 'package:makan/data/models/models.dart';
 import 'package:makan/data/services/chalet_slot_availability.dart';
 import 'package:makan/data/services/pricing_service.dart';
-import 'package:makan/presentation/screens/owner/manual_booking_actions.dart';
-import 'package:makan/presentation/screens/owner/manual_booking_sheet.dart';
+import 'package:makan/presentation/screens/owner/bookings/manual_booking_actions.dart';
+import 'package:makan/presentation/screens/owner/bookings/manual_booking_sheet.dart';
 
 BookingModel _booking({
   String source = 'app',

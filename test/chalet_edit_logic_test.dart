@@ -2,8 +2,8 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:makan/core/utils/number_utils.dart';
-import 'package:makan/presentation/screens/owner/chalet_edit_model.dart';
-import 'package:makan/presentation/screens/owner/chalet_edit_validation.dart';
+import 'package:makan/presentation/screens/owner/chalet_form/chalet_edit_model.dart';
+import 'package:makan/presentation/screens/owner/chalet_form/chalet_edit_validation.dart';
 
 import 'helpers/chalet_edit_test_harness.dart' show chaletImageUrl, sampleChaletRow;
 

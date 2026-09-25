@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/notification_service.dart';
-import 'owner_add_chalet_screen.dart';
-import 'owner_edit_chalet_screen.dart';
-import 'chalet_pricing_screen.dart';
+import 'chalet_form/owner_add_chalet_screen.dart';
+import 'chalet_form/owner_edit_chalet_screen.dart';
+import 'pricing/chalet_pricing_screen.dart';
 import 'owner_bottom_nav.dart';
 
 /// شاشة "شاليهاتي".

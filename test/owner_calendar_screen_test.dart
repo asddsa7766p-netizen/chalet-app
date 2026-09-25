@@ -4,9 +4,9 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:makan/data/models/models.dart';
 import 'package:makan/data/services/chalet_slot_availability.dart';
 import 'package:makan/data/services/pricing_service.dart';
-import 'package:makan/presentation/screens/owner/owner_calendar_data_source.dart';
-import 'package:makan/presentation/screens/owner/owner_calendar_logic.dart';
-import 'package:makan/presentation/screens/owner/owner_calendar_widgets.dart';
+import 'package:makan/presentation/screens/owner/calendar/owner_calendar_data_source.dart';
+import 'package:makan/presentation/screens/owner/calendar/owner_calendar_logic.dart';
+import 'package:makan/presentation/screens/owner/calendar/owner_calendar_widgets.dart';
 
 import 'helpers/owner_calendar_test_harness.dart';
 import 'helpers/pricing_test_harness.dart' show loadArabicTestFont;

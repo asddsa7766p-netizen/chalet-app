@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../data/services/services.dart' show ChaletService;
+import '../../../../data/services/services.dart' show ChaletService;
 import 'chalet_edit_model.dart';
 
 /// واجهة رفيعة بين شاشة تعديل الشاليه والباك إند (لتمكين اختبارها بلا Supabase).

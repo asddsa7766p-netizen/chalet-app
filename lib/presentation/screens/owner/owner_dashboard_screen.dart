@@ -12,7 +12,7 @@ import '../../../data/services/services.dart'
     show AuthService, BookingService, ChaletService;
 import '../../../data/services/notification_service.dart';
 import '../profile/profile_provider.dart';
-import 'manual_booking_sheet.dart';
+import 'bookings/manual_booking_sheet.dart';
 import 'owner_bottom_nav.dart';
 
 /// لوحة تحكم المالك — كروت إحصائيات، ترحيب مع أفاتار، بانر إكمال

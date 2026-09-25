@@ -1,7 +1,7 @@
 // ignore_for_file: prefer_const_constructors
 import 'package:flutter_test/flutter_test.dart';
 import 'package:makan/data/services/pricing_service.dart';
-import 'package:makan/presentation/screens/owner/pricing_preview.dart';
+import 'package:makan/presentation/screens/owner/pricing/pricing_preview.dart';
 
 const _morning = ChaletStayType.morning;
 const _evening = ChaletStayType.evening;

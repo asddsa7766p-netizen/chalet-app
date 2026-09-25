@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_colors.dart';
 
 /// صورة داخل مسودة التعديل: إما موجودة أصلاً (رابط بالتخزين) أو جديدة لم
 /// تُرفع بعد (ملف + بايتات بالذاكرة).

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/utils/number_utils.dart';
-import '../../../data/services/pricing_service.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/number_utils.dart';
+import '../../../../data/services/pricing_service.dart';
 import 'base_price_notice.dart';
 import 'effective_price_panel.dart';
 import 'pricing_data_source.dart';

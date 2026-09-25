@@ -1,4 +1,4 @@
-import '../../../core/utils/number_utils.dart';
+import '../../../../core/utils/number_utils.dart';
 
 /// تحقق مدخلات شاشة تعديل الشاليه (واجهة فقط، لا يعتمد على أي قيد بالقاعدة).
 ///

@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:makan/presentation/screens/owner/chalet_edit_model.dart';
-import 'package:makan/presentation/screens/owner/chalet_images_editor.dart';
-import 'package:makan/presentation/screens/owner/owner_edit_chalet_screen.dart';
+import 'package:makan/presentation/screens/owner/chalet_form/chalet_edit_model.dart';
+import 'package:makan/presentation/screens/owner/chalet_form/chalet_images_editor.dart';
+import 'package:makan/presentation/screens/owner/chalet_form/owner_edit_chalet_screen.dart';
 
 import 'helpers/chalet_edit_test_harness.dart';
 import 'helpers/pricing_test_harness.dart' show loadArabicTestFont;
@@ -920,7 +920,7 @@ void main() {
   // ==========================================================
   group('شاشة الإضافة (فحص المصدر: تعديل نصي وإخفاء حقلين)', () {
     final src =
-        File('lib/presentation/screens/owner/owner_add_chalet_screen.dart')
+        File('lib/presentation/screens/owner/chalet_form/owner_add_chalet_screen.dart')
             .readAsStringSync();
 
     test('حقلا الوديعة والحد الأدنى للليالي غير موجودين', () {

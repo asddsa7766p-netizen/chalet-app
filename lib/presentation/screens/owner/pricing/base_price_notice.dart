@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../data/services/pricing_service.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../data/services/pricing_service.dart';
 import 'pricing_preview.dart';
 
 /// إشعار داخل بطاقة نوع الإقامة يوضّح أثر "السعر الاحتياطي" الفعلي.

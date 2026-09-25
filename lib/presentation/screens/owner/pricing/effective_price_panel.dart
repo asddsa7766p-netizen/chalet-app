@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../data/services/pricing_service.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../data/services/pricing_service.dart';
 import 'pricing_preview.dart';
 
 /// اسم قصير للمصدر + لونه (يُستخدم بالجدول والمفتاح وتلميحات الحقول).

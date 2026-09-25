@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:makan/data/models/models.dart';
-import 'package:makan/presentation/screens/owner/owner_calendar_logic.dart';
+import 'package:makan/presentation/screens/owner/calendar/owner_calendar_logic.dart';
 
 BookingModel booking(
   String id,

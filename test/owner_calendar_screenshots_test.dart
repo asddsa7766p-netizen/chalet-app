@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:makan/presentation/screens/owner/owner_calendar_data_source.dart';
+import 'package:makan/presentation/screens/owner/calendar/owner_calendar_data_source.dart';
 
 import 'helpers/owner_calendar_test_harness.dart';
 import 'helpers/pricing_test_harness.dart' show loadArabicTestFont;
