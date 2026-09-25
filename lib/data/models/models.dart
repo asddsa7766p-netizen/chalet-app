@@ -42,7 +42,8 @@ extension BookingStatusX on BookingStatus {
 class BookingModel {
   final String id;
   final String chaletId;
-  final String userId;
+  /// null لحجز حساب حُذف (delete_my_account تفك الربط وتُبقي الحجز للمالك).
+  final String? userId;
   final DateTime checkIn;
   final DateTime checkOut;
   final int guestsCount;
@@ -126,7 +127,7 @@ class BookingModel {
     return BookingModel(
       id: json['id'] as String,
       chaletId: json['chalet_id'] as String,
-      userId: json['user_id'] as String,
+      userId: json['user_id'] as String?,
       checkIn: DateTime.parse(json['check_in'] as String),
       checkOut: DateTime.parse(json['check_out'] as String),
       guestsCount: json['guests_count'] as int? ?? 1,

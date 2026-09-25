@@ -5,6 +5,7 @@ import 'package:makan/presentation/screens/auth/auth_shared.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../data/services/services.dart';
+import '../settings/terms_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -24,6 +25,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePass = true;
   bool _obscureConfirm = true;
   bool _acceptedTerms = false; // ✅ موافقة على الشروط والأحكام
+  // يملكه الـ State ويُحرَّر بـ dispose (كان يُنشأ بكل build ولا يُحرَّر).
+  late final _termsTap = TapGestureRecognizer()
+    ..onTap = () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const TermsScreen()));
   bool _sent = false; // ✅ حالة نجاح كاملة الشاشة بدل AlertDialog
   // ✅ إصلاح: رسالة "أكّد بريدك" كانت تظهر دائماً رغم أن المشروع يفعّل
   // التأكيد التلقائي (المستخدم يصير مسجّل دخول فوراً). الآن تظهر فقط لو
@@ -32,6 +37,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
+    _termsTap.dispose();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
@@ -275,10 +281,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     style: const TextStyle(
                         color: AuthColors.darkGreen,
                         fontWeight: FontWeight.w800),
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = () {
-                        // TODO: افتح شاشة/رابط الشروط والأحكام الفعلي هنا.
-                      },
+                    recognizer: _termsTap,
                   ),
                   const TextSpan(text: ' وسياسة الخصوصية'),
                 ],

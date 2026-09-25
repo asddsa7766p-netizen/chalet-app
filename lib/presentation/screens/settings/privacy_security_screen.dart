@@ -1,11 +1,95 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/support_contact.dart';
+import '../../../data/services/services.dart';
 
-class PrivacySecurityScreen extends StatelessWidget {
-  const PrivacySecurityScreen({super.key});
+class PrivacySecurityScreen extends StatefulWidget {
+  /// قابلة للحقن بالاختبارات؛ الافتراضي [AuthService.deleteMyAccount].
+  final Future<void> Function()? deleteAccount;
+
+  /// الافتراضي [AuthService.isLoggedIn] (زر الحذف لصاحب حساب فقط).
+  final bool? isLoggedIn;
+
+  /// بعد نجاح الحذف (والخروج)؛ الافتراضي: الرئيسية كضيف.
+  final VoidCallback? onAccountDeleted;
+
+  const PrivacySecurityScreen({
+    super.key,
+    this.deleteAccount,
+    this.isLoggedIn,
+    this.onAccountDeleted,
+  });
+
+  @override
+  State<PrivacySecurityScreen> createState() => _PrivacySecurityScreenState();
+}
+
+class _PrivacySecurityScreenState extends State<PrivacySecurityScreen> {
+  bool _deleting = false;
+
+  bool get _loggedIn => widget.isLoggedIn ?? AuthService.instance.isLoggedIn;
+
+  Future<void> _deleteAccount() async {
+    if (_deleting) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final router = widget.onAccountDeleted == null ? GoRouter.of(context) : null;
+    setState(() => _deleting = true);
+    try {
+      await (widget.deleteAccount ?? AuthService.instance.deleteMyAccount)();
+    } catch (e) {
+      // رفض الخادم (حجوزات قادمة/شاليهات مسجلة) رسالته عربية جاهزة: تُعرض كما هي.
+      if (mounted) setState(() => _deleting = false);
+      messenger.showSnackBar(SnackBar(
+        content: Text(accountDeletionErrorMessage(e),
+            style: const TextStyle(fontFamily: 'Cairo')),
+        backgroundColor: AppColors.error,
+      ));
+      return;
+    }
+    if (mounted) setState(() => _deleting = false);
+    messenger.showSnackBar(const SnackBar(
+      content: Text('تم حذف حسابك', style: TextStyle(fontFamily: 'Cairo')),
+    ));
+    if (widget.onAccountDeleted != null) {
+      widget.onAccountDeleted!();
+    } else {
+      router!.go('/home');
+    }
+  }
+
+  Widget _deleteAccountButton() {
+    return SizedBox(
+      height: 50,
+      child: OutlinedButton.icon(
+        key: const Key('delete_account_button'),
+        onPressed: _deleting ? null : _deleteAccount,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.error,
+          side: const BorderSide(color: AppColors.error, width: 1.4),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        icon: _deleting
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.error))
+            : const Icon(Icons.delete_forever_outlined),
+        label: const Text('حذف الحساب',
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+      ),
+    );
+  }
 
   Widget _sectionCard({
     required IconData icon,
@@ -223,12 +307,19 @@ class PrivacySecurityScreen extends StatelessWidget {
                 _sectionCard(
                   icon: Icons.gavel_outlined,
                   title: '5. حقوق المستخدم',
-                  bullets: const [
-                    'لديك الحق في طلب حذف بياناتك.',
+                  bullets: [
+                    _loggedIn
+                        ? 'لديك الحق في حذف حسابك وبياناتك، من زر "حذف الحساب" أدناه.'
+                        : 'لديك الحق في حذف حسابك وبياناتك.',
                     'تعديل معلوماتك.',
                     'معرفة البيانات المخزنة عنك.',
                   ],
                 ),
+
+                if (_loggedIn) ...[
+                  const SizedBox(height: 12),
+                  _deleteAccountButton(),
+                ],
 
                 // بيانات التواصل من AppStrings فقط، والقسم يُخفى ما دامت فارغة.
                 if (SupportContact.hasAny) ...[
@@ -284,6 +375,94 @@ class PrivacySecurityScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// تأكيد حذف الحساب: يشرح ما يُحذف وأنه نهائي، وزر الحذف لا يتفعّل إلا
+/// بكتابة كلمة "حذف". يرجع true عند التأكيد.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  static const _confirmWord = 'حذف';
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  bool get _matches => _ctrl.text.trim() == _confirmWord;
+
+  @override
+  Widget build(BuildContext context) {
+    const body = TextStyle(
+        fontFamily: 'Cairo', fontSize: 13, height: 1.7, color: AppColors.charcoal);
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('حذف الحساب نهائياً',
+          style: TextStyle(
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.w800,
+              color: AppColors.error)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '• يُحذف حسابك وبياناتك الشخصية: الاسم، الهاتف، البريد، المفضلة، التقييمات، والإشعارات.\n'
+              '• حجوزاتك السابقة تبقى في سجل صاحب الشاليه باسم "مستخدم محذوف" وبدون رقم هاتفك.\n'
+              '• إن كانت لديك حجوزات قادمة فألغِها أولاً.\n'
+              '• لا يمكن التراجع عن الحذف.',
+              style: body,
+            ),
+            const SizedBox(height: 14),
+            const Text('للتأكيد اكتب كلمة "$_confirmWord":',
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal)),
+            const SizedBox(height: 8),
+            TextField(
+              key: const Key('delete_account_confirm_field'),
+              controller: _ctrl,
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+              style: const TextStyle(fontFamily: 'Cairo'),
+              decoration: InputDecoration(
+                hintText: _confirmWord,
+                isDense: true,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+        ),
+        ElevatedButton(
+          key: const Key('delete_account_confirm_button'),
+          onPressed: _matches ? () => Navigator.pop(context, true) : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.error,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('حذف نهائياً',
+              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+        ),
+      ],
     );
   }
 }

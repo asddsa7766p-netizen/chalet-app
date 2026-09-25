@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../data/models/booking_period.dart';
+import '../../../data/models/manual_booking.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/dashboard_service.dart';
 import '../../../data/services/services.dart'
@@ -708,7 +709,7 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${b.guestName?.isNotEmpty == true ? b.guestName : 'ضيف'} · '
+                    '${b.displayGuestName ?? 'ضيف'} · '
                     '${b.isMultiDay ? b.dateLabel : arabicDayLabel(b.checkIn, withYear: false)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

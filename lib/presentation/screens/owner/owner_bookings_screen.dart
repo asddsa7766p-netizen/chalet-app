@@ -522,12 +522,12 @@ class _OwnerBookingsScreenState extends State<OwnerBookingsScreen> {
   }
 
   Widget _buildGuestSection(BookingModel b, {required bool isManual}) {
-    // الحجز اليدوي: صاحب الحساب هو المالك نفسه، فبيانات الضيف الحقيقية
-    // تُستخرج من الملاحظات (انظر manual_booking.dart).
-    final manualGuest = isManual ? b.manualGuest : null;
-    final guestName = isManual ? manualGuest!.name : b.guestName;
-    final guestPhone = isManual ? manualGuest!.phone : b.guestPhone;
-    final guestAvatar = isManual ? null : b.guestAvatar;
+    // اليدوي وحجز الحساب المحذوف: الاسم والهاتف من أعمدة الحجز، بلا صورة
+    // بروفايل (انظر ManualBookingX.displayGuestName).
+    final guestName = b.displayGuestName;
+    final guestPhone = b.displayGuestPhone;
+    final guestAvatar =
+        (isManual || b.isFromDeletedAccount) ? null : b.guestAvatar;
     final hasName = (guestName ?? '').isNotEmpty;
     final hasPhone = (guestPhone ?? '').isNotEmpty;
 

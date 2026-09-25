@@ -301,6 +301,53 @@ class AuthService {
       _rolesChanged();
     }
   }
+
+  /// يحذف حساب المستخدم الحالي نهائياً عبر `delete_my_account` (الخادم يرفض
+  /// إن كانت له حجوزات قادمة أو شاليهات، ويفك ربط حجوزاته السابقة ويحذف
+  /// مستخدم auth). عند الرفض يرمي [AccountDeletionException] برسالة جاهزة
+  /// للعرض. بعد النجاح يخرج محلياً: المستخدم لم يعد موجوداً بالخادم، فطلب
+  /// الخروج من الخادم لا معنى له وقد يفشل.
+  Future<void> deleteMyAccount() async {
+    try {
+      final result = await supabase.rpc('delete_my_account');
+      if (result is! Map || result['deleted'] != true) {
+        throw const AccountDeletionException(accountDeletionFailedMessage);
+      }
+    } catch (e) {
+      throw AccountDeletionException(accountDeletionErrorMessage(e));
+    }
+    try {
+      await supabase.auth.signOut(scope: SignOutScope.local);
+    } finally {
+      _rolesChanged();
+    }
+  }
+}
+
+const accountDeletionFailedMessage = 'تعذر حذف الحساب، يرجى المحاولة لاحقاً';
+
+/// رفض أو فشل حذف الحساب؛ [message] جاهزة للعرض كما هي.
+class AccountDeletionException implements Exception {
+  final String message;
+  const AccountDeletionException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// رسالة خطأ حذف الحساب للعرض. رفض الخادم المقصود (RAISE EXCEPTION برمز
+/// P0001، أو 42501 لغير المسجّل) يحمل رسالة عربية جاهزة تُعرض حرفياً، مثل
+/// "لديك حجوزات قادمة. ألغِها أولاً ثم احذف الحساب."؛ أي خطأ آخر (شبكة، خطأ
+/// قاعدة غير متوقع) يُسجَّل ويُعرض برسالة عامة بدل النص التقني الخام.
+String accountDeletionErrorMessage(Object error) {
+  if (error is AccountDeletionException) return error.message;
+  if (error is PostgrestException &&
+      (error.code == 'P0001' || error.code == '42501') &&
+      error.message.trim().isNotEmpty) {
+    return error.message.trim();
+  }
+  reportError(error, StackTrace.current, context: 'auth.delete_my_account');
+  return accountDeletionFailedMessage;
 }
 
 /// Holds a pending action requested by a guest that needs authentication.

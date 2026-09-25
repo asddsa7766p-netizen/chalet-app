@@ -427,16 +427,10 @@ class CalendarLegend extends StatelessWidget {
   }
 }
 
-/// اسم الضيف كما يُعرض: اليدوي من guest_name، وحجز التطبيق من ملف صاحبه.
-String? bookingGuestName(BookingModel b) {
-  final raw = b.isManual ? b.manualGuest.name : b.guestName?.trim();
-  return (raw == null || raw.isEmpty) ? null : raw;
-}
+/// اسم الضيف كما يُعرض (انظر [ManualBookingX.displayGuestName]).
+String? bookingGuestName(BookingModel b) => b.displayGuestName;
 
-String? bookingGuestPhone(BookingModel b) {
-  final raw = b.isManual ? b.manualGuest.phone : b.guestPhone?.trim();
-  return (raw == null || raw.isEmpty) ? null : raw;
-}
+String? bookingGuestPhone(BookingModel b) => b.displayGuestPhone;
 
 /// ورقة اليوم (محتوى واحد يُعرض داخل ورقة سفلية بالهاتف وفي لوحة جانبية
 /// بالشاشات العريضة). لا تنفّذ أي كتابة بنفسها: كلها callbacks للشاشة.
