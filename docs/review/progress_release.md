@@ -76,6 +76,17 @@
 
 **البوابة:** analyze 226 (0 جديد). test: 344 نجاح.
 
+## المرحلة 6: البروفايل والإعدادات والإشعارات — ✅ منتهية
+- **شاشة إشعارات واحدة:** قورنت النسختان؛ أُبقيت `notifications/notifications_screen.dart` (فلاتر الكل/غير المقروءة/العروض، حالة خطأ بإعادة محاولة، وقت نسبي، رسالة عند فشل التعليم كمقروء) وأُضيف لها السحب للتحديث (الميزة الوحيدة التي كانت بالنسخة الأخرى). حُذفت النسخة المضمَّنة (`NotificationsScreen` + `_NotifTile`) من `profile_screen.dart` (كود داخل ملف، لا ملف كامل). الجرس والقائمة يمرّان عبر `/notifications`.
+- **خدمة واحدة:** `NotificationService` (notification_service.dart) بكل العمليات مع ترجمة الأخطاء، `.limit(100)`، وعدّ غير المقروءة على السيرفر (`count`) بدل جلب الصفوف. حُذف `NotificationsService` من services.dart.
+- **نموذج واحد:** `NotificationModel` في notification_model.dart فقط (مطابق لأعمدة الجدول الحية؛ أُزيل `relatedId` لأنه لا عمود له، وأُضيف `copyWith`). حُذفت النسخة من models.dart.
+- **profile_screen:** حارس النص الفارغ قبل `.characters.first` (كان يُسقط "حسابي")؛ ورقة تعديل البيانات صارت StatefulWidget تملك حقولها وتتخلّص منها، مع `mounted` ورسالة خطأ داخل الورقة بدل استثناء غير معالَج؛ Sentry لعدّاد الإشعارات؛ حُذف استيرادان غير مستخدمين.
+- **settings_screen:** اللغة بـ `ref.watch(localeNotifierProvider)` (تتحدث فوراً)؛ حُذفت ميزة العملة كاملة (+ `AppStrings.currency`)؛ أُخفي مفتاح "الإشعارات" لأنه يحفظ تفضيلاً لا يقرؤه أي جزء بالتطبيق؛ الشاشة صارت ConsumerWidget بلا SharedPreferences.
+- ⚠️ للمراجعة: شاشة "الشروط والأحكام" تعرض نصاً مؤقتاً ("يمكنك لاحقاً استبدال هذا النص…") — تحتاج النص الرسمي قبل النشر.
+- اختبار جديد: `settings_and_notifications_test.dart`.
+
+**البوابة:** analyze 220 (0 جديد). test: 347 نجاح.
+
 ## المرحلة 4.5: يوم واحد + فترة واحدة — ✅ منتهية
 (تحقق من القاعدة الحية: لا دالة تستخدم min_nights؛ booking_slots وتحقق التداخل والسعر كلها تعمل بـ check_out = اليوم التالي؛ bookings_stay_type_check يقبل 'default'؛ نصوص الإشعارات يولّدها trigger بلا تواريخ فلا تغيير عليها؛ ~16 حجزاً قديماً ممتداً لعدة أيام موجودة فعلاً.)
 - نموذج مشترك `data/models/booking_period.dart`: `BookingPeriod` (الأنواع المفعّلة أو "يوم كامل" = default)، `stayTypeLabel`، أوقات بـ ص/م، وامتداد عرض على BookingModel (`dateLabel`، `periodWithTime`، `lastBookedDay`، `isMultiDay`). BookingModel يقرأ وقت الفترة من `chalets.chalet_stay_types` المضمَّنة باستعلامات الحجوزات (`bookingPeriodColumns`).

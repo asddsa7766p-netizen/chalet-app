@@ -21,8 +21,7 @@ import '../../presentation/screens/owner/owner_calendar_screen.dart';
 import '../../presentation/screens/owner/owner_external_screen.dart';
 import '../../presentation/screens/owner/owner_profile_screen.dart';
 import '../../presentation/screens/map/palestine_chalets_map_screen.dart';
-import '../../presentation/screens/profile/profile_screen.dart'
-    show NotificationsScreen;
+import '../../presentation/screens/notifications/notifications_screen.dart';
 import '../../data/models/chalet_model.dart';
 import '../../data/services/host_service.dart';
 import '../../data/services/services.dart';

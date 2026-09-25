@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../data/models/models.dart';
-import '../../../data/services/services.dart';
+import '../../../data/models/notification_model.dart';
+import '../../../data/services/notification_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -43,7 +43,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       _loadError = false;
     });
     try {
-      final notifs = await NotificationsService.instance.getNotifications();
+      final notifs = await NotificationService.instance.getNotifications();
       if (!mounted) return;
       setState(() {
         _notifications = notifs;
@@ -96,7 +96,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               padding: const EdgeInsets.only(left: 12, right: 12),
               child: TextButton(
                 onPressed: () => _runAndReload(
-                    () => NotificationsService.instance.markAllAsRead()),
+                    () => NotificationService.instance.markAllAsRead()),
                 child: Text(
                   AppStrings.markAllRead,
                   style: TextStyle(
@@ -118,7 +118,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ? _buildLoadError()
               : _notifications.isEmpty
               ? _buildEmpty()
-              : SingleChildScrollView(
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  color: AppColors.primary,
+                  child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   child: Column(
                     children: [
@@ -141,15 +145,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 onTap: () async {
                                   if (n.isRead) return;
                                   await _runAndReload(() =>
-                                      NotificationsService.instance
+                                      NotificationService.instance
                                           .markAsRead(n.id));
                                 },
                               ))
                           .toList(),
                       const SizedBox(height: 28),
-                      const SizedBox.shrink(),
                     ],
                   ),
+                ),
                 ),
     );
   }

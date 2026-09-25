@@ -155,7 +155,7 @@ class _OwnerNotificationsScreenState extends State<OwnerNotificationsScreen> {
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(_iconFor(item.type),
+                                    Icon(_iconFor(item.type ?? ''),
                                         color: AppColors.primary, size: 22),
                                     const SizedBox(width: 10),
                                     Expanded(
@@ -169,7 +169,7 @@ class _OwnerNotificationsScreenState extends State<OwnerNotificationsScreen> {
                                                   fontWeight: FontWeight.w800,
                                                   fontSize: 13)),
                                           const SizedBox(height: 3),
-                                          Text(item.body,
+                                          Text(item.body ?? '',
                                               style: const TextStyle(
                                                   fontFamily: 'Cairo',
                                                   fontSize: 12,

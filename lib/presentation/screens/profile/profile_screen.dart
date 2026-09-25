@@ -4,14 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:makan/presentation/screens/profile/profile_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/error_reporter.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
 import '../../../data/services/notification_service.dart';
 import '../../widgets/common/common_widgets.dart';
 import '../../widgets/common/language_bottom_sheet.dart';
-import '../settings/about_app_screen.dart' show AboutAppScreen;
-import '../settings/privacy_security_screen.dart' show PrivacySecurityScreen;
 import '../settings/settings_screen.dart' show SettingsScreen;
 import '../settings/help_support_screen.dart' show HelpSupportScreen;
 import '../home/main_screen.dart' show goToMainTab;
@@ -334,15 +333,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     trailingText:
                         _unreadNotifications > 0 ? '$_unreadNotifications' : null,
                     onTap: () async {
-                      await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const NotificationsScreen()));
+                      await context.push('/notifications');
                       try {
                         final c =
                             await NotificationService.instance.getUnreadCount();
                         if (mounted) setState(() => _unreadNotifications = c);
-                      } catch (_) {}
+                      } catch (e, st) {
+                        // عدّاد ثانوي: يبقى آخر رقم معروض.
+                        reportError(e, st, context: 'profile_unread_count');
+                      }
                     },
                   ),
 
@@ -621,7 +620,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ? NetworkImage(profile!.avatarUrl!)
                   : null,
               child: profile?.avatarUrl == null
-                  ? Text((profile?.fullName ?? 'م').characters.first,
+                  // الاسم قد يكون نصاً فارغاً (لا null): characters.first
+                  // على نص فارغ يرمي StateError ويُسقط الشاشة.
+                  ? Text(
+                      (profile?.fullName?.trim().isNotEmpty ?? false)
+                          ? profile!.fullName!.trim().characters.first
+                          : 'م',
                       style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 26,
@@ -729,235 +733,103 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _showEditProfile(UserProfile? profile) {
-    final nameCtrl = TextEditingController(text: profile?.fullName);
-    final phoneCtrl = TextEditingController(text: profile?.phone);
-    showModalBottomSheet(
+  Future<void> _showEditProfile(UserProfile? profile) async {
+    final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('تعديل البيانات',
-                style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800)),
-            const SizedBox(height: 16),
-            CustomTextField(
-                controller: nameCtrl,
-                label: AppStrings.fullName,
-                prefixIcon: Icons.person_outline),
-            const SizedBox(height: 12),
-            CustomTextField(
-                controller: phoneCtrl,
-                label: AppStrings.phone,
-                prefixIcon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone),
-            const SizedBox(height: 20),
-            AppButton(
-              label: 'حفظ التغييرات',
-              onPressed: () async {
-                await AuthService.instance.updateProfile(
-                    fullName: nameCtrl.text, phone: phoneCtrl.text);
-                Navigator.pop(ctx);
-                // NEW: بدل _load()، ننعش الـ provider فيتحدث كل شي
-                // يعتمد عليه (بما فيه هاد الهيدر) تلقائيًا.
-                ref.invalidate(profileProvider);
-              },
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _EditProfileSheet(profile: profile),
     );
+    if (saved == true && mounted) {
+      // بدل _load()، ننعش الـ provider فيتحدث كل شي يعتمد عليه تلقائيًا.
+      ref.invalidate(profileProvider);
+    }
   }
 }
 
-// ============================================
-// NOTIFICATIONS SCREEN
-// ============================================
-class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+/// ورقة تعديل الاسم والهاتف: تملك حقولها وتتخلّص منها، وترجع true عند
+/// الحفظ الناجح. فشل الحفظ يُعرض داخل الورقة ولا يغلقها.
+class _EditProfileSheet extends StatefulWidget {
+  const _EditProfileSheet({required this.profile});
+
+  final UserProfile? profile;
+
   @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
-  List<NotificationModel> _notifications = [];
-  bool _loading = true;
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  late final _name = TextEditingController(text: widget.profile?.fullName);
+  late final _phone = TextEditingController(text: widget.profile?.phone);
+  bool _saving = false;
+  String? _error;
 
   @override
-  void initState() {
-    super.initState();
-    _load();
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
-      final notifs = await NotificationsService.instance.getNotifications();
-      if (mounted)
-        setState(() {
-          _notifications = notifs;
-          _loading = false;
-        });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      await AuthService.instance
+          .updateProfile(fullName: _name.text.trim(), phone: _phone.text.trim());
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final unread = _notifications.where((n) => !n.isRead).length;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(AppStrings.allNotifications),
-        actions: [
-          if (unread > 0)
-            TextButton(
-              onPressed: () async {
-                await NotificationsService.instance.markAllAsRead();
-                _load();
-              },
-              child: const Text(AppStrings.markAllRead,
-                  style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 12,
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600)),
-            ),
-        ],
-      ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
-          : _notifications.isEmpty
-              ? const Center(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      Icon(Icons.notifications_none_rounded,
-                          size: 64, color: AppColors.sand),
-                      SizedBox(height: 14),
-                      Text('لا يوجد إشعارات',
-                          style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary)),
-                    ]))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _notifications.length,
-                    itemBuilder: (_, i) => _NotifTile(
-                      notification: _notifications[i],
-                      onTap: () async {
-                        if (!_notifications[i].isRead) {
-                          await NotificationsService.instance
-                              .markAsRead(_notifications[i].id);
-                          setState(() => _notifications[i] = NotificationModel(
-                                id: _notifications[i].id,
-                                userId: _notifications[i].userId,
-                                title: _notifications[i].title,
-                                body: _notifications[i].body,
-                                type: _notifications[i].type,
-                                isRead: true,
-                                createdAt: _notifications[i].createdAt,
-                              ));
-                        }
-                      },
-                    ),
-                  ),
-                ),
-    );
-  }
-}
-
-class _NotifTile extends StatelessWidget {
-  final NotificationModel notification;
-  final VoidCallback? onTap;
-  const _NotifTile({required this.notification, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: notification.isRead
-              ? Colors.white
-              : AppColors.primary.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-              color: notification.isRead
-                  ? AppColors.border
-                  : AppColors.primary.withOpacity(0.3)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border)),
-              child: Center(
-                  child: Text(notification.icon,
-                      style: const TextStyle(fontSize: 20))),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(notification.title,
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 14,
-                          fontWeight: notification.isRead
-                              ? FontWeight.w600
-                              : FontWeight.w800,
-                          color: AppColors.textPrimary)),
-                  if (notification.body != null) ...[
-                    const SizedBox(height: 4),
-                    Text(notification.body!,
-                        style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            height: 1.5)),
-                  ],
-                  const SizedBox(height: 6),
-                  Text(
-                      '${notification.createdAt.day}/${notification.createdAt.month}/${notification.createdAt.year}',
-                      style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: AppColors.textMuted)),
-                ],
-              ),
-            ),
-            if (!notification.isRead)
-              Container(
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.only(top: 4),
-                  decoration: const BoxDecoration(
-                      color: AppColors.primary, shape: BoxShape.circle)),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('تعديل البيانات',
+              style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 16),
+          CustomTextField(
+              controller: _name,
+              label: AppStrings.fullName,
+              prefixIcon: Icons.person_outline),
+          const SizedBox(height: 12),
+          CustomTextField(
+              controller: _phone,
+              label: AppStrings.phone,
+              prefixIcon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!,
+                style: const TextStyle(
+                    fontFamily: 'Cairo', fontSize: 12.5, color: AppColors.error)),
           ],
-        ),
+          const SizedBox(height: 20),
+          AppButton(
+            label: 'حفظ التغييرات',
+            loading: _saving,
+            onPressed: _saving ? null : _save,
+          ),
+        ],
       ),
     );
   }

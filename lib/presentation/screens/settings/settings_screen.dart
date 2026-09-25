@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_state_providers.dart';
 import '../../../core/constants/app_colors.dart';
@@ -13,72 +12,10 @@ import '../settings/help_support_screen.dart';
 // Settings UI with RTL support and premium styling.
 // (Originally existed inside profile_screen.dart in this project.)
 
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  static const _kNotifications = 'settings_notifications';
-  static const _kLanguage = 'settings_language'; // 'ar' | 'en'
-  static const _kCurrency =
-      'settings_currency'; // 'ILS' | 'USD' | 'EUR' | 'JOD'
-
-  bool _notificationsEnabled = true;
-  String _language = 'ar';
-  String _currency = 'ILS';
-
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _notificationsEnabled = prefs.getBool(_kNotifications) ?? true;
-      _language = prefs.getString(_kLanguage) ?? 'ar';
-      _currency = prefs.getString(_kCurrency) ?? 'ILS';
-      _loading = false;
-    });
-  }
-
-  Future<void> _setDarkMode(bool value) async {
-    await ref.read(themeNotifierProvider).setDarkMode(value);
-  }
-
-  Future<void> _setNotifications(bool value) async {
-    setState(() => _notificationsEnabled = value);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kNotifications, value);
-  }
-
-  Future<void> _setCurrency(String currency) async {
-    setState(() => _currency = currency);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kCurrency, currency);
-  }
-
-  String get _currencyLabel {
-    switch (_currency) {
-      case 'USD':
-        return 'دولار \$';
-      case 'EUR':
-        return 'يورو €';
-      case 'JOD':
-        return 'دينار JD';
-      case 'ILS':
-      default:
-        return 'شيكل ₪';
-    }
-  }
-
-  void _openLanguageSheet() {
+  void _openLanguageSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -89,152 +26,77 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _openCurrencyDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text(
-            'اختيار العملة',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w900),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _currencyOption('ILS', 'شيكل ₪'),
-                _currencyOption('USD', 'دولار \$'),
-                _currencyOption('EUR', 'يورو €'),
-                _currencyOption('JOD', 'دينار JD'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('إغلاق', style: TextStyle(fontFamily: 'Cairo')),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _currencyOption(String code, String label) {
-    final selected = _currency == code;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.attach_money_rounded, color: AppColors.primary),
-      title: Text(
-        label,
-        style:
-            const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800),
-      ),
-      trailing: selected
-          ? Container(
-              width: 22,
-              height: 22,
-              decoration: const BoxDecoration(
-                color: AppColors.accent,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_rounded,
-                  size: 16, color: AppColors.white),
-            )
-          : null,
-      onTap: () async {
-        await _setCurrency(code);
-        if (mounted) Navigator.pop(context);
-      },
-    );
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDarkMode = ref.watch(themeNotifierProvider).isDarkMode;
+    // تفاعلي: يتحدّث فور تغيير اللغة من الورقة (كان يُقرأ مرة واحدة).
+    final languageCode = ref.watch(localeNotifierProvider).locale.languageCode;
 
+    // ملاحظة: أُزيلت ميزة العملة (لم يكن لها أي أثر على الأسعار بالتطبيق)
+    // ومفتاح "الإشعارات" (كان يحفظ تفضيلاً لا يقرؤه أي جزء من التطبيق).
     return Scaffold(
       appBar: AppBar(title: const Text(AppStrings.settings)),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _SettingsTile(
-                  icon: Icons.language_rounded,
-                  label: AppStrings.language,
-                  value: _language == 'ar' ? 'العربية' : 'English',
-                  onTap: _openLanguageSheet,
-                ),
-                _SettingsTile(
-                  icon: Icons.attach_money_rounded,
-                  label: AppStrings.currency,
-                  value: _currencyLabel,
-                  onTap: _openCurrencyDialog,
-                ),
-                _SettingsTile(
-                  icon: Icons.notifications_outlined,
-                  label: AppStrings.notifications,
-                  trailing: Switch(
-                    value: _notificationsEnabled,
-                    onChanged: _setNotifications,
-                    activeThumbColor: AppColors.primary,
-                  ),
-                ),
-                _SettingsTile(
-                  icon: Icons.dark_mode_outlined,
-                  label: 'الوضع المظلم',
-                  trailing: Switch(
-                    value: isDarkMode,
-                    onChanged: _setDarkMode,
-                    activeThumbColor: AppColors.primary,
-                  ),
-                ),
-                _SettingsTile(
-                  icon: Icons.shield_outlined,
-                  label: AppStrings.privacy,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const PrivacySecurityScreen(),
-                    ),
-                  ),
-                ),
-                _SettingsTile(
-                  icon: Icons.article_outlined,
-                  label: AppStrings.termsAndConditions,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const _TermsScreen(),
-                    ),
-                  ),
-                ),
-                _SettingsTile(
-                  icon: Icons.help_outline_rounded,
-                  label: AppStrings.help,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const HelpSupportScreen(),
-                    ),
-                  ),
-                ),
-                _SettingsTile(
-                  icon: Icons.info_outline_rounded,
-                  label: AppStrings.about,
-                  value: 'الإصدار 1.0.0',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AboutAppScreen(),
-                    ),
-                  ),
-                ),
-              ],
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _SettingsTile(
+            icon: Icons.language_rounded,
+            label: AppStrings.language,
+            value: languageCode == 'ar' ? 'العربية' : 'English',
+            onTap: () => _openLanguageSheet(context),
+          ),
+          _SettingsTile(
+            icon: Icons.dark_mode_outlined,
+            label: 'الوضع المظلم',
+            trailing: Switch(
+              value: isDarkMode,
+              onChanged: (v) => ref.read(themeNotifierProvider).setDarkMode(v),
+              activeThumbColor: AppColors.primary,
             ),
+          ),
+          _SettingsTile(
+            icon: Icons.shield_outlined,
+            label: AppStrings.privacy,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const PrivacySecurityScreen(),
+              ),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.article_outlined,
+            label: AppStrings.termsAndConditions,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const _TermsScreen(),
+              ),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.help_outline_rounded,
+            label: AppStrings.help,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const HelpSupportScreen(),
+              ),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.info_outline_rounded,
+            label: AppStrings.about,
+            value: 'الإصدار 1.0.0',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AboutAppScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

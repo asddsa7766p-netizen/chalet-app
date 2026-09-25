@@ -105,7 +105,6 @@ class AppStrings {
   // Settings
   static const String settings = 'الإعدادات';
   static const String language = 'اللغة';
-  static const String currency = 'العملة';
   static const String notifications = 'الإشعارات';
   static const String privacy = 'الخصوصية والأمان';
   static const String termsAndConditions = 'الشروط والأحكام';
