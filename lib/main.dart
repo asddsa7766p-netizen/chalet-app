@@ -134,17 +134,17 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  runApp(const ProviderScope(child: FriendsChaletsApp()));
+  runApp(const ProviderScope(child: MakanApp()));
 }
 
-class FriendsChaletsApp extends ConsumerStatefulWidget {
-  const FriendsChaletsApp({super.key});
+class MakanApp extends ConsumerStatefulWidget {
+  const MakanApp({super.key});
 
   @override
-  ConsumerState<FriendsChaletsApp> createState() => _FriendsChaletsAppState();
+  ConsumerState<MakanApp> createState() => _MakanAppState();
 }
 
-class _FriendsChaletsAppState extends ConsumerState<FriendsChaletsApp> {
+class _MakanAppState extends ConsumerState<MakanApp> {
   bool _loadedPrefs = false;
   StreamSubscription<AuthState>? _authSub;
 
@@ -160,7 +160,6 @@ class _FriendsChaletsAppState extends ConsumerState<FriendsChaletsApp> {
       if (state.event == AuthChangeEvent.signedIn ||
           state.event == AuthChangeEvent.signedOut ||
           state.event == AuthChangeEvent.userUpdated) {
-        AuthService.instance.clearAdminCache();
         ref.invalidate(favoritesProvider);
         ref.invalidate(profileProvider);
       }

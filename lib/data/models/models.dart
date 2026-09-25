@@ -193,6 +193,10 @@ class UserProfile {
     this.isAdmin = false, // ← أضف هذا
   });
 
+  /// المصدر الوحيد لقاعدة "مالك" بالتطبيق (الراوتر وحسابي). become_owner/
+  /// become_customer تضبطان role و is_owner معاً، فأيّهما يكفي.
+  bool get isHost => isOwner || role == 'owner';
+
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
       id: json['id'] as String,

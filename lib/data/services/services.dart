@@ -113,6 +113,13 @@ class AuthService {
 
   Stream<AuthState> get authStateChanges => supabase.auth.onAuthStateChange;
 
+  /// يزيد عند أي تغيير محتمل بصلاحيات المستخدم (دخول/خروج/become_owner/
+  /// become_customer). كاش الصلاحيات بـ AppRouter يقارنه ليعيد الجلب،
+  /// فلا يحتاج أي مستدعٍ لتذكّر مسح الكاش بنفسه.
+  int get rolesEpoch => _rolesEpoch;
+  int _rolesEpoch = 0;
+  void _rolesChanged() => _rolesEpoch++;
+
   /// Sign up with email and password
   Future<AuthResponse> signUp({
     required String email,
@@ -161,6 +168,8 @@ class AuthService {
       );
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
+    } finally {
+      _rolesChanged();
     }
   }
 
@@ -171,10 +180,9 @@ class AuthService {
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     } finally {
-      // ✅ إصلاح: بدون هذا، لو مستخدم admin سجّل خروج ودخل مستخدم آخر
-      // بنفس جلسة التطبيق (بدون إعادة تشغيل كاملة)، isAdmin() كانت ترجّع
-      // القيمة المخزّنة القديمة بدل التحقق من جديد.
-      clearAdminCache();
+      // بدون هذا، لو خرج أدمن ودخل مستخدم آخر بنفس جلسة التطبيق، يبقى
+      // كاش الصلاحيات القديم.
+      _rolesChanged();
     }
   }
 
@@ -272,6 +280,8 @@ class AuthService {
       return result as bool;
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
+    } finally {
+      _rolesChanged();
     }
   }
 
@@ -283,31 +293,9 @@ class AuthService {
       return result as bool;
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
+    } finally {
+      _rolesChanged();
     }
-  }
-
-  /// Cached admin check.
-  /// Returns true if the current user's profile has is_admin = true.
-  bool? _isAdminCache;
-  Future<bool> isAdmin() async {
-    if (_isAdminCache != null) return _isAdminCache!;
-    final userId = currentUser?.id;
-    if (userId == null) return false;
-    try {
-      final row = await supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('id', userId)
-          .maybeSingle();
-      _isAdminCache = (row?['is_admin'] as bool?) ?? false;
-      return _isAdminCache!;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  void clearAdminCache() {
-    _isAdminCache = null;
   }
 }
 

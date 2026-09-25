@@ -23,8 +23,9 @@ import '../../presentation/screens/owner/owner_profile_screen.dart';
 import '../../presentation/screens/map/palestine_chalets_map_screen.dart';
 import '../../presentation/screens/notifications/notifications_screen.dart';
 import '../../data/models/chalet_model.dart';
-import '../../data/services/host_service.dart';
+import '../../data/models/models.dart';
 import '../../data/services/services.dart';
+import '../utils/error_reporter.dart';
 
 import '../../presentation/screens/owner/owner_add_chalet_screen.dart';
 import '../../presentation/screens/admin/admin_dashboard_screen.dart';
@@ -57,6 +58,34 @@ class AppRouter {
         location.startsWith('/home/reviews/') ||
         location.startsWith('/owner-') ||
         location == '/admin-dashboard';
+  }
+
+  // ---- كاش صلاحيات المستخدم (مالك/أدمن) لحرّاس المسارات ----
+  static Future<UserProfile?>? _profileFuture;
+  static String? _profileUserId;
+  static int? _profileEpoch;
+
+  /// بروفايل المستخدم الحالي لفحص الصلاحيات (`isHost`/`isAdmin`)، مخزَّن
+  /// مؤقتاً حتى لا يُستعلم عن profiles بكل تنقّل. يُعاد الجلب تلقائياً عند
+  /// تغيّر المستخدم أو [AuthService.rolesEpoch] (دخول/خروج/become_owner/
+  /// become_customer). عند الفشل يُرجع null (لا صلاحية) ولا يُخزَّن الفشل.
+  static Future<UserProfile?> currentUserProfile() {
+    final auth = AuthService.instance;
+    final userId = auth.currentUser?.id;
+    if (userId == null) return Future.value(null);
+    if (_profileFuture != null &&
+        _profileUserId == userId &&
+        _profileEpoch == auth.rolesEpoch) {
+      return _profileFuture!;
+    }
+    _profileUserId = userId;
+    _profileEpoch = auth.rolesEpoch;
+    final future = auth.getCurrentProfile().catchError((Object e, StackTrace st) {
+      _profileFuture = null;
+      reportError(e, st, context: 'router.current_user_profile');
+      return null;
+    });
+    return _profileFuture = future;
   }
 
   static final GoRouter router = GoRouter(
@@ -98,15 +127,15 @@ class AppRouter {
 
       // Owner routes (excluding add-chalet): require host role.
       if (location.startsWith('/owner-') && location != '/owner-add-chalet') {
-        final isHost = await HostService.instance.isHost();
-        return isHost ? null : '/home';
+        final profile = await currentUserProfile();
+        return profile?.isHost == true ? null : '/home';
       }
 
       // Admin route protection
       if (location == '/admin-dashboard') {
         if (!isLoggedIn) return '/auth/login';
-        final isAdmin = await AuthService.instance.isAdmin();
-        return isAdmin ? null : '/home';
+        final profile = await currentUserProfile();
+        return profile?.isAdmin == true ? null : '/home';
       }
 
       return null;

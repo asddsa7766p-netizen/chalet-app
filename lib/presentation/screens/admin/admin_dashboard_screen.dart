@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../data/services/admin_service.dart';
+import '../../../data/services/services.dart' show AuthService;
 
 /// لوحة تحكم الأدمن الشاملة — makan
 ///
@@ -40,7 +41,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _checkAccess() async {
     try {
-      final isAdmin = await AdminService.instance.isCurrentUserAdmin();
+      final profile = await AuthService.instance.getCurrentProfile();
+      final isAdmin = profile?.isAdmin == true;
       if (!mounted) return;
       setState(() {
         _isAdmin = isAdmin;

@@ -141,3 +141,14 @@
 **بانتظار إذن المستخدم (حذف ملف كامل):** `core/theme/shared_preferences_keys.dart` (ثابتان لا يستوردهما أحد)، `screens/bookings/my_bookings_screen.dart` (سطر export واحد لا يستورده أحد)، `screens/reviews/reviews_screen.dart` (سطر export واحد يستورده app_router فقط).
 
 **البوابة:** analyze: No issues found. test: 351 نجاح.
+
+### 8ج — صلاحيات موحّدة + MakanApp
+(تحقق من القاعدة الحية بقراءة فقط: `become_owner` تضبط `is_owner=true, role='owner'` معاً — وتشترط شاليهاً معتمداً غير محذوف — و`become_customer` تمسحهما معاً؛ كل البروفايلات الـ19 متسقة: لا صف فيه role و is_owner مختلفان.)
+- **قاعدة واحدة:** `UserProfile.isHost` (`isOwner || role == 'owner'`) و`UserProfile.isAdmin`. كانت 4 تطبيقات: `HostService.isHost` (role فقط)، `AuthService.isAdmin` (كاش خاص)، `AdminService.isCurrentUserAdmin`، وحساب مضمَّن بـ profile_screen.
+- **استعلام واحد:** `AuthService.getCurrentProfile()`. حُذفت `AuthService.isAdmin`/`clearAdminCache` و`AdminService.isCurrentUserAdmin`؛ `HostService` لم يعد مستخدماً (الملف بانتظار الإذن).
+- **كاش بـ app_router.dart:** `AppRouter.currentUserProfile()` يخزّن Future البروفايل لكل مستخدم + `AuthService.rolesEpoch`، الذي يزيد في `signIn`/`signOut`/`becomeOwner`/`becomeCustomer` (بـ finally). أي تغيير بالمستخدم أو الـ epoch ← جلب جديد، فلا يمكن لأي مستدعٍ أن ينسى مسح الكاش، ولا حاجة لاستيراد الراوتر من الشاشات (كان سيُنشئ استيراداً دائرياً). الفشل لا يُخزَّن ويُسجَّل بـ `reportError`، والنتيجة "لا صلاحية" (كان `isHost` يرمي داخل redirect).
+- لوحة الأدمن تفحص الوصول بـ `getCurrentProfile()?.isAdmin` (السيرفر يفرض `is_current_user_admin()` بكل دالة على أي حال).
+- `FriendsChaletsApp` ← `MakanApp`.
+- اختبار جديد: `user_roles_test.dart`.
+
+**البوابة:** analyze: No issues found. test: 355 نجاح.

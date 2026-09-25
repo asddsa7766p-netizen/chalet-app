@@ -173,7 +173,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     ref.listen(profileProvider, (previous, next) => _onProfileChanged());
     final profileAsync = ref.watch(profileProvider);
     final profile = profileAsync.valueOrNull;
-    final isHost = profile?.isOwner == true || profile?.role == 'owner';
+    final isHost = profile?.isHost == true;
     final isAdmin = profile?.isAdmin == true;
     // عدد المفضلة الحي من المزوّد (كان لقطة ثابتة وقت initState فقط).
     final favoritesCount =

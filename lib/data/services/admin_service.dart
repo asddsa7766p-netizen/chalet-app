@@ -69,18 +69,6 @@ class AdminService {
   /// حجم صفحة قوائم لوحة الأدمن.
   static const pageSize = 20;
 
-  Future<bool> isCurrentUserAdmin() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return false;
-
-    final row = await _supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .maybeSingle();
-    return (row?['is_admin'] as bool?) ?? false;
-  }
-
   /// [from] شامل و[to] غير شامل، على تاريخ وصول الحجز.
   Future<AdminOverviewStats> getOverviewStats({
     DateTime? from,
