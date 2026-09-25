@@ -13,7 +13,6 @@ import 'package:makan/presentation/screens/payment/payment_flow_entry.dart';
 import '../../presentation/screens/reels/reels_screen.dart';
 import '../../presentation/screens/chalet/chalet_detail_screen.dart';
 import '../../presentation/screens/booking/booking_screen.dart';
-import '../../presentation/screens/reviews/reviews_screen.dart';
 import '../../presentation/screens/owner/owner_dashboard_screen.dart';
 import '../../presentation/screens/owner/owner_chalets_screen.dart';
 import '../../presentation/screens/owner/owner_bookings_screen.dart';
