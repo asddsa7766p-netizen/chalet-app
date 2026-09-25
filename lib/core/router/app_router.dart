@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:makan/presentation/screens/favorites/favorites_screen.dart';
+import 'package:makan/presentation/screens/reviews/reviews_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 

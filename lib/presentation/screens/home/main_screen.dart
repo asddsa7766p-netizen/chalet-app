@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../home/home_tab.dart';
+import '../bookings/my_bookings_screen.dart';
 import '../favorites/favorites_screen.dart';
 import '../profile/profile_screen.dart';
 import '../reels/reels_screen.dart';
