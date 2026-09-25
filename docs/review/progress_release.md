@@ -152,3 +152,10 @@
 - اختبار جديد: `user_roles_test.dart`.
 
 **البوابة:** analyze: No issues found. test: 355 نجاح.
+
+### 8د — pubspec.yaml
+- حُذف `riverpod_annotation` و`riverpod_generator` (لا `@riverpod` ولا ملفات `.g.dart`)، و`patrol` نُقل إلى dev_dependencies (لا استخدام بـ lib/).
+- **حُذفت أيضاً** (صفر استيراد بـ lib/ و test/، مؤكَّد بـ grep): `connectivity_plus`، `flutter_rating_bar`، `flutter_svg`، `lottie`، `photo_view`، `smooth_page_indicator`، و`build_runner` (لم يبقَ أي مولّد كود). يقلّل حجم التطبيق وعدد الإضافات الأصلية.
+- `flutter pub get` نجح؛ تحدّثت ملفات تسجيل الإضافات المولَّدة لـ macOS و Windows تلقائياً.
+
+**البوابة:** analyze: No issues found. test: 355 نجاح.
