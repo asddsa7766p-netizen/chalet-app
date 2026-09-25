@@ -331,8 +331,6 @@ class AuthRedirectService {
     _pending = null;
     return a;
   }
-
-  static PendingAuthAction? peek() => _pending;
 }
 
 // ============================================

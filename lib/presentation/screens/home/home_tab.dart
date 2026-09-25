@@ -12,6 +12,7 @@ import '../../../data/services/services.dart';
 import '../../../data/services/location_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/providers/favorites_provider.dart';
+import '../../widgets/common/common_widgets.dart';
 import '../../widgets/common/luxury_widgets.dart';
 import '../profile/profile_provider.dart';
 import '../../widgets/common/login_prompt.dart';
@@ -773,7 +774,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 if (_loading) {
                   return const SizedBox(
                     width: 220,
-                    child: LuxuryShimmerCard(height: 230),
+                    child: ShimmerCard(
+                        height: 230,
+                        borderRadius: BorderRadius.all(Radius.circular(18))),
                   );
                 }
                 return _buildPlaceCard(items[i]);
@@ -840,7 +843,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 if (_loading) {
                   return const SizedBox(
                     width: 220,
-                    child: LuxuryShimmerCard(height: 230),
+                    child: ShimmerCard(
+                        height: 230,
+                        borderRadius: BorderRadius.all(Radius.circular(18))),
                   );
                 }
                 return _buildPlaceCard(chalets[i]);

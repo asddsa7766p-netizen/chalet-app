@@ -139,49 +139,6 @@ class AppButton extends StatelessWidget {
   }
 }
 
-class SectionHeader extends StatelessWidget {
-  final String title;
-  final String? action;
-  final VoidCallback? onAction;
-
-  const SectionHeader({
-    super.key,
-    required this.title,
-    this.action,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontFamily: 'Cairo',
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        if (action != null)
-          TextButton(
-            onPressed: onAction,
-            child: Text(
-              action!,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 class ShimmerCard extends StatelessWidget {
   final double height;
   final double width;

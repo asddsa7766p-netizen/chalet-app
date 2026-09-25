@@ -280,44 +280,6 @@ class ChaletPricingService {
             onConflict: 'chalet_id,stay_type',
           ));
 
-  /// يعطّل نوع إقامة (بدون حذف بياناته/أسعاره المرتبطة به).
-  Future<void> setStayTypeEnabled({
-    required String chaletId,
-    required ChaletStayType type,
-    required bool isEnabled,
-  }) =>
-      _write(() => _supabase
-          .from('chalet_stay_types')
-          .update({
-            'is_enabled': isEnabled,
-            'updated_at': DateTime.now().toIso8601String()
-          })
-          .eq('chalet_id', chaletId)
-          .eq('stay_type', type.dbValue));
-
-  /// يحذف نوع إقامة نهائيًا مع كل أسعاره اليومية/الخاصة المرتبطة به.
-  Future<void> deleteStayType({
-    required String chaletId,
-    required ChaletStayType type,
-  }) =>
-      _write(() async {
-        await _supabase
-            .from('chalet_weekday_prices')
-            .delete()
-            .eq('chalet_id', chaletId)
-            .eq('stay_type', type.dbValue);
-        await _supabase
-            .from('chalet_date_prices')
-            .delete()
-            .eq('chalet_id', chaletId)
-            .eq('stay_type', type.dbValue);
-        await _supabase
-            .from('chalet_stay_types')
-            .delete()
-            .eq('chalet_id', chaletId)
-            .eq('stay_type', type.dbValue);
-      });
-
   // ==========================================================
   // السعر الأسبوعي (لكل نوع إقامة، أو 'default' للسلوك القديم)
   // ==========================================================
@@ -442,49 +404,8 @@ class ChaletPricingService {
   }
 
   // ==========================================================
-  // حساب الأسعار (يستدعي دوال SQL الموحّدة على السيرفر)
+  // تقويم الأسعار للعرض (سعر الحجز الفعلي يحسبه السيرفر)
   // ==========================================================
-
-  /// يحسب سعر ليلة واحدة بتاريخ معيّن ونوع إقامة معيّن.
-  Future<double> getPriceForDate({
-    required String chaletId,
-    required DateTime date,
-    String stayType = defaultStayType,
-  }) async {
-    final dateStr = date.toIso8601String().split('T').first;
-    final result = await _supabase.rpc(
-      'get_chalet_night_price',
-      params: {
-        'p_chalet_id': chaletId,
-        'p_date': dateStr,
-        'p_stay_type': stayType,
-      },
-    );
-    return (result as num).toDouble();
-  }
-
-  /// يحسب إجمالي سعر فترة إقامة كاملة لنوع إقامة معيّن (مجموع كل ليلة على
-  /// حدة حسب هرم الأولوية الكامل). هذا هو المصدر الموثوق لحساب مبلغ أي حجز.
-  Future<double> calculateStayPrice({
-    required String chaletId,
-    required DateTime checkIn,
-    required DateTime checkOut,
-    String stayType = defaultStayType,
-  }) async {
-    final checkInStr = checkIn.toIso8601String().split('T').first;
-    final checkOutStr = checkOut.toIso8601String().split('T').first;
-
-    final result = await _supabase.rpc(
-      'calculate_chalet_stay_price',
-      params: {
-        'p_chalet_id': chaletId,
-        'p_check_in': checkInStr,
-        'p_check_out': checkOutStr,
-        'p_stay_type': stayType,
-      },
-    );
-    return (result as num).toDouble();
-  }
 
   /// يبني تقويم أسعار شهر كامل لعرضه بالواجهة لنوع إقامة معيّن (بدون طلب
   /// RPC لكل يوم لحاله): يرجع خريطة (تاريخ → DayPriceInfo) تحتوي السعر

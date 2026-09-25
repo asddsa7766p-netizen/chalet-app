@@ -214,22 +214,6 @@ class UserProfile {
         'phone': phone,
         'avatar_url': avatarUrl,
       };
-
-  UserProfile copyWith({
-    String? fullName,
-    String? phone,
-    String? avatarUrl,
-    String? email,
-  }) {
-    return UserProfile(
-      id: id,
-      fullName: fullName ?? this.fullName,
-      phone: phone ?? this.phone,
-      avatarUrl: avatarUrl ?? this.avatarUrl,
-      email: email ?? this.email,
-      createdAt: createdAt,
-    );
-  }
 }
 
 // ============================================

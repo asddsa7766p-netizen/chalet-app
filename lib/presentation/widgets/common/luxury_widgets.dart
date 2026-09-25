@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
 
 import '../../../core/constants/app_colors.dart';
 
@@ -87,100 +86,6 @@ class LuxurySearchBar extends StatelessWidget {
           fontFamily: 'Cairo',
           color: AppColors.textPrimary,
           fontSize: 14,
-        ),
-      ),
-    );
-  }
-}
-
-class LuxurySectionHeader extends StatelessWidget {
-  final String title;
-  final String emoji;
-
-  const LuxurySectionHeader({
-    super.key,
-    required this.title,
-    this.emoji = '',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        if (emoji.isNotEmpty) ...[
-          Text(
-            emoji,
-            style: const TextStyle(fontSize: 18),
-          ),
-          const SizedBox(width: 6),
-        ],
-        Text(
-          title,
-          style: const TextStyle(
-            fontFamily: 'Cairo',
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class LuxuryShimmerCard extends StatelessWidget {
-  final double height;
-
-  const LuxuryShimmerCard({
-    super.key,
-    this.height = 240,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: AppColors.sand,
-      highlightColor: Colors.white,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-        ),
-      ),
-    );
-  }
-}
-
-class LuxuryEmptyState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const LuxuryEmptyState({
-    super.key,
-    this.icon = Icons.search_off_rounded,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          children: [
-            Icon(icon, size: 56, color: AppColors.primaryLight),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
-            ),
-          ],
         ),
       ),
     );

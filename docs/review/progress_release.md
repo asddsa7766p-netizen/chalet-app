@@ -127,3 +127,17 @@
   - `owner_add_chalet_screen`: حُذف `_gold` واستيراد models غير المستخدمَين.
 
 **البوابة:** analyze: No issues found. test: 351 نجاح.
+
+### 8ب — كود ميت داخل الملفات (−404 سطراً)
+كل عنصر مؤكَّد بـ grep على lib/ و test/ (التعريف فقط، لا أي استخدام):
+- ودجات: `SectionHeader` (common_widgets)، `LuxurySectionHeader` و`LuxuryEmptyState` و`LuxuryShimmerCard` (luxury_widgets صار `LuxurySearchBar` فقط)، كلاس `LoginPrompt` (بقيت `requireAuth` بنفس الملف).
+- **Shimmer واحد:** `ShimmerCard` (الأعم: عرض ونصف قطر قابلان للضبط)؛ استخدامَا home_tab صارا `ShimmerCard(height: 230, borderRadius: 18)` — نفس الشكل حرفياً.
+- `PricingService`: `setStayTypeEnabled`، `deleteStayType`، `getPriceForDate`، `calculateStayPrice` (لا مستدعٍ؛ السعر الفعلي من `get_booking_price`/السيرفر).
+- `ReelsService`: `uploadReel`، `toggleLike` (نمط SELECT ثم كتابة غير ذرّي)، `isLiked`، `_uploadFile` — بقيت `fetchReels` وحدها.
+- `AuthRedirectService.peek`، `UserProfile.copyWith` (كان يُسقط role/isOwner/isAdmin)، `ChaletModel.isPublic`، `kServiceFeePercentage`.
+- مجلد `splash`: غير موجود أصلاً على القرص ولا بـ git (المجلدات الفارغة لا تُتتبَّع) — لا شيء للحذف.
+- كل الأصول المشار إليها بالكود موجودة (logo، onboarding_bg، .env). `assets/.env` فيه URL والمفتاح العام فقط وغير متتبَّع بـ git.
+
+**بانتظار إذن المستخدم (حذف ملف كامل):** `core/theme/shared_preferences_keys.dart` (ثابتان لا يستوردهما أحد)، `screens/bookings/my_bookings_screen.dart` (سطر export واحد لا يستورده أحد)، `screens/reviews/reviews_screen.dart` (سطر export واحد يستورده app_router فقط).
+
+**البوابة:** analyze: No issues found. test: 351 نجاح.

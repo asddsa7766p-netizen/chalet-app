@@ -72,9 +72,6 @@ class ChaletModel {
   /// الصورة الرئيسية — للتوافق مع الكود القديم الذي يستخدم chalet.coverImage
   String get coverImage => images.isNotEmpty ? images.first : '';
 
-  /// هل الشاليه ظاهر للعامة؟
-  bool get isPublic => isAvailable && isApproved;
-
   /// هل لديه إحداثيات خريطة؟
   bool get hasLocation => latitude != null && longitude != null;
 
