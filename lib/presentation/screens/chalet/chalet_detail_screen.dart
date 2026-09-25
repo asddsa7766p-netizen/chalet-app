@@ -19,6 +19,7 @@ import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../data/services/location_service.dart';
+import '../../../core/utils/error_reporter.dart';
 
 class ChaletDetailScreen extends ConsumerStatefulWidget {
   final String chaletId;
@@ -105,9 +106,10 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
     List<ReviewModel> reviews = [];
     try {
       reviews = await ReviewsService.instance.getChaletReviews(widget.chaletId);
-    } catch (_) {
+    } catch (e, st) {
       // فشل التقييمات لا يمنع عرض باقي بيانات الشاليه — تبقى القائمة فاضية
       // ويظهر "لا يوجد تقييمات بعد" بدل كسر الشاشة كاملة.
+      reportError(e, st, context: 'chalet_detail.reviews');
     }
 
     if (!mounted) return;

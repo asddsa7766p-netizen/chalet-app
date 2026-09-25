@@ -1,6 +1,7 @@
 import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/app_strings.dart';
+import 'error_reporter.dart';
 
 /// قنوات الدعم من [AppStrings.supportPhone]/[AppStrings.supportEmail] فقط.
 /// أي واجهة تواصل تظهر فقط إن كانت القناة المقابلة معرَّفة.
@@ -28,8 +29,9 @@ class SupportContact {
             mode: LaunchMode.externalApplication);
       }
       if (hasEmail) return await launchUrl(emailUri);
-    } catch (_) {
+    } catch (e, st) {
       // لا تطبيق يفتح الرابط: المستدعي يعرض رسالة.
+      reportError(e, st, context: 'support_contact.open');
     }
     return false;
   }

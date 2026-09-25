@@ -903,17 +903,31 @@ class OwnerDayPanel extends StatelessWidget {
                             color: AppColors.charcoal)),
                   ),
                   const SizedBox(width: 4),
-                  IconButton(
-                    key: const Key('day_action_call'),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'اتصال',
-                    icon: const Icon(Icons.call_rounded,
-                        size: 20, color: AppColors.primary),
-                    onPressed: () async {
-                      try {
-                        await launchUrl(Uri(scheme: 'tel', path: phone));
-                      } catch (_) {}
-                    },
+                  Builder(
+                    builder: (context) => IconButton(
+                      key: const Key('day_action_call'),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'اتصال',
+                      icon: const Icon(Icons.call_rounded,
+                          size: 20, color: AppColors.primary),
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        bool opened;
+                        try {
+                          opened =
+                              await launchUrl(Uri(scheme: 'tel', path: phone));
+                        } catch (_) {
+                          opened = false; // لا تطبيق اتصال (مثلاً جهاز لوحي).
+                        }
+                        if (!opened) {
+                          messenger.showSnackBar(SnackBar(
+                            content: Text(
+                                'تعذر فتح تطبيق الاتصال. الرقم: $phone',
+                                style: const TextStyle(fontFamily: 'Cairo')),
+                          ));
+                        }
+                      },
+                    ),
                   ),
                 ],
               ),

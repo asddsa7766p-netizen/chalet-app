@@ -13,6 +13,7 @@ import 'owner_bottom_nav.dart';
 import 'owner_calendar_data_source.dart';
 import 'owner_calendar_logic.dart';
 import 'owner_calendar_widgets.dart';
+import '../../../core/utils/error_reporter.dart';
 
 typedef ManualBookingOpener = Future<bool> Function(
   BuildContext context, {
@@ -243,7 +244,10 @@ class _OwnerCalendarScreenState extends State<OwnerCalendarScreen> {
       final ids = [for (final c in _chalets) c.id];
       final pending = await _ds.loadPendingCounts(ids);
       if (mounted) setState(() => _pending = pending);
-    } catch (_) {}
+    } catch (e, st) {
+      // شارات "قيد الانتظار" ثانوية: تبقى قيمها السابقة.
+      reportError(e, st, context: 'owner_calendar.pending_counts');
+    }
   }
 
   void _selectChalet(CalendarChalet chalet) {

@@ -60,8 +60,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       int unread = 0;
       try {
         unread = await NotificationService.instance.getUnreadCount();
-      } catch (_) {
+      } catch (e, st) {
         // عدّاد ثانوي — فشله لا يعطّل باقي الإحصائيات.
+        reportError(e, st, context: 'profile.unread_count');
       }
 
       if (mounted) {

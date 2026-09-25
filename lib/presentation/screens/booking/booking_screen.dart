@@ -315,7 +315,10 @@ class _BookingScreenState extends State<BookingScreen> {
         _visibleMonth = month;
         _monthPricing = pricing;
       });
-    } catch (_) {}
+    } catch (e, st) {
+      // أسعار التقويم للعرض فقط (السعر الفعلي من السيرفر عند اختيار الفترة).
+      reportError(e, st, context: 'booking.month_pricing');
+    }
   }
 
   @override

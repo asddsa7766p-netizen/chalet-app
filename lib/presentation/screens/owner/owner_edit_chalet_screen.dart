@@ -12,6 +12,7 @@ import 'chalet_edit_model.dart';
 import 'chalet_edit_validation.dart';
 import 'chalet_images_editor.dart';
 import 'chalet_pricing_screen.dart';
+import '../../../core/utils/error_reporter.dart';
 
 typedef PickChaletImages = Future<List<XFile>> Function();
 typedef LocateChalet = Future<({double latitude, double longitude})?> Function();
@@ -523,8 +524,9 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
     if (urls.isEmpty) return;
     try {
       await _ds.deleteImageUrls(widget.chaletId, urls);
-    } catch (_) {
+    } catch (e, st) {
       // ملفات يتيمة بالتخزين لا تؤثر على المالك؛ لا نفشل الحفظ بسببها.
+      reportError(e, st, context: 'chalet_edit.delete_images');
     }
   }
 

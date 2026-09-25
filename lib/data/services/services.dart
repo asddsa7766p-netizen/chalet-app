@@ -9,6 +9,7 @@ import '../models/chalet_model.dart';
 import '../models/models.dart';
 import 'chalet_slot_availability.dart';
 import 'unavailable_nights.dart';
+import '../../core/utils/error_reporter.dart';
 
 // ============================================
 // SUPABASE CLIENT
@@ -147,7 +148,10 @@ class AuthService {
             'phone': phone,
             'email': email,
           });
-        } catch (_) {}
+        } catch (e, st) {
+          // ثانوي: البروفايل ينشئه trigger handle_new_user أصلاً؛ لا نُفشل التسجيل.
+          reportError(e, st, context: 'auth.sign_up_profile_upsert');
+        }
       }
 
       return response;
@@ -587,8 +591,9 @@ class ChaletService {
       if (!isEditing && chaletId.isNotEmpty) {
         try {
           await supabase.from('chalets').delete().eq('id', chaletId);
-        } catch (_) {
+        } catch (e, st) {
           // ignore secondary cleanup failure to preserve original error
+          reportError(e, st, context: 'chalet_save.cleanup_insert');
         }
       }
 

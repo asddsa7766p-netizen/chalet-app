@@ -105,9 +105,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           _selectedCity = saved;
         });
       }
-    } catch (_) {
+    } catch (e, st) {
       // فشل صامت (مثلاً أول تشغيل بدون توفر التخزين بعد) — يتصرف كأنه
       // ما في اختيار محفوظ، فتظهر شاشة الاختيار الإجبارية كالمعتاد.
+      reportError(e, st, context: 'home.read_city_pref');
     }
 
     await _load();
@@ -136,8 +137,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     try {
       final count = await NotificationService.instance.getUnreadCount();
       if (mounted) setState(() => _unreadNotifications = count);
-    } catch (_) {
+    } catch (e, st) {
       // فشل صامت — لا داعي لإظهار خطأ عام بسبب عداد ثانوي بالهيدر.
+      reportError(e, st, context: 'home.unread_count');
     }
   }
 
@@ -222,9 +224,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_preferredCityKey, city);
-    } catch (_) {
+    } catch (e, st) {
       // فشل صامت — أسوأ حالة إنه يرجع يسأل المرة الجاية، مش أهم من تعطيل
       // باقي الشاشة.
+      reportError(e, st, context: 'home.save_city_pref');
     }
   }
 
