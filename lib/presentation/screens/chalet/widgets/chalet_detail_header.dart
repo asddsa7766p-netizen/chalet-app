@@ -19,11 +19,17 @@ extension _ChaletDetailHeader on _ChaletDetailScreenState {
                     fontWeight: FontWeight.w700,
                     color: AppColors.charcoal)),
             const SizedBox(height: 16),
+            // الثيم يعطي الأزرار minimumSize بعرض لا نهائي، وهذان داخل Row
+            // بلا Expanded: بلا حد صريح ينكسر التخطيط ("infinite width")
+            // ويختفي الزران بنسخة الإصدار.
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 OutlinedButton(
                   onPressed: () => context.pop(),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(88, 52),
+                  ),
                   child:
                       const Text('رجوع', style: TextStyle(fontFamily: 'Cairo')),
                 ),
@@ -32,6 +38,7 @@ extension _ChaletDetailHeader on _ChaletDetailScreenState {
                   onPressed: _load,
                   icon: const Icon(Icons.refresh_rounded),
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(88, 52),
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                   ),
