@@ -414,12 +414,6 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
     }
   }
 
-  void _saveDraft() {
-    // ⚠️ حفظ كمسودة فعلي غير مفعّل بعد — بس رسالة تنبيه مؤقتة. إذا بدك
-    // سلوك حقيقي (حفظ جزئي بدون تحقق كامل)، خبرني وبنبنيها.
-    _showSnack('سيتم دعم "حفظ كمسودة" قريبًا');
-  }
-
   // لأجزاء الشاشة (extensions بملفات part) التي لا تستطيع استدعاء
   // setState المحمي مباشرة.
   void _setState(VoidCallback fn) => setState(fn);
@@ -631,7 +625,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
   Widget _buildBottomBar() {
     final isLast = _currentStep == _stepsInfo.length - 1;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: const Color(0xFFF7F4EC),
         boxShadow: [
@@ -641,87 +635,69 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
               offset: const Offset(0, -3)),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Row(
-            children: [
-              if (_currentStep > 0) ...[
-                OutlinedButton(
-                  key: const Key('add_chalet_prev_step'),
-                  onPressed: _saving ? null : _handleStepCancel,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(88, 52),
-                    side: const BorderSide(color: AppColors.sand),
-                    backgroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: const Text('السابق',
-                      style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.charcoal)),
-                ),
-                const SizedBox(width: 10),
-              ],
-              Expanded(
-                child: ElevatedButton(
-                  key: Key(isLast ? 'add_chalet_submit' : 'add_chalet_next_step'),
-                  onPressed: _saving ? null : _handleStepContinue,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 52),
-                    backgroundColor: _darkGreen,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2.2))
-                      // يصغر النص بدل أن يفيض مع تكبير خط الجهاز.
-                      : FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                isLast ? 'إرسال للمراجعة' : 'التالي',
-                                style: const TextStyle(
-                                    fontFamily: 'Cairo',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                  isLast
-                                      ? Icons.send_rounded
-                                      : Icons.arrow_back,
-                                  size: 16),
-                            ],
-                          ),
-                        ),
-                ),
+          if (_currentStep > 0) ...[
+            OutlinedButton(
+              key: const Key('add_chalet_prev_step'),
+              onPressed: _saving ? null : _handleStepCancel,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(88, 52),
+                side: const BorderSide(color: AppColors.sand),
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
-            ],
-          ),
-          // "حفظ كمسودة" بسطر مستقل حتى لا يزاحم زر التنقل على الشاشات الضيقة.
-          TextButton.icon(
-            key: const Key('add_chalet_save_draft'),
-            onPressed: _saving ? null : _saveDraft,
-            icon: const Icon(Icons.save_outlined,
-                size: 16, color: AppColors.charcoal),
-            label: const Text('حفظ كمسودة',
-                style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.charcoal)),
+              child: const Text('السابق',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.charcoal)),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: ElevatedButton(
+              key: Key(isLast ? 'add_chalet_submit' : 'add_chalet_next_step'),
+              onPressed: _saving ? null : _handleStepContinue,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(0, 52),
+                backgroundColor: _darkGreen,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.2))
+                  // يصغر النص بدل أن يفيض مع تكبير خط الجهاز.
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isLast ? 'إرسال للمراجعة' : 'التالي',
+                            style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                              isLast
+                                  ? Icons.send_rounded
+                                  : Icons.arrow_back,
+                              size: 16),
+                        ],
+                      ),
+                    ),
+            ),
           ),
         ],
       ),

@@ -118,7 +118,7 @@ void main() {
       // الخطوة 1: معلومات أساسية (لا سابق قبلها).
       expect(_button('السابق'), findsNothing);
       _expectUsable(tester, 'التالي');
-      _expectUsable(tester, 'حفظ كمسودة');
+      expect(find.text('حفظ كمسودة'), findsNothing);
       await tester.enterText(_field('اسم الشاليه'), 'شاليه الاختبار');
       await tester.enterText(_field('وصف مختصر'), 'وصف قصير');
       await _tap(tester, 'التالي');
@@ -126,7 +126,7 @@ void main() {
       // الخطوة 2: الصور والفيديو (هنا كان الزر يختفي).
       _expectUsable(tester, 'السابق');
       _expectUsable(tester, 'التالي');
-      _expectUsable(tester, 'حفظ كمسودة');
+      expect(find.text('حفظ كمسودة'), findsNothing);
       await tester.tap(find.byWidgetPredicate(
           (w) => w.runtimeType.toString() == '_CoverImageBox'));
       await tester.pumpAndSettle();
@@ -147,7 +147,7 @@ void main() {
       // الخطوة 4 (الأخيرة): السابق + إرسال للمراجعة، بلا "التالي".
       _expectUsable(tester, 'السابق');
       _expectUsable(tester, 'إرسال للمراجعة');
-      _expectUsable(tester, 'حفظ كمسودة');
+      expect(find.text('حفظ كمسودة'), findsNothing);
       expect(find.text('التالي'), findsNothing);
       await tester.enterText(_field('السعر الأساسي (يبدأ من)'), '350');
       await tester.pump();
