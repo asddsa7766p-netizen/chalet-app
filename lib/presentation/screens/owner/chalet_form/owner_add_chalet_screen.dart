@@ -8,12 +8,12 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/utils/number_utils.dart';
-import '../../../../data/services/services.dart';
 import '../../../../data/services/location_service.dart';
 import '../../../../data/models/chalet_model.dart';
 
 import '../../../widgets/common/common_widgets.dart';
 import '../../profile/profile_provider.dart';
+import 'add_chalet_data_source.dart';
 
 part 'add_chalet_steps.dart';
 part 'add_chalet_widgets.dart';
@@ -21,7 +21,10 @@ part 'add_chalet_widgets.dart';
 class OwnerAddChaletScreen extends ConsumerStatefulWidget {
   final ChaletModel? chalet;
 
-  const OwnerAddChaletScreen({super.key, this.chalet});
+  /// الافتراضي [SupabaseAddChaletDataSource]؛ قابل للحقن بالاختبارات.
+  final AddChaletDataSource? dataSource;
+
+  const OwnerAddChaletScreen({super.key, this.chalet, this.dataSource});
 
   @override
   ConsumerState<OwnerAddChaletScreen> createState() =>
@@ -59,7 +62,8 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
   double? _longitude;
   bool _fetchingLocation = false;
 
-  final ImagePicker _picker = ImagePicker();
+  late final AddChaletDataSource _ds =
+      widget.dataSource ?? SupabaseAddChaletDataSource();
   final List<XFile> _newImages = [];
   final List<Uint8List> _newImageBytes = [];
   final List<String> _existingImageUrls = [];
@@ -225,7 +229,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
 
     List<XFile> picked;
     try {
-      picked = await _picker.pickMultiImage(imageQuality: 85);
+      picked = await _ds.pickImages();
     } catch (_) {
       _showSnack('تعذر فتح معرض الصور، يرجى المحاولة لاحقاً', isError: true);
       return;
@@ -291,7 +295,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
   // ====================== Save ======================
 
   Map<String, dynamic> _buildChaletPayload() {
-    final ownerId = AuthService.instance.currentUser?.id;
+    final ownerId = _ds.currentUserId;
     if (ownerId == null) {
       throw Exception('لا يوجد مستخدم مسجل دخول حاليًا');
     }
@@ -356,13 +360,13 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
     setState(() => _saving = true);
 
     try {
-      final ownerId = AuthService.instance.currentUser?.id;
+      final ownerId = _ds.currentUserId;
       if (ownerId == null) {
         throw Exception('لا يوجد مستخدم مسجل دخول حاليًا');
       }
 
       final payload = _buildChaletPayload();
-      await ChaletService.instance.createOrUpdateChaletWithImages(
+      await _ds.saveChalet(
         isEditing: _editingChaletId != null,
         editingChaletId: _editingChaletId,
         ownerId: ownerId,
@@ -378,7 +382,7 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
       // مراجعة الإدارة) — فكانت الواجهة تعرض "نجاح" وتنتقل لـ
       // /owner-dashboard رغم أن الدور لم يتغيّر فعليًا، فيُعاد طرد
       // المستخدم فورًا من حارس الراوتر (isHost=false) وكأن كل شيء اختفى.
-      final becameOwner = await AuthService.instance.becomeOwner();
+      final becameOwner = await _ds.becomeOwner();
 
       if (!mounted) return;
 
@@ -620,9 +624,14 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
     );
   }
 
+  // أزرار الأنماط بالثيم (AppTheme) بـ minimumSize عرضه لا نهائي، فأي زر
+  // داخل Row بلا عرض محدد أو Expanded يُسقط التخطيط كله. بنسخة الإصدار (بلا
+  // assertions) كان هذا يخفي زر "التالي"/الحفظ بجانب "السابق". لذلك كل زر
+  // هنا إما Expanded أو له minimumSize محدود صراحة.
   Widget _buildBottomBar() {
+    final isLast = _currentStep == _stepsInfo.length - 1;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       decoration: BoxDecoration(
         color: const Color(0xFFF7F4EC),
         boxShadow: [
@@ -632,93 +641,87 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
               offset: const Offset(0, -3)),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (_currentStep > 0) ...[
-            SizedBox(
-              height: 52,
-              child: OutlinedButton(
-                key: const Key('add_chalet_prev_step'),
-                onPressed: _saving ? null : _handleStepCancel,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.sand),
-                  backgroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+          Row(
+            children: [
+              if (_currentStep > 0) ...[
+                OutlinedButton(
+                  key: const Key('add_chalet_prev_step'),
+                  onPressed: _saving ? null : _handleStepCancel,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(88, 52),
+                    side: const BorderSide(color: AppColors.sand),
+                    backgroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('السابق',
+                      style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.charcoal)),
                 ),
-                child: const Text('السابق',
-                    style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.charcoal)),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _saving ? null : _handleStepContinue,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _darkGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2.2))
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _currentStep == 3 ? 'حفظ الشاليه' : 'التالي',
-                            style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: ElevatedButton(
+                  key: Key(isLast ? 'add_chalet_submit' : 'add_chalet_next_step'),
+                  onPressed: _saving ? null : _handleStepContinue,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 52),
+                    backgroundColor: _darkGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2.2))
+                      // يصغر النص بدل أن يفيض مع تكبير خط الجهاز.
+                      : FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                isLast ? 'إرسال للمراجعة' : 'التالي',
+                                style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                  isLast
+                                      ? Icons.send_rounded
+                                      : Icons.arrow_back,
+                                  size: 16),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Icon(
-                              _currentStep == 3
-                                  ? Icons.save_rounded
-                                  : Icons.arrow_back,
-                              size: 16),
-                        ],
-                      ),
+                        ),
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 10),
-          // ✅ الإصلاح: أضفنا width: 140 هون. بدونها كان هاد الزر يكسر
-          // كل الشاشة (BoxConstraints forces an infinite width) لأنه
-          // كان جنب Expanded ضمن نفس الـ Row بدون عرض محدد له.
-          SizedBox(
-            width: 140,
-            height: 52,
-            child: OutlinedButton.icon(
-              onPressed: _saving ? null : _saveDraft,
-              icon: const Icon(Icons.save_outlined,
-                  size: 16, color: AppColors.charcoal),
-              label: const Text('حفظ كمسودة',
-                  style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.charcoal)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.sand),
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
+          // "حفظ كمسودة" بسطر مستقل حتى لا يزاحم زر التنقل على الشاشات الضيقة.
+          TextButton.icon(
+            key: const Key('add_chalet_save_draft'),
+            onPressed: _saving ? null : _saveDraft,
+            icon: const Icon(Icons.save_outlined,
+                size: 16, color: AppColors.charcoal),
+            label: const Text('حفظ كمسودة',
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.charcoal)),
           ),
         ],
       ),
