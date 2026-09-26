@@ -21,7 +21,7 @@ class OnboardingScreen extends StatelessWidget {
         children: [
           // الخلفية: صورة الاستراحة/المسبح
           Image.asset(
-            'assets/images/onboarding_bg.jpg',
+            'assets/images/onboarding_bg.webp',
             fit: BoxFit.cover,
           ),
 

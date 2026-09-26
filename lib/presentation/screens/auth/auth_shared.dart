@@ -131,7 +131,7 @@ class AuthHeader extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset('assets/images/onboarding_bg.jpg', fit: BoxFit.cover),
+          Image.asset('assets/images/onboarding_bg.webp', fit: BoxFit.cover),
           Container(color: Colors.black.withValues(alpha: 0.05)),
           Center(
             child: Image.asset('assets/images/logo.png',

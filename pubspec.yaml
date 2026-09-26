@@ -60,5 +60,5 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/.env
-    - assets/images/onboarding_bg.jpg
+    - assets/images/onboarding_bg.webp
     - assets/images/logo.png
