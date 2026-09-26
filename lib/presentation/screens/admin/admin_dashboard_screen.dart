@@ -2,15 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/admin_colors.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/currency_formatter.dart';
+import '../../../data/models/booking_period.dart';
 import '../../../data/services/admin_service.dart';
 import '../../widgets/common/paged_list.dart';
 import '../../../data/services/services.dart' show AuthService;
+import '../settings/settings_screen.dart' show SettingsScreen;
 
+part 'admin_header.dart';
 part 'overview_tab.dart';
 part 'chalet_approvals_tab.dart';
+part 'chalet_review_screen.dart';
 part 'users_tab.dart';
 
 /// لوحة تحكم الأدمن الشاملة — makan
@@ -117,75 +123,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         child: Column(
           children: [
             // ── Header ──
-            Material(
-              key: const Key('admin_header'),
-              color: AdminColors.navy,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: AdminColors.navyLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AdminColors.gold),
-                        ),
-                        child: const Icon(Icons.admin_panel_settings_rounded,
-                            color: AdminColors.gold),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'لوحة الإدارة',
-                              style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w900,
-                                  color: AdminColors.onNavy),
-                            ),
-                            Text(
-                              'وضع الإدارة · مكان',
-                              style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AdminColors.gold),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // يفتح واجهة التطبيق (بشريط "وضع الإدارة" أعلاها)، لا خروج
-                      // من الحساب.
-                      TextButton.icon(
-                        onPressed: () => context.go('/home'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AdminColors.onNavy,
-                          backgroundColor: AdminColors.navyLight,
-                          minimumSize: const Size(0, 36),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                        icon: const Icon(Icons.storefront_rounded, size: 16),
-                        label: const Text('تصفّح التطبيق',
-                            style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            const AdminDashboardHeader(),
             // ── Tabs ──
             TabBar(
               controller: _tabController,
@@ -240,6 +178,7 @@ Future<bool> _confirm(
   required String title,
   required String message,
   required String action,
+  Color actionColor = AppColors.error,
 }) async {
   final ok = await showDialog<bool>(
     context: context,
@@ -256,8 +195,8 @@ Future<bool> _confirm(
         TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(action,
-                style: const TextStyle(
-                    fontFamily: 'Cairo', color: AppColors.error))),
+                style: TextStyle(
+                    fontFamily: 'Cairo', color: actionColor))),
       ],
     ),
   );

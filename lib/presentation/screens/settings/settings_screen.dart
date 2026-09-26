@@ -15,7 +15,10 @@ import '../settings/terms_screen.dart';
 // (Originally existed inside profile_screen.dart in this project.)
 
 class SettingsScreen extends ConsumerWidget {
-  const SettingsScreen({super.key});
+  /// إعدادات حساب الإدارة: اللغة والثيم فقط.
+  final bool languageAndThemeOnly;
+
+  const SettingsScreen({super.key, this.languageAndThemeOnly = false});
 
   void _openLanguageSheet(BuildContext context) {
     showModalBottomSheet(
@@ -56,49 +59,52 @@ class SettingsScreen extends ConsumerWidget {
               activeThumbColor: AppColors.primary,
             ),
           ),
-          _SettingsTile(
-            icon: Icons.shield_outlined,
-            label: AppStrings.privacy,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const PrivacySecurityScreen(),
-              ),
-            ),
-          ),
-          _SettingsTile(
-            icon: Icons.article_outlined,
-            label: AppStrings.termsAndConditions,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const TermsScreen(),
-              ),
-            ),
-          ),
-          // تُخفى حتى تُعتمد بيانات الدعم (AppStrings.supportPhone/Email).
-          if (SupportContact.hasAny)
+          // حساب الإدارة: اللغة والثيم فقط.
+          if (!languageAndThemeOnly) ...[
             _SettingsTile(
-              icon: Icons.help_outline_rounded,
-              label: AppStrings.help,
+              icon: Icons.shield_outlined,
+              label: AppStrings.privacy,
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const HelpSupportScreen(),
+                  builder: (_) => const PrivacySecurityScreen(),
                 ),
               ),
             ),
-          _SettingsTile(
-            icon: Icons.info_outline_rounded,
-            label: AppStrings.about,
-            value: 'الإصدار 1.0.0',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AboutAppScreen(),
+            _SettingsTile(
+              icon: Icons.article_outlined,
+              label: AppStrings.termsAndConditions,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const TermsScreen(),
+                ),
               ),
             ),
-          ),
+            // تُخفى حتى تُعتمد بيانات الدعم (AppStrings.supportPhone/Email).
+            if (SupportContact.hasAny)
+              _SettingsTile(
+                icon: Icons.help_outline_rounded,
+                label: AppStrings.help,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const HelpSupportScreen(),
+                  ),
+                ),
+              ),
+            _SettingsTile(
+              icon: Icons.info_outline_rounded,
+              label: AppStrings.about,
+              value: 'الإصدار 1.0.0',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AboutAppScreen(),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

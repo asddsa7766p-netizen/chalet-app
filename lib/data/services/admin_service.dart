@@ -1,5 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/chalet_model.dart';
+import 'pricing_service.dart' show ChaletStayTypeConfig;
+
 /// إحصائيات لوحة الأدمن كما تُرجعها admin_get_overview_stats (مجمَّعة على
 /// السيرفر بدل جلب كل صفوف المنصة وجمعها بالتطبيق).
 ///
@@ -117,6 +120,38 @@ class AdminService {
     return (data as List).cast<Map<String, dynamic>>();
   }
 
+  /// كل ما يحتاجه الأدمن لمراجعة شاليه قبل اعتماده: الشاليه، فتراته المفعّلة
+  /// (أوقاتها وأسعارها)، واسم المالك وهاتفه. سياسات RLS تسمح للأدمن بقراءة
+  /// الشاليه غير المعتمد وبروفايل مالكه.
+  Future<AdminChaletReview> getChaletForReview(String chaletId) async {
+    final chaletRow =
+        await _supabase.from('chalets').select('*').eq('id', chaletId).single();
+    final chalet = ChaletModel.fromJson(chaletRow);
+    final periodRows = await _supabase
+        .from('chalet_stay_types')
+        .select()
+        .eq('chalet_id', chaletId)
+        .eq('is_enabled', true)
+        .order('sort_order', ascending: true);
+    final owner = chalet.ownerId == null
+        ? null
+        : await _supabase
+            .from('profiles')
+            .select('full_name, phone, email')
+            .eq('id', chalet.ownerId!)
+            .maybeSingle();
+    return AdminChaletReview(
+      chalet: chalet,
+      periods: [
+        for (final r in periodRows as List)
+          ChaletStayTypeConfig.fromJson(Map<String, dynamic>.from(r as Map)),
+      ],
+      ownerName: owner?['full_name'] as String?,
+      ownerPhone: owner?['phone'] as String?,
+      ownerEmail: owner?['email'] as String?,
+    );
+  }
+
   Future<void> approveChalet(String chaletId) =>
       _rpc('admin_approve_chalet', {'p_chalet_id': chaletId});
 
@@ -148,6 +183,29 @@ class AdminService {
       '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+}
+
+/// بيانات شاشة مراجعة الشاليه بلوحة الإدارة.
+class AdminChaletReview {
+  final ChaletModel chalet;
+
+  /// الفترات المفعّلة؛ فارغة = فترة "يوم كامل" الافتراضية.
+  final List<ChaletStayTypeConfig> periods;
+  final String? ownerName;
+  final String? ownerPhone;
+  final String? ownerEmail;
+
+  const AdminChaletReview({
+    required this.chalet,
+    this.periods = const [],
+    this.ownerName,
+    this.ownerPhone,
+    this.ownerEmail,
+  });
+
+  /// سعر الفترة: سعرها الأساسي، وإلا السعر الافتراضي للشاليه.
+  double priceOf(ChaletStayTypeConfig period) =>
+      period.basePrice ?? chalet.pricePerNight;
 }
 
 class AdminActionException implements Exception {

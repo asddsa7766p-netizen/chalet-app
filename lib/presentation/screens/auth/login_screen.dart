@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:makan/presentation/screens/auth/auth_shared.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/router/app_router.dart';
 import '../../../core/utils/error_reporter.dart';
 import '../../../data/services/services.dart';
 import '../home/main_screen.dart' show goToMainTab;
@@ -40,6 +41,14 @@ class _LoginScreenState extends State<LoginScreen> {
       // داخل microtask أو بعد await.
       final router = GoRouter.of(context);
       final pending = AuthRedirectService.consumePendingAction();
+      // حساب الإدارة: لوحة الإدارة مباشرة، ويُهمل أي إجراء زبون معلّق (حجز،
+      // مفضلة، تقييمات) — الأدمن لا يتصفح واجهة الزبون.
+      final profile = await AppRouter.currentUserProfile();
+      if (profile?.isAdmin == true) {
+        router.go('/admin-dashboard');
+        return;
+      }
+      if (!mounted) return;
       if (pending != null) {
         switch (pending.type) {
           case 'open_booking':
@@ -63,11 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
             final chaletId = pending.data['chaletId'] as String?;
             if (chaletId != null) {
               try {
-                // حساب الإدارة لا يستخدم المفضلة: يفتح الشاليه فقط.
-                final profile = await AuthService.instance.getCurrentProfile();
-                if (profile?.isAdmin != true) {
-                  await FavoritesService.instance.toggleFavorite(chaletId);
-                }
+                await FavoritesService.instance.toggleFavorite(chaletId);
               } catch (e, st) {
                 // تبديل المفضلة ثانوي هنا: لا نوقف تدفق تسجيل الدخول لأجله، لكن نسجّله.
                 reportError(e, st, context: 'login.pending_toggle_favorite');

@@ -57,11 +57,56 @@ class AppRouter {
         location == '/admin-dashboard';
   }
 
-  /// مسارات الزبون والمالك الممنوعة على حساب الإدارة.
-  static bool isAdminBlockedRoute(String location) {
-    return location == '/home/booking' ||
-        location == '/payment' ||
-        location.startsWith('/owner-');
+  /// المسارات المسموحة لحساب الإدارة: لوحة الإدارة فقط. الأدمن لا يتصفح
+  /// واجهة الزبون ولا المالك، فكل ما عداها (الرئيسية، البحث، الخريطة،
+  /// تفاصيل الشاليه، الحجز، الدفع، الإشعارات، owner-*) يعيده للوحة.
+  static bool isAdminRoute(String location) =>
+      location == '/admin-dashboard' ||
+      location.startsWith('/admin-dashboard/');
+
+  /// قرار التوجيه لمسار [location] (منفصل عن GoRouter ليُختبر مباشرة).
+  /// [loadProfile] لا يُستدعى للضيف.
+  static Future<String?> resolveRedirect(
+    String location, {
+    required bool isLoggedIn,
+    required Future<UserProfile?> Function() loadProfile,
+  }) async {
+    if (isLoggedIn) {
+      // حساب الإدارة واجهته لوحة الإدارة فقط: بعد تسجيل الدخول، وعند فتح
+      // التطبيق بجلسة محفوظة (onboarding)، وأي مسار زبون أو مالك حتى عبر
+      // رابط مباشر أو إجراء معلّق — كلها تعيده للوحة. السيرفر يرفض حجزه
+      // وتملّكه للشاليهات أيضاً.
+      if (!isAdminRoute(location)) {
+        final profile = await loadProfile();
+        if (profile?.isAdmin == true) return '/admin-dashboard';
+      }
+      // Onboarding وصفحات الدخول: المسجَّل يذهب للرئيسية مباشرة.
+      if (location == '/onboarding' || location.startsWith('/auth/')) {
+        return '/home';
+      }
+    } else if (location == '/onboarding') {
+      return null;
+    }
+
+    // Public routes: allow guests.
+    if (isPublicRoute(location)) return null;
+
+    // Protected routes: require login.
+    if (isProtectedRoute(location) && !isLoggedIn) return '/auth/login';
+
+    // Owner routes (excluding add-chalet): require host role.
+    if (location.startsWith('/owner-') && location != '/owner-add-chalet') {
+      final profile = await loadProfile();
+      return profile?.isHost == true ? null : '/home';
+    }
+
+    // Admin route protection
+    if (location == '/admin-dashboard') {
+      final profile = await loadProfile();
+      return profile?.isAdmin == true ? null : '/home';
+    }
+
+    return null;
   }
 
   // ---- كاش صلاحيات المستخدم (مالك/أدمن) لحرّاس المسارات ----
@@ -106,51 +151,11 @@ class AppRouter {
         return '/onboarding';
       }
 
-      final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
-
-      // Onboarding: لو مسجل دخول، وجّهه على الهوم مباشرة بدل شاشة الترحيب.
-      if (location == '/onboarding') {
-        if (isLoggedIn) return '/home';
-        return null;
-      }
-
-      // Logged-in users on auth pages go to home.
-      if (isLoggedIn && location.startsWith('/auth/')) {
-        return '/home';
-      }
-
-      // Public routes: allow guests.
-      if (isPublicRoute(location)) {
-        return null;
-      }
-
-      // Protected routes: require login.
-      if (isProtectedRoute(location)) {
-        if (!isLoggedIn) return '/auth/login';
-      }
-
-      // حساب الإدارة لا يحجز ولا يدفع ولا يملك شاليهات (السيرفر يرفض ذلك
-      // أيضاً): مسارات الحجز والدفع والمالك كلها تعيده للوحة الإدارة، حتى
-      // عبر رابط مباشر أو إجراء معلّق بعد تسجيل الدخول.
-      if (isAdminBlockedRoute(location)) {
-        final profile = await currentUserProfile();
-        if (profile?.isAdmin == true) return '/admin-dashboard';
-      }
-
-      // Owner routes (excluding add-chalet): require host role.
-      if (location.startsWith('/owner-') && location != '/owner-add-chalet') {
-        final profile = await currentUserProfile();
-        return profile?.isHost == true ? null : '/home';
-      }
-
-      // Admin route protection
-      if (location == '/admin-dashboard') {
-        if (!isLoggedIn) return '/auth/login';
-        final profile = await currentUserProfile();
-        return profile?.isAdmin == true ? null : '/home';
-      }
-
-      return null;
+      return resolveRedirect(
+        location,
+        isLoggedIn: Supabase.instance.client.auth.currentUser != null,
+        loadProfile: currentUserProfile,
+      );
     },
     routes: [
       GoRoute(

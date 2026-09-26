@@ -8,7 +8,6 @@ import '../favorites/favorites_screen.dart';
 import '../profile/profile_screen.dart';
 import '../reels/reels_screen.dart';
 import '../map/palestine_chalets_map_screen.dart';
-import '../../widgets/common/admin_mode_banner.dart';
 import '../../widgets/common/login_prompt.dart';
 import '../profile/profile_provider.dart';
 import '../../../data/services/services.dart';
@@ -116,22 +115,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       const ProfileScreen(),
     ];
 
-    final stack = IndexedStack(index: current, children: screens);
-
     return Scaffold(
-      // شريط "وضع الإدارة" فوق كل التبويبات؛ يأخذ هو حافة الشاشة العلوية،
-      // فتُزال من الشاشات تحته حتى لا تتكرر مسافة شريط الحالة.
-      body: isAdmin
-          ? Column(
-              children: [
-                const AdminModeBanner(),
-                Expanded(
-                  child: MediaQuery.removePadding(
-                      context: context, removeTop: true, child: stack),
-                ),
-              ],
-            )
-          : stack,
+      body: IndexedStack(index: current, children: screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: visible.indexOf(current),
         onTap: (pos) {

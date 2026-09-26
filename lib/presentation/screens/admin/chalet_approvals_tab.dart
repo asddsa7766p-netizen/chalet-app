@@ -146,11 +146,16 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
           final images = (c['images'] as List?)?.cast<String>() ?? [];
           final cover = images.isNotEmpty ? images.first : null;
 
-          return Container(
-            decoration: BoxDecoration(
-                color: AppColors.card,
+          return Material(
+            color: AppColors.card,
+            shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border)),
+                side: const BorderSide(color: AppColors.border)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+            key: Key('pending_chalet_${c['id']}'),
+            onTap: _actionLoading ? null : () => _openReview(c),
+            child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,6 +188,12 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
                               fontFamily: 'Cairo',
                               fontSize: 12,
                               color: AppColors.textSecondary)),
+                      const Text('اضغط لمراجعة كل التفاصيل',
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AdminColors.navy)),
                       const SizedBox(height: 10),
                       Row(
                         children: [
@@ -229,10 +240,23 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
                 ),
               ],
             ),
+            ),
+            ),
           );
         },
       ),
     );
+  }
+
+  /// يفتح شاشة المراجعة؛ اعتماد الشاليه أو رفضه منها يزيله من القائمة.
+  Future<void> _openReview(Map<String, dynamic> chalet) async {
+    final decided = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) =>
+            AdminChaletReviewScreen(chaletId: chalet['id'] as String)));
+    if (decided == true && mounted) {
+      setState(() => _pager.items =
+          _pager.items.where((c) => c['id'] != chalet['id']).toList());
+    }
   }
 
   Widget _placeholder() => Container(
