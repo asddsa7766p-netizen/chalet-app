@@ -67,6 +67,8 @@ Future<bool> confirmBookingFlow(
     actionColor: AppColors.primary,
   );
   if (!proceed) return false;
+  // المستدعي قد يكون أُزيل أثناء الحوار؛ onStart يستدعي setState عنده.
+  if (!context.mounted) return false;
 
   onStart?.call();
   try {
@@ -96,6 +98,8 @@ Future<bool> rejectBookingFlow(
     actionColor: AppColors.error,
   );
   if (!proceed) return false;
+  // المستدعي قد يكون أُزيل أثناء الحوار؛ onStart يستدعي setState عنده.
+  if (!context.mounted) return false;
 
   onStart?.call();
   try {
