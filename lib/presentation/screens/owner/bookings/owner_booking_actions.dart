@@ -5,6 +5,17 @@ import '../../../../data/services/services.dart';
 
 typedef BookingAction = Future<void> Function(String bookingId);
 
+/// رسالة فشل القبول/الرفض: رسالة الخدمة أو الخادم إن كانت عربية واضحة (مثل
+/// [bookingNotUpdatedMessage] أو [periodTakenMessage])، وإلا [fallback].
+/// "واضحة" = فيها حروف عربية وليس فيها حروف لاتينية، فأي نص تقني خام
+/// (PostgrestException، SocketException…) يُستبدل بالرسالة العامة.
+String bookingActionErrorMessage(Object error, String fallback) {
+  final msg = error.toString().replaceFirst('Exception: ', '').trim();
+  final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(msg);
+  final hasLatin = RegExp(r'[A-Za-z]').hasMatch(msg);
+  return hasArabic && !hasLatin ? msg : fallback;
+}
+
 void _snack(ScaffoldMessengerState messenger, String msg,
     {bool isError = false}) {
   messenger.showSnackBar(
@@ -75,8 +86,12 @@ Future<bool> confirmBookingFlow(
     await (confirm ?? BookingService.instance.confirmIncomingBooking)(bookingId);
     _snack(messenger, 'تم تأكيد الحجز بنجاح');
     return true;
-  } catch (_) {
-    _snack(messenger, 'تعذر تأكيد الحجز، يرجى المحاولة لاحقاً', isError: true);
+  } catch (e) {
+    _snack(
+        messenger,
+        bookingActionErrorMessage(
+            e, 'تعذر تأكيد الحجز، يرجى المحاولة لاحقاً'),
+        isError: true);
     return false;
   }
 }
@@ -106,8 +121,11 @@ Future<bool> rejectBookingFlow(
     await (reject ?? BookingService.instance.rejectIncomingBooking)(bookingId);
     _snack(messenger, 'تم رفض الحجز');
     return true;
-  } catch (_) {
-    _snack(messenger, 'تعذر رفض الحجز، يرجى المحاولة لاحقاً', isError: true);
+  } catch (e) {
+    _snack(
+        messenger,
+        bookingActionErrorMessage(e, 'تعذر رفض الحجز، يرجى المحاولة لاحقاً'),
+        isError: true);
     return false;
   }
 }
