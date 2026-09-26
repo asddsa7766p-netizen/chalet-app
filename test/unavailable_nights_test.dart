@@ -148,6 +148,13 @@ void main() {
           singleDayOnlyMessage);
     });
 
+    test('شاليه محذوف أو غير معتمد يُعرض بنص السيرفر كما هو', () {
+      const raw = 'PostgrestException(message: هذا الشاليه لم يعد متاحاً '
+          'للحجز, code: P0001, details: null, hint: null)';
+      expect(translateSupabaseError(raw), 'هذا الشاليه لم يعد متاحاً للحجز');
+      expect(translateSupabaseError(raw), chaletNotBookableMessage);
+    });
+
     test('حروف كبيرة وصغيرة لا تهم', () {
       expect(translateSupabaseError('BOOKING CONFLICT: AVAILABILITY UNAVAILABLE'),
           unavailableDatesMessage);

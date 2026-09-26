@@ -14,6 +14,10 @@ const unavailableDatesMessage =
 /// رفض السيرفر لأي حجز ليس يوماً واحداً (enforce_single_day_booking).
 const singleDayOnlyMessage = 'الحجز يكون ليوم واحد وفترة واحدة فقط';
 
+/// رفض السيرفر لحجز على شاليه محذوف أو غير معتمد (trigger
+/// enforce_bookable_chalet، ERRCODE P0001).
+const chaletNotBookableMessage = 'هذا الشاليه لم يعد متاحاً للحجز';
+
 /// تعارض فترة محجوزة (exclusion/overlap بالقاعدة).
 const periodTakenMessage = 'هذه الفترة محجوزة، جرّب فترة أو يوماً آخر';
 
@@ -38,6 +42,12 @@ String _translateSupabaseError(dynamic error) {
   // موجّهة للمستخدم، فتُعرض كما هي. تسبق كل الفروع الأخرى.
   if (msg.contains(singleDayOnlyMessage)) {
     return singleDayOnlyMessage;
+  }
+
+  // trigger enforce_bookable_chalet: شاليه محذوف أو غير معتمد. رسالة موجّهة
+  // للمستخدم فتُعرض كما هي، قبل أي فرع قد يطابق نص الخطأ.
+  if (msg.contains(chaletNotBookableMessage)) {
+    return chaletNotBookableMessage;
   }
 
   // يجب أن يسبق فرع "booking conflict" العام أدناه: رسالة الـ trigger
