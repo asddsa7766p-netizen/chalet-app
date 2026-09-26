@@ -347,6 +347,33 @@ void main() {
     });
   });
 
+  testWidgets('بطاقة الشاليه المعلّق: بلا أزرار اعتماد/رفض، والضغط يفتح المراجعة',
+      (tester) async {
+    final taps = <int>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: PendingChaletCard(
+          chalet: const {
+            'id': 'ch1',
+            'name': 'شاليه الياسمين',
+            'city': 'نابلس',
+            'price_per_night': 400,
+            'images': <String>[],
+          },
+          onTap: () => taps.add(1),
+        ),
+      ),
+    ));
+    expect(find.text('شاليه الياسمين'), findsOneWidget);
+    expect(find.text('موافقة'), findsNothing);
+    expect(find.text('رفض'), findsNothing);
+    expect(find.byType(ElevatedButton), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.byType(TextButton), findsNothing);
+    await tester.tap(find.text('شاليه الياسمين'));
+    expect(taps, [1]);
+  });
+
   testWidgets('ChaletCard: showFavorite=false يخفي القلب كلياً',
       (tester) async {
     final chalet = ChaletModel.fromJson(const {
