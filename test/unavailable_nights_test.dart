@@ -155,6 +155,14 @@ void main() {
       expect(translateSupabaseError(raw), chaletNotBookableMessage);
     });
 
+    test('رفض حجز/إضافة شاليه من حساب الإدارة يُعرض بنص السيرفر كما هو', () {
+      const raw = 'PostgrestException(message: حساب الإدارة لا يمكنه الحجز أو '
+          'إضافة شاليهات, code: P0001, details: null, hint: null)';
+      expect(translateSupabaseError(raw),
+          'حساب الإدارة لا يمكنه الحجز أو إضافة شاليهات');
+      expect(translateSupabaseError(raw), adminCannotBookMessage);
+    });
+
     test('حروف كبيرة وصغيرة لا تهم', () {
       expect(translateSupabaseError('BOOKING CONFLICT: AVAILABILITY UNAVAILABLE'),
           unavailableDatesMessage);

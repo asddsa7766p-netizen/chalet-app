@@ -18,6 +18,10 @@ const singleDayOnlyMessage = 'الحجز يكون ليوم واحد وفترة �
 /// enforce_bookable_chalet، ERRCODE P0001).
 const chaletNotBookableMessage = 'هذا الشاليه لم يعد متاحاً للحجز';
 
+/// رفض السيرفر لحجز أو إضافة شاليه من حساب الإدارة (trigger
+/// block_admin_customer_actions على bookings وchalets، ERRCODE P0001).
+const adminCannotBookMessage = 'حساب الإدارة لا يمكنه الحجز أو إضافة شاليهات';
+
 /// تعارض فترة محجوزة (exclusion/overlap بالقاعدة).
 const periodTakenMessage = 'هذه الفترة محجوزة، جرّب فترة أو يوماً آخر';
 
@@ -48,6 +52,12 @@ String _translateSupabaseError(dynamic error) {
   // للمستخدم فتُعرض كما هي، قبل أي فرع قد يطابق نص الخطأ.
   if (msg.contains(chaletNotBookableMessage)) {
     return chaletNotBookableMessage;
+  }
+
+  // trigger block_admin_customer_actions: حساب الإدارة لا يحجز ولا يضيف
+  // شاليهات. رسالة موجّهة للمستخدم فتُعرض كما هي.
+  if (msg.contains(adminCannotBookMessage)) {
+    return adminCannotBookMessage;
   }
 
   // يجب أن يسبق فرع "booking conflict" العام أدناه: رسالة الـ trigger
