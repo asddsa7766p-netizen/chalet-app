@@ -10,7 +10,6 @@ import '../../presentation/screens/auth/forgot_password_screen.dart';
 import '../../presentation/screens/home/main_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
 import 'package:makan/presentation/screens/payment/payment_flow_entry.dart';
-import '../../presentation/screens/reels/reels_screen.dart';
 import '../../presentation/screens/chalet/chalet_detail_screen.dart';
 import '../../presentation/screens/booking/booking_screen.dart';
 import '../../presentation/screens/owner/owner_dashboard_screen.dart';
@@ -45,8 +44,7 @@ class AppRouter {
         location == '/home' ||
         location.startsWith('/home/chalet/') ||
         location == '/search' ||
-        location == '/map' ||
-        location == '/reels';
+        location == '/map';
   }
 
   /// Routes that require login (redirect to /auth/login if not logged in).
@@ -225,10 +223,6 @@ class AppRouter {
             periodLabel: extra['periodLabel'] as String,
           );
         },
-      ),
-      GoRoute(
-        path: '/reels',
-        builder: (_, __) => const ReelsScreen(),
       ),
       GoRoute(
         path: '/home',
