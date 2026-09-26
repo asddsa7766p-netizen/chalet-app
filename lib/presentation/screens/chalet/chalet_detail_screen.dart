@@ -14,6 +14,7 @@ import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/login_prompt.dart';
+import '../profile/profile_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:url_launcher/url_launcher.dart';
@@ -350,6 +351,8 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                   ),
                 ),
                 actions: [
+                  // الأدمن لا يستخدم المفضلة (ولا يحجز): القلب مخفي عنه.
+                  if (!ref.watch(isAdminProvider))
                   GestureDetector(
                     onTap: _toggleFavorite,
                     child: Container(
@@ -594,6 +597,8 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       color: AppColors.primary)),
             ],
           ),
+          // الأدمن لا يحجز (السيرفر يرفض أيضاً): يبقى السعر فقط بلا "احجز الآن".
+          if (!ref.watch(isAdminProvider)) ...[
           const SizedBox(width: 16),
           Expanded(
             child: ElevatedButton(
@@ -620,6 +625,7 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       fontWeight: FontWeight.w700)),
             ),
           ),
+          ],
         ],
       ),
     );

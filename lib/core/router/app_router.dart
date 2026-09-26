@@ -57,6 +57,13 @@ class AppRouter {
         location == '/admin-dashboard';
   }
 
+  /// مسارات الزبون والمالك الممنوعة على حساب الإدارة.
+  static bool isAdminBlockedRoute(String location) {
+    return location == '/home/booking' ||
+        location == '/payment' ||
+        location.startsWith('/owner-');
+  }
+
   // ---- كاش صلاحيات المستخدم (مالك/أدمن) لحرّاس المسارات ----
   static Future<UserProfile?>? _profileFuture;
   static String? _profileUserId;
@@ -120,6 +127,14 @@ class AppRouter {
       // Protected routes: require login.
       if (isProtectedRoute(location)) {
         if (!isLoggedIn) return '/auth/login';
+      }
+
+      // حساب الإدارة لا يحجز ولا يدفع ولا يملك شاليهات (السيرفر يرفض ذلك
+      // أيضاً): مسارات الحجز والدفع والمالك كلها تعيده للوحة الإدارة، حتى
+      // عبر رابط مباشر أو إجراء معلّق بعد تسجيل الدخول.
+      if (isAdminBlockedRoute(location)) {
+        final profile = await currentUserProfile();
+        if (profile?.isAdmin == true) return '/admin-dashboard';
       }
 
       // Owner routes (excluding add-chalet): require host role.

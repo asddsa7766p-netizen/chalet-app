@@ -12,6 +12,7 @@ import '../../../data/services/services.dart';
 import '../../widgets/common/common_widgets.dart';
 import '../../widgets/common/login_prompt.dart';
 import '../../../data/providers/favorites_provider.dart';
+import '../profile/profile_provider.dart';
 
 part 'search_filters_sheet.dart';
 
@@ -402,6 +403,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           // (onFavoriteTap = null) ويعرض دائماً "غير مفضّل"
                           // حتى للشاليه المفضّل فعلاً بالرئيسية.
                           isFavorite: ref.watch(isFavoriteProvider(chalet.id)),
+                          showFavorite: !ref.watch(isAdminProvider),
                           onFavoriteTap: () {
                             if (!requireAuth(
                                 context,

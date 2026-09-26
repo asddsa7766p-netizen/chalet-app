@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:makan/presentation/screens/profile/profile_provider.dart';
+import '../../../core/constants/admin_colors.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/error_reporter.dart';
@@ -120,8 +121,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-                'لا يوجد حاليًا شاليه معتمد يسمح بتفعيل وضع المالك'),
+            content: Text('لا يوجد حاليًا شاليه معتمد يسمح بتفعيل وضع المالك'),
           ),
         );
       }
@@ -209,39 +209,44 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   _buildHeader(profile, isHost, isAdmin),
                   const SizedBox(height: 16),
 
-                  Row(
-                    children: [
-                      Expanded(
-                          child: _statCard(
-                              label: 'حجز مكتمل',
-                              value: '$_completedCount',
-                              accent: AppColors.primary)),
-                      const SizedBox(width: 10),
-                      Expanded(
-                          child: _statCard(
-                              label: 'في المفضلة',
-                              value: '$favoritesCount',
-                              accent: const Color(0xFF883454))),
-                    ],
-                  ),
+                  // الأدمن لا يحجز ولا يملك مفضلة ولا شاليهات: كل خيارات الزبون
+                  // والمالك بهذه الشاشة مخفية عنه (isAdmin).
+                  if (!isAdmin)
+                    Row(
+                      children: [
+                        Expanded(
+                            child: _statCard(
+                                label: 'حجز مكتمل',
+                                value: '$_completedCount',
+                                accent: AppColors.primary)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: _statCard(
+                                label: 'في المفضلة',
+                                value: '$favoritesCount',
+                                accent: const Color(0xFF883454))),
+                      ],
+                    ),
 
-                  // ✅ زر لوحة تحكم الأدمن — مخفي تماماً عن غير الأدمن
+                  // ✅ زر لوحة الإدارة — مخفي تماماً عن غير الأدمن، بألوان الإدارة.
                   if (isAdmin) ...[
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
+                        key: const Key('profile_admin_dashboard'),
                         onPressed: () => context.go('/admin-dashboard'),
-                        icon: const Icon(Icons.admin_panel_settings_rounded),
+                        icon: const Icon(Icons.admin_panel_settings_rounded,
+                            color: AdminColors.gold),
                         label: const Text(
-                          'لوحة تحكم الأدمن',
+                          'لوحة الإدارة',
                           style: TextStyle(
                               fontFamily: 'Cairo',
                               fontWeight: FontWeight.w800,
                               fontSize: 15),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF8A6D3B),
+                          backgroundColor: AdminColors.navy,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -252,7 +257,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ],
 
                   // زر لوحة تحكم المالك
-                  if (isHost) ...[
+                  if (isHost && !isAdmin) ...[
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
@@ -280,7 +285,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   // ✅ جديد: زر "العودة إلى لوحة المالك" — يظهر فقط لمن كان
                   // مالكًا سابقًا ولديه شاليه معتمد فعليًا (is_approved=true)
                   // مرتبط به، بدل إجباره على تعبئة شاليه جديد ليعود مالكًا.
-                  if (!isHost && _hasApprovedChalet) ...[
+                  if (!isHost && !isAdmin && _hasApprovedChalet) ...[
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
@@ -310,31 +315,34 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   _sectionTitle('إعدادات الحساب'),
                   const SizedBox(height: 8),
 
-                  _menuRow(
-                    icon: Icons.calendar_month_rounded,
-                    iconBg: AppColors.primary.withValues(alpha: 0.15),
-                    iconColor: AppColors.primary,
-                    label: 'حجوزاتي',
-                    trailingText: null,
-                    onTap: () => goToMainTab(context, 3),
-                  ),
-                  const SizedBox(height: 10),
-                  _menuRow(
-                    icon: Icons.favorite_rounded,
-                    iconBg: AppColors.error.withValues(alpha: 0.12),
-                    iconColor: AppColors.error,
-                    label: 'المفضلة',
-                    trailingText: null,
-                    onTap: () => goToMainTab(context, 2),
-                  ),
-                  const SizedBox(height: 10),
+                  if (!isAdmin) ...[
+                    _menuRow(
+                      icon: Icons.calendar_month_rounded,
+                      iconBg: AppColors.primary.withValues(alpha: 0.15),
+                      iconColor: AppColors.primary,
+                      label: 'حجوزاتي',
+                      trailingText: null,
+                      onTap: () => goToMainTab(context, 3),
+                    ),
+                    const SizedBox(height: 10),
+                    _menuRow(
+                      icon: Icons.favorite_rounded,
+                      iconBg: AppColors.error.withValues(alpha: 0.12),
+                      iconColor: AppColors.error,
+                      label: 'المفضلة',
+                      trailingText: null,
+                      onTap: () => goToMainTab(context, 2),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   _menuRow(
                     icon: Icons.notifications_active_rounded,
                     iconBg: const Color(0xFF2ECC71).withValues(alpha: 0.15),
                     iconColor: const Color(0xFF2ECC71),
                     label: 'التنبيهات',
-                    trailingText:
-                        _unreadNotifications > 0 ? '$_unreadNotifications' : null,
+                    trailingText: _unreadNotifications > 0
+                        ? '$_unreadNotifications'
+                        : null,
                     onTap: () async {
                       await context.push('/notifications');
                       try {
@@ -350,7 +358,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                   const SizedBox(height: 16),
 
-                  if (!isHost)
+                  if (!isHost && !isAdmin)
                     GestureDetector(
                       onTap: () => context.push('/owner-add-chalet'),
                       child: Container(
@@ -394,8 +402,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                       style: TextStyle(
                                           fontFamily: 'Cairo',
                                           fontSize: 12,
-                                          color:
-                                              Colors.white.withValues(alpha: 0.85))),
+                                          color: Colors.white
+                                              .withValues(alpha: 0.85))),
                                 ],
                               ),
                             ),
@@ -569,7 +577,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     decoration: BoxDecoration(
                       color: iconBg,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: iconColor.withValues(alpha: 0.25)),
+                      border:
+                          Border.all(color: iconColor.withValues(alpha: 0.25)),
                     ),
                     child: Icon(icon, color: iconColor, size: 22),
                   ),
@@ -700,19 +709,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8A6D3B).withValues(alpha: 0.1),
+                          color: AdminColors.navy,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: const Color(0xFF8A6D3B).withValues(alpha: 0.4)),
+                          border: Border.all(color: AdminColors.gold),
                         ),
-                        child: const Text('🛡️ أدمن',
+                        child: const Text('🛡️ الإدارة',
                             style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF8A6D3B))),
+                                color: AdminColors.gold)),
                       ),
-                    if (isHost)
+                    if (isHost && !isAdmin)
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 3),

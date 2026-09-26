@@ -17,3 +17,10 @@ import 'package:makan/data/services/services.dart';
 final profileProvider = FutureProvider<UserProfile?>((ref) async {
   return AuthService.instance.getCurrentProfile();
 });
+
+/// هل الحساب الحالي أدمن؟ مصدر واحد لإخفاء خيارات الزبون والمالك (المفضلة،
+/// الحجوزات، الحجز، "أضف شاليهك"، وضع المالك) وإظهار هوية الإدارة. الأدمن
+/// لا يحجز ولا يملك شاليهات (السيرفر يرفض ذلك أيضاً). false أثناء التحميل.
+final isAdminProvider = Provider<bool>(
+  (ref) => ref.watch(profileProvider).valueOrNull?.isAdmin ?? false,
+);

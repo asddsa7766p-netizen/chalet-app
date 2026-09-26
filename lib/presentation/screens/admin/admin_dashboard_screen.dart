@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/admin_colors.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../data/services/admin_service.dart';
 import '../../widgets/common/paged_list.dart';
@@ -67,7 +68,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     if (_checkingAccess) {
       return const Scaffold(
         body:
-            Center(child: CircularProgressIndicator(color: AppColors.primary)),
+            Center(child: CircularProgressIndicator(color: AdminColors.navy)),
       );
     }
 
@@ -107,79 +108,112 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       );
     }
 
+    // هوية الإدارة (كحلي + ذهبي) مختلفة عمداً عن أخضر واجهة الزبون، حتى يعرف
+    // الأدمن دائماً أنه في وضع الإدارة.
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Directionality(
-          textDirection: TextDirection.rtl,
-          child: Column(
-            children: [
-              // ── Header ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'لوحة تحكم الأدمن',
-                        style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.textPrimary),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => context.go('/home'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Column(
+          children: [
+            // ── Header ──
+            Material(
+              key: const Key('admin_header'),
+              color: AdminColors.navy,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color:
-                                  AppColors.primary.withValues(alpha: 0.25)),
+                          color: AdminColors.navyLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AdminColors.gold),
                         ),
-                        child: const Text('خروج',
+                        child: const Icon(Icons.admin_panel_settings_rounded,
+                            color: AdminColors.gold),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'لوحة الإدارة',
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  color: AdminColors.onNavy),
+                            ),
+                            Text(
+                              'وضع الإدارة · مكان',
+                              style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AdminColors.gold),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // يفتح واجهة التطبيق (بشريط "وضع الإدارة" أعلاها)، لا خروج
+                      // من الحساب.
+                      TextButton.icon(
+                        onPressed: () => context.go('/home'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AdminColors.onNavy,
+                          backgroundColor: AdminColors.navyLight,
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.storefront_rounded, size: 16),
+                        label: const Text('تصفّح التطبيق',
                             style: TextStyle(
                                 fontFamily: 'Cairo',
-                                color: AppColors.primary,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700)),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              // ── Tabs ──
-              TabBar(
+            ),
+            // ── Tabs ──
+            TabBar(
+              controller: _tabController,
+              labelColor: AdminColors.navy,
+              unselectedLabelColor: AppColors.textMuted,
+              indicatorColor: AdminColors.gold,
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12),
+              tabs: const [
+                Tab(text: 'نظرة عامة'),
+                Tab(text: 'موافقة الشاليهات'),
+                Tab(text: 'المستخدمون'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
                 controller: _tabController,
-                labelColor: AppColors.primary,
-                unselectedLabelColor: AppColors.textMuted,
-                indicatorColor: AppColors.primary,
-                labelStyle: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12),
-                tabs: const [
-                  Tab(text: 'نظرة عامة'),
-                  Tab(text: 'موافقة الشاليهات'),
-                  Tab(text: 'المستخدمون'),
+                children: const [
+                  _OverviewTab(),
+                  _ChaletApprovalsTab(),
+                  _UsersTab(),
                 ],
               ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: const [
-                    _OverviewTab(),
-                    _ChaletApprovalsTab(),
-                    _UsersTab(),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -212,8 +246,8 @@ Future<bool> _confirm(
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(title,
-          style:
-              const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
+          style: const TextStyle(
+              fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
       content: Text(message, style: const TextStyle(fontFamily: 'Cairo')),
       actions: [
         TextButton(

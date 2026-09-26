@@ -199,6 +199,9 @@ class ChaletCard extends StatelessWidget {
   final VoidCallback? onFavoriteTap;
   final VoidCallback? onTap;
 
+  /// false يخفي زر القلب كلياً (حساب الأدمن لا يستخدم المفضلة).
+  final bool showFavorite;
+
   const ChaletCard({
     super.key,
     required this.chalet,
@@ -206,6 +209,7 @@ class ChaletCard extends StatelessWidget {
     this.isFavorite = false,
     this.onFavoriteTap,
     this.onTap,
+    this.showFavorite = true,
   });
 
   @override
@@ -278,6 +282,7 @@ class ChaletCard extends StatelessWidget {
                                 color: AppColors.primary,
                               ),
                             ),
+                            if (showFavorite)
                             IconButton(
                               onPressed: onFavoriteTap,
                               icon: Icon(
@@ -323,6 +328,7 @@ class ChaletCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (showFavorite)
                       IconButton(
                         onPressed: onFavoriteTap,
                         icon: Icon(

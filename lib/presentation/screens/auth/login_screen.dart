@@ -63,7 +63,11 @@ class _LoginScreenState extends State<LoginScreen> {
             final chaletId = pending.data['chaletId'] as String?;
             if (chaletId != null) {
               try {
-                await FavoritesService.instance.toggleFavorite(chaletId);
+                // حساب الإدارة لا يستخدم المفضلة: يفتح الشاليه فقط.
+                final profile = await AuthService.instance.getCurrentProfile();
+                if (profile?.isAdmin != true) {
+                  await FavoritesService.instance.toggleFavorite(chaletId);
+                }
               } catch (e, st) {
                 // تبديل المفضلة ثانوي هنا: لا نوقف تدفق تسجيل الدخول لأجله، لكن نسجّله.
                 reportError(e, st, context: 'login.pending_toggle_favorite');

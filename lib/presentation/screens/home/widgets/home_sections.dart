@@ -192,6 +192,8 @@ extension _HomeSections on _HomeTabState {
                       ),
                     ),
                   ),
+                  // الأدمن لا يستخدم المفضلة: القلب مخفي عنه.
+                  if (!ref.watch(isAdminProvider))
                   Positioned(
                     top: 10,
                     left: 10,
