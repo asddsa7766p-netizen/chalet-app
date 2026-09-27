@@ -79,6 +79,29 @@ class ChaletService {
     }
   }
 
+  /// عدد الشاليهات الظاهرة للزبائن (نفس شروط [getChalets]) بكل مدينة من
+  /// [cities]: استعلام عدّ لكل مدينة بالتوازي، يجلب صفاً واحداً على الأكثر
+  /// بدل كل الشاليهات. يرتّب أقسام المدن بالرئيسية.
+  Future<Map<String, int>> countChaletsByCity(List<String> cities) async {
+    try {
+      final counts = await Future.wait(cities.map((city) async {
+        final res = await supabase
+            .from('chalets')
+            .select('id')
+            .eq('is_available', true)
+            .eq('is_approved', true)
+            .isFilter('deleted_at', null)
+            .eq('city', city)
+            .limit(1)
+            .count(CountOption.exact);
+        return res.count;
+      }));
+      return {for (var i = 0; i < cities.length; i++) cities[i]: counts[i]};
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
   Future<ChaletModel?> getChaletById(String id) async {
     try {
       final data =

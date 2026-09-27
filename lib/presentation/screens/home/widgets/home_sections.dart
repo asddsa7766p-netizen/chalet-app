@@ -77,70 +77,26 @@ extension _HomeSections on _HomeTabState {
   }
 
   // ------------------------------------------------------------
-  // one horizontal section for a given city, e.g. "شاليهات جنين".
-  // Filters _allForGrouping locally (no extra network call). The whole
-  // section hides itself if that city has nothing to show once loading
-  // is done — no empty section on the home screen.
+  // قسم مدينة وهمي أثناء تحميل أعداد المدن (قبل معرفة ترتيب الأقسام).
+  // الأقسام الحقيقية: CitySectionsSliver (widgets/city_sections.dart).
   // ------------------------------------------------------------
-  Widget _buildCitySection(String city) {
-    final chalets = _allForGrouping.where((c) => c.city == city).toList();
-
-    if (!_loading && chalets.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
+  Widget _buildCitySectionSkeleton() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: () => context.go('/search?city=$city'),
-                child: const Text(
-                  'عرض الكل',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-              Text(
-                'شاليهات $city',
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
+      child: SizedBox(
+        height: 270,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: 2,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (_, __) => const SizedBox(
+            width: 220,
+            child: ShimmerCard(
+                height: 270,
+                borderRadius: BorderRadius.all(Radius.circular(18))),
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 230,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _loading ? 2 : chalets.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (_, i) {
-                if (_loading) {
-                  return const SizedBox(
-                    width: 220,
-                    child: ShimmerCard(
-                        height: 230,
-                        borderRadius: BorderRadius.all(Radius.circular(18))),
-                  );
-                }
-                return _buildPlaceCard(chalets[i]);
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -338,7 +294,7 @@ extension _HomeSections on _HomeTabState {
   Widget _buildNearYouGrid() {
     if (_userPosition == null) return const SizedBox.shrink();
 
-    final withDistance = _allForGrouping
+    final withDistance = _nearYouPool
         .where((c) => c.hasLocation)
         .map((c) => MapEntry(c, _distanceToChalet(c)!))
         .toList()

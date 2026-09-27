@@ -18,6 +18,8 @@ import '../profile/profile_provider.dart';
 import '../../widgets/common/login_prompt.dart';
 import 'dart:async';
 
+import 'widgets/city_sections.dart';
+
 part 'widgets/city_picker_sheet.dart';
 part 'widgets/home_header.dart';
 part 'widgets/home_sections.dart';
@@ -56,28 +58,28 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   // نفس مصدر المدن بكل التطبيق (AppStrings.cities) مسبوقاً بـ "الكل".
   static const _chips = [AppStrings.allCities, ...AppStrings.cities];
 
-  // ------------------------------------------------------------
-  // cities shown as their own horizontal sections on the home
-  // screen, below "أماكن مميزة". Add/remove city names here and
-  // the matching section appears/disappears automatically.
-  //
-  // ✅ إصلاح: كانت القائمة تحتوي "القدس" و"الناصرة" رغم أنه لا يمكن لأي
-  // شاليه أن يحمل هاتين المدينتين أصلاً (ليستا ضمن قائمة المدن بشاشة
-  // إضافة شاليه) — فكان قسماهما ميتين دائمًا (يختفيان تلقائيًا لعدم وجود
-  // بيانات). استُبدلا بمدينتين حقيقيتين يمكن أن تحتويا شاليهات فعلاً.
-  // ------------------------------------------------------------
-  static const List<String> _featuredCitySections = [
-    'جنين',
-    'رام الله',
-    'نابلس',
-    'الخليل',
-  ];
-
   List<ChaletModel> _featured = [];
-  // مجموع الشاليهات غير المفلترة (كل المدن)، تُستخدم لبناء أقسام المدن
-  // ولحساب "بالقرب منك"، وأيضاً لفلترة العرض محلياً عند اختيار مدينة من
-  // الهيدر (بدون أي طلب شبكة إضافي — انظر _filterByCity).
-  List<ChaletModel> _allForGrouping = [];
+  // أحدث الشاليهات (getChalets الافتراضي، 20) لقسم "بالقرب منك" فقط.
+  // أقسام المدن لا تُبنى منها (كانت تُفلتر منها محلياً فتختفي أي مدينة
+  // ليست ضمن أحدث 20 شاليه).
+  List<ChaletModel> _nearYouPool = [];
+
+  // عدد شاليهات كل مدينة (AppStrings.cities)؛ منه يُرتَّب ويُختار ما يظهر
+  // من أقسام المدن (orderCitySections).
+  Map<String, int> _cityCounts = const {};
+
+  // شاليهات كل قسم مدينة (حتى citySectionLimit)، تُجلب عند ظهور القسم أول
+  // مرة وتُحفظ حتى لا يُعاد جلبها بالتمرير؛ تُمسح مع كل تحديث للشاشة.
+  final Map<String, Future<List<ChaletModel>>> _citySectionFutures = {};
+
+  Future<List<ChaletModel>> _cityChalets(String city) =>
+      _citySectionFutures.putIfAbsent(
+          city,
+          () => ChaletService.instance
+              .getChalets(city: city, limit: citySectionLimit));
+
+  void _retryCity(String city) =>
+      setState(() => _citySectionFutures.remove(city));
   bool _loading = true;
   String? _error;
 
@@ -170,17 +172,18 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     });
     try {
       // اسم المستخدم للترحيب يأتي من profileProvider (لا جلب ثانٍ للبروفايل هنا).
-      final results = await Future.wait([
+      final results = await Future.wait<Object>([
         ChaletService.instance.getFeaturedChalets(),
-        // مجموعة غير مفلترة (بدون تحديد مدينة) نبني منها أقسام المدن
-        // ونفلترها محلياً عند اختيار مدينة من الهيدر، بدل طلب شبكة منفصل
-        // لكل مدينة أو عند كل تبديل.
         ChaletService.instance.getChalets(),
+        // عدد لكل مدينة فقط؛ شاليهات كل قسم تُجلب لاحقاً عند ظهوره.
+        ChaletService.instance.countChaletsByCity(AppStrings.cities),
       ]);
       if (mounted) {
         setState(() {
-          _featured = results[0];
-          _allForGrouping = results[1];
+          _featured = results[0] as List<ChaletModel>;
+          _nearYouPool = results[1] as List<ChaletModel>;
+          _cityCounts = results[2] as Map<String, int>;
+          _citySectionFutures.clear();
           _loading = false;
         });
       }
@@ -220,7 +223,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   // ✅ إصلاح: كانت تطلق طلب شبكة كامل (وتُظهر Loading على كامل الشاشة)
   // فقط لتخزين نتيجة لا تُعرض بأي مكان (_all)، رغم أن اختيار مدينة لا
   // يغيّر أي محتوى مرئي فعلياً غير نص الهيدر. الآن الفلترة تتم محلياً
-  // وفوراً على البيانات المُحمَّلة أصلاً (_allForGrouping) بدون أي طلب
+  // وفوراً على البيانات المُحمَّلة أصلاً بدون أي طلب
   // شبكة جديد ولا وميض تحميل على باقي الأقسام.
   void _filterByCity(String city) {
     setState(() => _selectedCity = city);
@@ -279,13 +282,22 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   // NEW: "بالقرب منك" section, sorted by real distance from GPS.
                   // Hides itself automatically if location isn't available.
                   SliverToBoxAdapter(child: _buildNearYouGrid()),
-                  // ✅ إصلاح: عند اختيار مدينة معيّنة من الهيدر، نعرض قسمها
-                  // فقط بدل كل الأقسام الأربعة الثابتة — بما إنه فعلياً صار
-                  // فلتر حقيقي (انظر _filterByCity) بدل تسمية بلا أثر مرئي.
-                  for (final city in _selectedCity == AppStrings.allCities
-                      ? _featuredCitySections
-                      : [_selectedCity])
-                    SliverToBoxAdapter(child: _buildCitySection(city)),
+                  // أقسام المدن: "الكل" = كل مدينة فيها شاليهات، الأكثر أولاً؛
+                  // مدينة مختارة = قسمها أولاً ثم الباقي. كل قسم يجلب حتى
+                  // citySectionLimit شاليهات عند اقترابه من الشاشة فقط.
+                  if (_loading)
+                    for (var i = 0; i < 2; i++)
+                      SliverToBoxAdapter(child: _buildCitySectionSkeleton())
+                  else
+                    CitySectionsSliver(
+                      cities: orderCitySections(_cityCounts, _selectedCity),
+                      loadCity: _cityChalets,
+                      onRetry: _retryCity,
+                      onViewAll: (city) => context.go(Uri(
+                          path: '/search',
+                          queryParameters: {'city': city}).toString()),
+                      cardBuilder: _buildPlaceCard,
+                    ),
                   const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
               ),
