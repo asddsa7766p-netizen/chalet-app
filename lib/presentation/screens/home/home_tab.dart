@@ -59,10 +59,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   static const _chips = [AppStrings.allCities, ...AppStrings.cities];
 
   List<ChaletModel> _featured = [];
-  // أحدث الشاليهات (getChalets الافتراضي، 20) لقسم "بالقرب منك" فقط.
-  // أقسام المدن لا تُبنى منها (كانت تُفلتر منها محلياً فتختفي أي مدينة
-  // ليست ضمن أحدث 20 شاليه).
-  List<ChaletModel> _nearYouPool = [];
+  // "بالقرب منك": أقرب الشاليهات من كل القاعدة (get_nearby_chalets)،
+  // مرتبة بالمسافة على السيرفر. فارغة بلا إذن موقع فيختفي القسم.
+  List<NearbyChalet> _nearby = [];
 
   // عدد شاليهات كل مدينة (AppStrings.cities)؛ منه يُرتَّب ويُختار ما يظهر
   // من أقسام المدن (orderCitySections).
@@ -136,6 +135,23 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final pos = await LocationService.instance.getCurrentPosition();
     if (mounted && pos != null) {
       setState(() => _userPosition = pos);
+      await _loadNearby();
+    }
+  }
+
+  /// عدد بطاقات "بالقرب منك" (شبكة 2×2).
+  static const _nearbyCount = 4;
+
+  // أقرب الشاليهات للموقع الحالي. فشل صامت: يختفي القسم ولا يعطّل الشاشة.
+  Future<void> _loadNearby() async {
+    final pos = _userPosition;
+    if (pos == null) return;
+    try {
+      final nearby = await ChaletService.instance.getNearbyChalets(
+          lat: pos.latitude, lng: pos.longitude, limit: _nearbyCount);
+      if (mounted) setState(() => _nearby = nearby);
+    } catch (e, st) {
+      reportError(e, st, context: 'home.nearby');
     }
   }
 
@@ -153,36 +169,24 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     }
   }
 
-  // NEW: المسافة بالكيلومتر بين المستخدم وشاليه معيّن، أو null إذا
-  // كان موقع المستخدم أو إحداثيات الشاليه غير متوفرة.
-  double? _distanceToChalet(ChaletModel chalet) {
-    if (_userPosition == null || !chalet.hasLocation) return null;
-    return LocationService.instance.distanceInKm(
-      lat1: _userPosition!.latitude,
-      lon1: _userPosition!.longitude,
-      lat2: chalet.latitude!,
-      lon2: chalet.longitude!,
-    );
-  }
-
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
+    // مستقل عن باقي الشاشة (فشله صامت)؛ أول مرة يأتي بعد تحديد الموقع.
+    unawaited(_loadNearby());
     try {
       // اسم المستخدم للترحيب يأتي من profileProvider (لا جلب ثانٍ للبروفايل هنا).
       final results = await Future.wait<Object>([
         ChaletService.instance.getFeaturedChalets(),
-        ChaletService.instance.getChalets(),
         // عدد لكل مدينة فقط؛ شاليهات كل قسم تُجلب لاحقاً عند ظهوره.
         ChaletService.instance.countChaletsByCity(AppStrings.cities),
       ]);
       if (mounted) {
         setState(() {
           _featured = results[0] as List<ChaletModel>;
-          _nearYouPool = results[1] as List<ChaletModel>;
-          _cityCounts = results[2] as Map<String, int>;
+          _cityCounts = results[1] as Map<String, int>;
           _citySectionFutures.clear();
           _loading = false;
         });

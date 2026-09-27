@@ -7,7 +7,6 @@ enum ChaletApprovalStatus { approved, pending, rejected }
 
 extension ChaletApprovalRow on Map<String, dynamic> {
   DateTime? get rejectedAt => _date(this['rejected_at']);
-  DateTime? get updatedAt => _date(this['updated_at']);
 
   String? get rejectionReason {
     final r = (this['rejection_reason'] as String?)?.trim();
@@ -19,14 +18,6 @@ extension ChaletApprovalRow on Map<String, dynamic> {
     return rejectedAt != null
         ? ChaletApprovalStatus.rejected
         : ChaletApprovalStatus.pending;
-  }
-
-  /// عدّل المالك الشاليه بعد رفضه؟ الرفض يضبط rejected_at وupdated_at بنفس
-  /// now()، وtrigger set_chalet_updated_at يحدّث updated_at مع كل تعديل.
-  bool get editedSinceRejection {
-    final rejected = rejectedAt;
-    final updated = updatedAt;
-    return rejected != null && updated != null && updated.isAfter(rejected);
   }
 }
 

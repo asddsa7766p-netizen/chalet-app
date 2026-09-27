@@ -39,10 +39,6 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
   // الحقيقي بدل الاعتماد على القيمة الافتراضية صفر.
   int _unreadCount = 0;
 
-  // شاليهات مرفوضة فُتحت شاشة أسعارها بهذه الجلسة: الأسعار بجداول منفصلة لا
-  // تحدّث chalets.updated_at، فلا يكشفها editedSinceRejection وحده.
-  final Set<String> _pricingOpened = {};
-
   @override
   void initState() {
     super.initState();
@@ -127,18 +123,10 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
         ),
       ),
     );
-    if (chalet.approvalStatus == ChaletApprovalStatus.rejected) {
-      _pricingOpened.add(id);
-    }
     // إعادة تحميل القائمة بعد الرجوع، احتياطًا لو تم تعديل السعر الافتراضي
     // من داخل شاشة إدارة الأسعار مستقبلًا.
     if (mounted) _load();
   }
-
-  /// الشاليه المرفوض يُعاد إرساله بعد تعديله: تعديل بيانات الشاليه نفسه
-  /// (updated_at بعد rejected_at)، أو فتح شاشة أسعاره بهذه الجلسة.
-  bool _canResubmit(Map<String, dynamic> chalet) =>
-      chalet.editedSinceRejection || _pricingOpened.contains(chalet['id']);
 
   List<Map<String, dynamic>> get _rejected => [
         for (final c in _chalets)
@@ -249,15 +237,11 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
                                 RejectedChaletCard(
                                   key: Key('rejected_chalet_${c['id']}'),
                                   chalet: c,
-                                  canResubmit: _canResubmit(c),
                                   onEdit: () => _goToEdit(c),
                                   onManagePrices: () => _goToPricing(c),
                                   resubmit: () => ChaletService.instance
                                       .resubmitChalet(c['id'] as String),
-                                  onResubmitted: () {
-                                    _pricingOpened.remove(c['id']);
-                                    _load();
-                                  },
+                                  onResubmitted: _load,
                                 ),
                                 const SizedBox(height: 12),
                               ],

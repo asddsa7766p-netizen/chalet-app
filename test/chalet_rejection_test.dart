@@ -12,7 +12,6 @@ Map<String, dynamic> _row({
   bool approved = false,
   String? reason,
   String? rejectedAt,
-  String? updatedAt,
 }) =>
     {
       'id': 'ch1',
@@ -20,7 +19,6 @@ Map<String, dynamic> _row({
       'is_approved': approved,
       'rejection_reason': reason,
       'rejected_at': rejectedAt,
-      'updated_at': updatedAt,
     };
 
 void main() {
@@ -48,18 +46,6 @@ void main() {
           'الصور غير واضحة');
     });
 
-    test('عُدّل بعد الرفض؟ updated_at بعد rejected_at فقط', () {
-      const at = '2026-09-20T10:00:00.123456+00:00';
-      // الرفض نفسه يضبط الاثنين بنفس now().
-      expect(_row(rejectedAt: at, updatedAt: at).editedSinceRejection, isFalse);
-      expect(
-          _row(rejectedAt: at, updatedAt: '2026-09-21T08:00:00+00:00')
-              .editedSinceRejection,
-          isTrue);
-      expect(_row(updatedAt: '2026-09-21T08:00:00Z').editedSinceRejection,
-          isFalse,
-          reason: 'غير مرفوض');
-    });
   });
 
   group('رسائل السيرفر بـ translateSupabaseError', () {
@@ -77,6 +63,34 @@ void main() {
     }
   });
 
+  test('صف get_nearby_chalets: الشاليه من jsonb والمسافة بالكيلومتر', () {
+    final n = NearbyChalet.fromRow({
+      'chalet': {
+        'id': 'c9',
+        'name': 'شاليه القمر',
+        'city': 'نابلس',
+        'price_per_night': 350,
+        'latitude': 32.22,
+        'longitude': 35.25,
+        'images': ['https://x/a.jpg'],
+        'created_at': '2026-09-01T10:00:00+00:00',
+      },
+      'distance_km': 2.5,
+    });
+    expect(n.chalet.id, 'c9');
+    expect(n.chalet.name, 'شاليه القمر');
+    expect(n.chalet.pricePerNight, 350);
+    expect(n.chalet.coverImage, 'https://x/a.jpg');
+    expect(n.distanceKm, 2.5);
+    expect(
+        NearbyChalet.fromRow({
+          'chalet': {'id': 'c1'},
+          'distance_km': 0,
+        }).distanceKm,
+        0.0,
+        reason: 'عدد صحيح من jsonb');
+  });
+
   test('إحصائيات الأدمن: rejectedChalets (وصفر إن غاب المفتاح)', () {
     final s = AdminOverviewStats.fromJson(
         const {'pendingChalets': 2, 'rejectedChalets': 3});
@@ -88,7 +102,6 @@ void main() {
   group('بطاقة الشاليه المرفوض (شاليهاتي)', () {
     Future<({List<int> edits, List<int> sends, List<int> done})> pump(
       WidgetTester tester, {
-      required bool canResubmit,
       Future<void> Function()? resubmit,
     }) async {
       final edits = <int>[];
@@ -100,7 +113,6 @@ void main() {
             chalet: _row(
                 reason: 'الصور غير واضحة',
                 rejectedAt: '2026-09-20T10:00:00Z'),
-            canResubmit: canResubmit,
             onEdit: () => edits.add(1),
             onManagePrices: () {},
             resubmit: () async {
@@ -114,22 +126,24 @@ void main() {
       return (edits: edits, sends: sends, done: done);
     }
 
-    testWidgets('شارة "مرفوض" حمراء والسبب ظاهر، وتعديل قبل إعادة الإرسال',
+    testWidgets(
+        'شارة "مرفوض" حمراء والسبب ظاهر، وإعادة الإرسال ظاهرة دائماً بلا شرط تعديل',
         (tester) async {
-      final r = await pump(tester, canResubmit: false);
+      final r = await pump(tester);
       expect(find.byKey(const Key('rejected_badge')), findsOneWidget);
       expect(find.text('مرفوض'), findsOneWidget);
       expect(find.text('الصور غير واضحة'), findsOneWidget);
       expect(find.text('سبب الرفض · 20/9/2026'), findsOneWidget);
-      expect(find.byKey(const Key('rejected_resubmit')), findsNothing,
-          reason: 'لا إعادة إرسال قبل التعديل');
+      // الصف بلا updated_at أصلاً: الزر لا يعتمد على وقت آخر تعديل.
+      expect(find.byKey(const Key('rejected_resubmit')), findsOneWidget);
+      expect(find.text('إعادة الإرسال للمراجعة'), findsOneWidget);
       await tester.tap(find.byKey(const Key('rejected_edit')));
       expect(r.edits, [1]);
     });
 
-    testWidgets('بعد التعديل: إعادة الإرسال تستدعي الدالة ثم تحدّث القائمة',
+    testWidgets('إعادة الإرسال تستدعي الدالة ثم تحدّث القائمة',
         (tester) async {
-      final r = await pump(tester, canResubmit: true);
+      final r = await pump(tester);
       await tester.tap(find.byKey(const Key('rejected_resubmit')));
       await tester.pumpAndSettle();
       expect(r.sends, [1]);
@@ -139,7 +153,6 @@ void main() {
 
     testWidgets('فشل إعادة الإرسال: رسالة السيرفر ولا تحديث', (tester) async {
       final r = await pump(tester,
-          canResubmit: true,
           resubmit: () async => throw Exception(nothingToResubmitMessage));
       await tester.tap(find.byKey(const Key('rejected_resubmit')));
       await tester.pumpAndSettle();

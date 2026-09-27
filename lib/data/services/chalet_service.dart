@@ -102,6 +102,25 @@ class ChaletService {
     }
   }
 
+  /// أقرب الشاليهات المعتمدة المتاحة من كل القاعدة إلى ([lat], [lng])،
+  /// مرتبة بالمسافة (get_nearby_chalets؛ الحد يُقصّ على السيرفر إلى 1..50).
+  Future<List<NearbyChalet>> getNearbyChalets({
+    required double lat,
+    required double lng,
+    int limit = 4,
+  }) async {
+    try {
+      final data = await supabase.rpc('get_nearby_chalets',
+          params: {'p_lat': lat, 'p_lng': lng, 'p_limit': limit});
+      return [
+        for (final row in data as List)
+          NearbyChalet.fromRow(Map<String, dynamic>.from(row as Map)),
+      ];
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
   Future<ChaletModel?> getChaletById(String id) async {
     try {
       final data =
@@ -312,7 +331,7 @@ class ChaletService {
           .from('chalets')
           .select(
             'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count, max_guests, '
-            'rejection_reason, rejected_at, updated_at',
+            'rejection_reason, rejected_at',
           )
           .eq('owner_id', ownerId)
           // الحذف من المالك "ناعم" (trigger يضبط deleted_at بدل الحذف)، فالشاليه
@@ -336,4 +355,19 @@ class ChaletService {
       throw Exception(_translateSupabaseError(e));
     }
   }
+}
+
+/// صف من get_nearby_chalets: الشاليه (jsonb بكل أعمدته) ومسافته بالكيلومتر
+/// (مقرّبة لخانة عشرية على السيرفر).
+class NearbyChalet {
+  final ChaletModel chalet;
+  final double distanceKm;
+
+  const NearbyChalet({required this.chalet, required this.distanceKm});
+
+  factory NearbyChalet.fromRow(Map<String, dynamic> row) => NearbyChalet(
+        chalet: ChaletModel.fromJson(
+            Map<String, dynamic>.from(row['chalet'] as Map)),
+        distanceKm: (row['distance_km'] as num?)?.toDouble() ?? 0,
+      );
 }

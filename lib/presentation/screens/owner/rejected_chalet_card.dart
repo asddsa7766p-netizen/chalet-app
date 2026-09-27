@@ -4,11 +4,11 @@ import '../../../core/constants/app_colors.dart';
 import '../../../data/models/chalet_approval.dart';
 
 /// بطاقة شاليه رفضته الإدارة (شاليهاتي): شارة "مرفوض" حمراء، سبب الرفض
-/// وتاريخه بوضوح، "تعديل" و"الأسعار"، ثم — بعد التعديل ([canResubmit]) —
-/// "إعادة الإرسال للمراجعة" (resubmit_chalet) فيعود "بانتظار الموافقة".
+/// وتاريخه بوضوح، "تعديل" و"الأسعار"، و"إعادة الإرسال للمراجعة"
+/// (resubmit_chalet) فيعود "بانتظار الموافقة". زر الإرسال ظاهر دائماً: المالك
+/// أدرى متى أنهى تعديلاته.
 class RejectedChaletCard extends StatefulWidget {
   final Map<String, dynamic> chalet;
-  final bool canResubmit;
   final VoidCallback onEdit;
   final VoidCallback onManagePrices;
 
@@ -19,7 +19,6 @@ class RejectedChaletCard extends StatefulWidget {
   const RejectedChaletCard({
     super.key,
     required this.chalet,
-    required this.canResubmit,
     required this.onEdit,
     required this.onManagePrices,
     required this.resubmit,
@@ -146,11 +145,9 @@ class _RejectedChaletCardState extends State<RejectedChaletCard> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            widget.canResubmit
-                ? 'عدّلت الشاليه؟ أعد إرساله ليراجعه فريق الإدارة من جديد.'
-                : 'عدّل الشاليه حسب السبب، ثم أعد إرساله للمراجعة.',
-            style: const TextStyle(
+          const Text(
+            'عدّل الشاليه حسب السبب، ثم أعد إرساله للمراجعة.',
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 12,
               color: AppColors.textSecondary,
@@ -177,30 +174,28 @@ class _RejectedChaletCardState extends State<RejectedChaletCard> {
               ),
             ],
           ),
-          if (widget.canResubmit) ...[
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              key: const Key('rejected_resubmit'),
-              onPressed: _sending ? null : _resubmit,
-              icon: _sending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.send_rounded, size: 16),
-              label: const Text('إعادة الإرسال للمراجعة',
-                  style: TextStyle(
-                      fontFamily: 'Cairo', fontWeight: FontWeight.w900)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            key: const Key('rejected_resubmit'),
+            onPressed: _sending ? null : _resubmit,
+            icon: _sending
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.send_rounded, size: 16),
+            label: const Text('إعادة الإرسال للمراجعة',
+                style: TextStyle(
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w900)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
-          ],
+          ),
         ],
       ),
     );

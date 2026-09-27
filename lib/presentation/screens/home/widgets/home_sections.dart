@@ -285,24 +285,16 @@ extension _HomeSections on _HomeTabState {
   }
 
   // ------------------------------------------------------------
-  // UPDATED: "بالقرب منك" section — now driven by real GPS distance
-  // instead of a static placeholder. Sorted nearest-first, and the
-  // whole section hides itself automatically when:
-  //   - location permission isn't granted / GPS is off, or
-  //   - no chalet has coordinates yet.
+  // "بالقرب منك": أقرب الشاليهات من كل القاعدة (get_nearby_chalets، مرتبة
+  // بالمسافة على السيرفر) مع المسافة على البطاقة. يختفي القسم عندما:
+  //   - لا إذن موقع / GPS مطفأ، أو
+  //   - لا شاليه بإحداثيات (أو فشل الجلب).
   // ------------------------------------------------------------
   Widget _buildNearYouGrid() {
-    if (_userPosition == null) return const SizedBox.shrink();
-
-    final withDistance = _nearYouPool
-        .where((c) => c.hasLocation)
-        .map((c) => MapEntry(c, _distanceToChalet(c)!))
-        .toList()
-      ..sort((a, b) => a.value.compareTo(b.value));
-
-    if (withDistance.isEmpty) return const SizedBox.shrink();
-
-    final items = withDistance.take(4).toList();
+    if (_userPosition == null || _nearby.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final items = _nearby;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
@@ -343,7 +335,7 @@ extension _HomeSections on _HomeTabState {
             ),
             itemCount: items.length,
             itemBuilder: (_, i) =>
-                _buildNearYouTile(items[i].key, items[i].value),
+                _buildNearYouTile(items[i].chalet, items[i].distanceKm),
           ),
         ],
       ),
