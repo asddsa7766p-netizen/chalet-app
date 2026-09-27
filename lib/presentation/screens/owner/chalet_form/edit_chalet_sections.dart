@@ -126,7 +126,10 @@ extension _EditChaletSections on _OwnerEditChaletScreenState {
   // ---------------- الحالة ----------------
 
   Widget _buildStatusCard() {
-    final color = _approved ? AppColors.success : AppColors.warning;
+    final rejected = _rejectionReason != null;
+    final color = _approved
+        ? AppColors.success
+        : (rejected ? AppColors.error : AppColors.warning);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -140,7 +143,9 @@ extension _EditChaletSections on _OwnerEditChaletScreenState {
           Icon(
             _approved
                 ? Icons.verified_outlined
-                : Icons.hourglass_top_rounded,
+                : (rejected
+                    ? Icons.block_rounded
+                    : Icons.hourglass_top_rounded),
             color: color,
             size: 22,
           ),
@@ -150,25 +155,47 @@ extension _EditChaletSections on _OwnerEditChaletScreenState {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _approved ? 'معتمد' : 'قيد المراجعة',
+                  _approved ? 'معتمد' : (rejected ? 'مرفوض' : 'قيد المراجعة'),
                   key: const ValueKey('approvalBadge'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 14,
                     height: 1.3,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.charcoal,
+                    color: rejected ? AppColors.error : AppColors.charcoal,
                   ),
                 ),
-                const Text(
-                  'حالة الاعتماد تحددها الإدارة ولا يمكن تغييرها من هنا.',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12,
-                    height: 1.4,
-                    color: AppColors.textSecondary,
+                if (rejected) ...[
+                  Text(
+                    'سبب الرفض: ${_rejectionReason!.isEmpty ? '—' : _rejectionReason}',
+                    key: const ValueKey('rejectionReason'),
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      height: 1.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.charcoal,
+                    ),
                   ),
-                ),
+                  const Text(
+                    'عدّل ما طلبته الإدارة واحفظ، ثم ارجع إلى "شاليهاتي" واضغط "إعادة الإرسال للمراجعة".',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12,
+                      height: 1.4,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ] else
+                  const Text(
+                    'حالة الاعتماد تحددها الإدارة ولا يمكن تغييرها من هنا.',
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12,
+                      height: 1.4,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
               ],
             ),
           ),

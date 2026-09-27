@@ -2,6 +2,9 @@ part of 'admin_dashboard_screen.dart';
 
 // ════════════════════ تبويب 2: موافقة الشاليهات ══════════════════════════
 
+/// قائمتان: "بانتظار الموافقة" (غير المرفوضة) و"المرفوضة" (بسبب الرفض
+/// وتاريخه، بانتظار تعديل المالك). لا أزرار قرار على البطاقات: الضغط يفتح
+/// شاشة المراجعة، وهي الطريق الوحيد للاعتماد أو الرفض.
 class _ChaletApprovalsTab extends StatefulWidget {
   const _ChaletApprovalsTab();
   @override
@@ -9,8 +12,104 @@ class _ChaletApprovalsTab extends StatefulWidget {
 }
 
 class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
-  final _pager = PagedList<Map<String, dynamic>>(
-      (page) => AdminService.instance.getPendingChalets(page: page),
+  bool _showRejected = false;
+
+  // قرار من إحدى القائمتين يغيّر الأخرى (رفض ← المرفوضة، اعتماد مرفوض ←
+  // يخرج منها)، فيزيد عدّادها لتُعاد قراءتها.
+  int _pendingVersion = 0;
+  int _rejectedVersion = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: SegmentedButton<bool>(
+            key: const Key('approvals_filter'),
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: AdminColors.navy,
+              selectedForegroundColor: AdminColors.onNavy,
+              foregroundColor: AdminColors.navy,
+            ),
+            segments: const [
+              ButtonSegment(
+                  value: false,
+                  label: Text('بانتظار الموافقة',
+                      style: TextStyle(
+                          fontFamily: 'Cairo', fontWeight: FontWeight.w700))),
+              ButtonSegment(
+                  value: true,
+                  label: Text('المرفوضة',
+                      style: TextStyle(
+                          fontFamily: 'Cairo', fontWeight: FontWeight.w700))),
+            ],
+            selected: {_showRejected},
+            onSelectionChanged: (s) => setState(() => _showRejected = s.first),
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _showRejected ? 1 : 0,
+            children: [
+              ChaletQueueList(
+                key: const Key('pending_queue'),
+                fetch: (page) =>
+                    AdminService.instance.getPendingChalets(page: page),
+                emptyText: 'لا توجد شاليهات بانتظار الموافقة',
+                version: _pendingVersion,
+                onDecided: () => setState(() => _rejectedVersion++),
+              ),
+              // لا تُجلب المرفوضة قبل فتحها أول مرة.
+              if (_showRejected || _rejectedVersion > 0)
+                ChaletQueueList(
+                  key: const Key('rejected_queue'),
+                  fetch: (page) =>
+                      AdminService.instance.getRejectedChalets(page: page),
+                  emptyText: 'لا توجد شاليهات مرفوضة',
+                  version: _rejectedVersion,
+                  onDecided: () => setState(() => _pendingVersion++),
+                )
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// قائمة شاليهات مرقّمة بصفحات (معلّقة أو مرفوضة). الضغط على بطاقة يفتح
+/// المراجعة؛ القرار منها يزيل الشاليه ويستدعي [onDecided]. تغيّر [version]
+/// يعيد التحميل.
+class ChaletQueueList extends StatefulWidget {
+  final Future<List<Map<String, dynamic>>> Function(int page) fetch;
+  final String emptyText;
+  final int version;
+  final VoidCallback? onDecided;
+
+  /// للاختبارات؛ الافتراضي يفتح [AdminChaletReviewScreen] ويرجع قراره.
+  final Future<bool?> Function(BuildContext context, String chaletId)?
+      openReview;
+
+  const ChaletQueueList({
+    super.key,
+    required this.fetch,
+    required this.emptyText,
+    this.version = 0,
+    this.onDecided,
+    this.openReview,
+  });
+
+  @override
+  State<ChaletQueueList> createState() => _ChaletQueueListState();
+}
+
+class _ChaletQueueListState extends State<ChaletQueueList> {
+  late final _pager = PagedList<Map<String, dynamic>>(
+      (page) => widget.fetch(page),
       pageSize: AdminService.pageSize);
   bool _loading = true;
   String? _error;
@@ -20,6 +119,12 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(ChaletQueueList old) {
+    super.didUpdateWidget(old);
+    if (old.version != widget.version) _load();
   }
 
   Future<void> _load() async {
@@ -58,18 +163,23 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
     if (_opening) return; // ضغطتان سريعتان لا تفتحان شاشتين
     _opening = true;
     try {
-      final decided = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(
-              builder: (_) =>
-                  AdminChaletReviewScreen(chaletId: chalet['id'] as String)));
+      final id = chalet['id'] as String;
+      final decided =
+          await (widget.openReview ?? _defaultOpenReview)(context, id);
       if (decided == true && mounted) {
         setState(() => _pager.items =
-            _pager.items.where((c) => c['id'] != chalet['id']).toList());
+            _pager.items.where((c) => c['id'] != id).toList());
+        widget.onDecided?.call();
       }
     } finally {
       _opening = false;
     }
   }
+
+  static Future<bool?> _defaultOpenReview(
+          BuildContext context, String chaletId) =>
+      Navigator.of(context).push<bool>(MaterialPageRoute(
+          builder: (_) => AdminChaletReviewScreen(chaletId: chaletId)));
 
   @override
   Widget build(BuildContext context) {
@@ -83,14 +193,14 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
       return RefreshIndicator(
         onRefresh: _load,
         color: AppColors.primary,
-        child: ListView(children: const [
-          SizedBox(height: 120),
-          Icon(Icons.check_circle_outline_rounded,
+        child: ListView(children: [
+          const SizedBox(height: 120),
+          const Icon(Icons.check_circle_outline_rounded,
               size: 56, color: AppColors.textMuted),
-          SizedBox(height: 14),
+          const SizedBox(height: 14),
           Center(
-              child: Text('لا توجد شاليهات بانتظار الموافقة',
-                  style: TextStyle(
+              child: Text(widget.emptyText,
+                  style: const TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -122,8 +232,8 @@ class _ChaletApprovalsTabState extends State<_ChaletApprovalsTab> {
   }
 }
 
-/// بطاقة شاليه بانتظار الموافقة. لا أزرار اعتماد أو رفض عليها: الضغط يفتح
-/// شاشة المراجعة، وهي الطريق الوحيد للقرار.
+/// بطاقة شاليه بانتظار القرار (أو مرفوض: بسبب الرفض وتاريخه). لا أزرار
+/// اعتماد أو رفض عليها: الضغط يفتح شاشة المراجعة، وهي الطريق الوحيد للقرار.
 class PendingChaletCard extends StatelessWidget {
   final Map<String, dynamic> chalet;
   final VoidCallback onTap;
@@ -142,12 +252,16 @@ class PendingChaletCard extends StatelessWidget {
     // images مخزنة كـ text[] في Supabase
     final images = (c['images'] as List?)?.cast<String>() ?? [];
     final cover = images.isNotEmpty ? images.first : null;
+    final rejectedAt = c.rejectedAt;
 
     return Material(
       color: AppColors.card,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.border)),
+          side: BorderSide(
+              color: rejectedAt != null
+                  ? AppColors.error.withValues(alpha: 0.4)
+                  : AppColors.border)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -184,12 +298,27 @@ class PendingChaletCard extends StatelessWidget {
                             fontSize: 12,
                             color: AppColors.textSecondary)),
                     const SizedBox(height: 4),
-                    const Text('اضغط لمراجعة التفاصيل والاعتماد أو الرفض',
-                        style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AdminColors.navy)),
+                    if (rejectedAt != null) ...[
+                      Text('رُفض في ${formatRejectionDate(rejectedAt)}',
+                          style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.error)),
+                      Text('السبب: ${c.rejectionReason ?? '—'}',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 12,
+                              color: AppColors.textPrimary)),
+                    ] else
+                      const Text('اضغط لمراجعة التفاصيل والاعتماد أو الرفض',
+                          style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AdminColors.navy)),
                   ],
                 ),
               ),

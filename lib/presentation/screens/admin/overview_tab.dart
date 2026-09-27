@@ -99,6 +99,9 @@ class _OverviewTabState extends State<_OverviewTab> {
       (Icons.villa_rounded, 'الشاليهات المعتمدة',
           '${s.approvedChalets} / ${s.totalChalets}', const Color(0xFF8A6D3B)),
       (Icons.pending_actions_rounded, 'بانتظار الموافقة', '${s.pendingChalets}',
+          AdminColors.gold),
+      // مرفوضة بانتظار تعديل المالك وإعادة إرسالها (خارج "بانتظار الموافقة").
+      (Icons.block_rounded, 'الشاليهات المرفوضة', '${s.rejectedChalets}',
           AppColors.error),
       (Icons.calendar_month_rounded, 'حجوزات التطبيق', '${s.totalBookings}',
           AppColors.primary),

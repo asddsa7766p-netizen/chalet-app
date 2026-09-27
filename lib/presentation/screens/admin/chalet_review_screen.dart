@@ -4,16 +4,18 @@ part of 'admin_dashboard_screen.dart';
 
 /// شاشة مراجعة شاليه للأدمن قبل اعتماده: كل التفاصيل (الصور، الوصف،
 /// الموقع، المرافق، السعر، الفترات بأوقاتها وأسعارها، المالك وهاتفه) بلا
-/// قلب ولا زر حجز، وأسفلها "اعتماد" و"رفض" بحوار تأكيد.
+/// قلب ولا زر حجز، وأسفلها "اعتماد" (حوار تأكيد) و"رفض" (سبب إلزامي). الرفض
+/// لا يحذف الشاليه: يعود للمالك مع السبب ليعدّله ويعيد إرساله. الشاليه
+/// المرفوض أصلاً يعرض سبب رفضه ويقبل الاعتماد فقط.
 ///
-/// تُغلق بـ `true` بعد اعتماد الشاليه أو رفضه، ليُزال من قائمة المعلّقة.
+/// تُغلق بـ `true` بعد اعتماد الشاليه أو رفضه، ليُزال من قائمته.
 class AdminChaletReviewScreen extends StatefulWidget {
   final String chaletId;
 
   /// للاختبارات؛ الافتراضيات دوال [AdminService].
   final Future<AdminChaletReview> Function(String chaletId)? load;
   final Future<void> Function(String chaletId)? approve;
-  final Future<void> Function(String chaletId)? reject;
+  final Future<void> Function(String chaletId, String reason)? reject;
 
   const AdminChaletReviewScreen({
     super.key,
@@ -59,26 +61,37 @@ class _AdminChaletReviewScreenState extends State<AdminChaletReviewScreen> {
 
   Future<void> _decide({required bool approve}) async {
     if (_busy) return;
-    final confirmed = await _confirm(
-      context,
-      title: approve ? 'اعتماد الشاليه' : 'رفض الشاليه',
-      message: approve
-          ? 'سيظهر الشاليه للزبائن ويصبح قابلاً للحجز فور اعتماده.'
-          : 'هل أنت متأكد من رفض وحذف هذا الشاليه؟ لا يمكن التراجع.',
-      action: approve ? 'اعتماد' : 'رفض وحذف',
-      actionColor: approve ? AppColors.primary : AppColors.error,
-    );
-    if (!confirmed || !mounted) return;
+    String? reason;
+    if (approve) {
+      final confirmed = await _confirm(
+        context,
+        title: 'اعتماد الشاليه',
+        message: 'سيظهر الشاليه للزبائن ويصبح قابلاً للحجز فور اعتماده.',
+        action: 'اعتماد',
+        actionColor: AppColors.primary,
+      );
+      if (!confirmed) return;
+    } else {
+      reason = await showRejectReasonDialog(context);
+      if (reason == null) return;
+    }
+    if (!mounted) return;
 
     setState(() => _busy = true);
     try {
-      final action = approve
-          ? (widget.approve ?? AdminService.instance.approveChalet)
-          : (widget.reject ?? AdminService.instance.rejectChalet);
-      await action(widget.chaletId);
+      if (approve) {
+        await (widget.approve ?? AdminService.instance.approveChalet)(
+            widget.chaletId);
+      } else {
+        await (widget.reject ?? AdminService.instance.rejectChalet)(
+            widget.chaletId, reason!);
+      }
       if (!mounted) return;
-      _showSnack(context,
-          approve ? 'تمت الموافقة على الشاليه ✅' : 'تم رفض وحذف الشاليه');
+      _showSnack(
+          context,
+          approve
+              ? 'تمت الموافقة على الشاليه ✅'
+              : 'تم رفض الشاليه وإبلاغ المالك بالسبب');
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -118,7 +131,8 @@ class _AdminChaletReviewScreenState extends State<AdminChaletReviewScreen> {
                 ? const Center(
                     child: CircularProgressIndicator(color: AdminColors.navy))
                 : _buildDetails(data),
-        bottomNavigationBar: data == null ? null : _buildActions(),
+        bottomNavigationBar:
+            data == null ? null : _buildActions(canReject: !data.isRejected),
       ),
     );
   }
@@ -152,19 +166,60 @@ class _AdminChaletReviewScreenState extends State<AdminChaletReviewScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AdminColors.gold.withValues(alpha: 0.15),
+                  color: data.isRejected
+                      ? AppColors.error.withValues(alpha: 0.12)
+                      : AdminColors.gold.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('بانتظار الموافقة',
+                child: Text(data.isRejected ? 'مرفوض' : 'بانتظار الموافقة',
                     style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: AdminColors.navy)),
+                        color: data.isRejected
+                            ? AppColors.error
+                            : AdminColors.navy)),
               ),
             ],
           ),
         ),
+        if (data.isRejected)
+          Container(
+            key: const Key('review_rejection_banner'),
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(16),
+              border:
+                  Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('سبب الرفض · ${formatRejectionDate(data.rejectedAt!)}',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.error)),
+                const SizedBox(height: 4),
+                Text(data.rejectionReason ?? '—',
+                    style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        height: 1.6,
+                        color: AppColors.textPrimary)),
+                const SizedBox(height: 6),
+                const Text(
+                    'بانتظار تعديل المالك وإعادة إرساله. الاعتماد الآن يمسح الرفض.',
+                    style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
         _section('الوصف', Icons.notes_rounded, [
           Text(
               c.description.trim().isEmpty
@@ -358,7 +413,7 @@ class _AdminChaletReviewScreenState extends State<AdminChaletReviewScreen> {
     );
   }
 
-  Widget _buildActions() {
+  Widget _buildActions({required bool canReject}) {
     return SafeArea(
       top: false,
       child: Container(
@@ -386,25 +441,27 @@ class _AdminChaletReviewScreenState extends State<AdminChaletReviewScreen> {
                         fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                key: const Key('review_reject'),
-                onPressed: _busy ? null : () => _decide(approve: false),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  side: BorderSide(
-                      color: AppColors.error.withValues(alpha: 0.6)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+            if (canReject) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('review_reject'),
+                  onPressed: _busy ? null : () => _decide(approve: false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: BorderSide(
+                        color: AppColors.error.withValues(alpha: 0.6)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('رفض',
+                      style: TextStyle(
+                          fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
                 ),
-                icon: const Icon(Icons.close_rounded, size: 18),
-                label: const Text('رفض',
-                    style: TextStyle(
-                        fontFamily: 'Cairo', fontWeight: FontWeight.w800)),
               ),
-            ),
+            ],
           ],
         ),
       ),

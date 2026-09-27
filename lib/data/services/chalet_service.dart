@@ -288,7 +288,8 @@ class ChaletService {
       final data = await supabase
           .from('chalets')
           .select(
-            'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count, max_guests',
+            'id, name, city, location, price_per_night, images, is_available, is_approved, rating, reviews_count, max_guests, '
+            'rejection_reason, rejected_at, updated_at',
           )
           .eq('owner_id', ownerId)
           // الحذف من المالك "ناعم" (trigger يضبط deleted_at بدل الحذف)، فالشاليه
@@ -298,6 +299,16 @@ class ChaletService {
           .limit(ownerChaletsLimit);
 
       return (data as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  /// يعيد شاليهاً مرفوضاً للمراجعة بعد تعديله (resubmit_chalet): يمسح سبب
+  /// الرفض فيعود "بانتظار الموافقة"، ويُشعر الإدارة. للمالك فقط.
+  Future<void> resubmitChalet(String chaletId) async {
+    try {
+      await supabase.rpc('resubmit_chalet', params: {'p_chalet_id': chaletId});
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }

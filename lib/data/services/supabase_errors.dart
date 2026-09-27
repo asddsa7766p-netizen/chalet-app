@@ -25,6 +25,24 @@ const adminCannotBookMessage = 'حساب الإدارة لا يمكنه الحج
 /// تعارض فترة محجوزة (exclusion/overlap بالقاعدة).
 const periodTakenMessage = 'هذه الفترة محجوزة، جرّب فترة أو يوماً آخر';
 
+/// رفض الشاليه بلا سبب (admin_reject_chalet، ERRCODE P0001).
+const rejectReasonRequiredMessage =
+    'اكتب سبب الرفض حتى يعرف المالك ما يجب تعديله';
+
+/// إعادة إرسال شاليه ليس مرفوضاً أو ليس للمالك (resubmit_chalet، P0001).
+const nothingToResubmitMessage =
+    'لا يوجد شاليه مرفوض بهذا الرقم لإعادة إرساله';
+
+/// الشاليه محذوف أو غير موجود (admin_approve_chalet/admin_reject_chalet).
+const chaletNotFoundMessage = 'الشاليه غير موجود';
+
+/// رسائل دوال اعتماد الشاليهات الموجّهة للمستخدم، تُعرض كما هي.
+const chaletReviewServerMessages = [
+  rejectReasonRequiredMessage,
+  nothingToResubmitMessage,
+  chaletNotFoundMessage,
+];
+
 /// أوقات فترات الشاليه، تُضمَّن داخل chalets(...) باستعلامات الحجوزات حتى
 /// يُعرض كل حجز بتاريخه واسم فترته ووقتها (BookingModel.periodStart/End).
 const bookingPeriodColumns =
@@ -58,6 +76,11 @@ String _translateSupabaseError(dynamic error) {
   // شاليهات. رسالة موجّهة للمستخدم فتُعرض كما هي.
   if (msg.contains(adminCannotBookMessage)) {
     return adminCannotBookMessage;
+  }
+
+  // دوال اعتماد الشاليهات ورفضها وإعادة إرسالها: رسائلها موجّهة للمستخدم.
+  for (final m in chaletReviewServerMessages) {
+    if (msg.contains(m)) return m;
   }
 
   // يجب أن يسبق فرع "booking conflict" العام أدناه: رسالة الـ trigger

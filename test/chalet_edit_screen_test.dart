@@ -120,6 +120,22 @@ void main() {
       expect(_k('availableSwitch'), findsOneWidget);
     });
 
+    testWidgets('مرفوض: شارة "مرفوض" مع سبب الرفض وخطوة إعادة الإرسال',
+        (tester) async {
+      await pumpEditScreen(
+          tester,
+          _fake(overrides: {
+            'is_approved': false,
+            'rejection_reason': 'الصور غير واضحة',
+            'rejected_at': '2026-09-20T10:00:00Z',
+          }));
+      expect(find.text('مرفوض'), findsOneWidget);
+      expect(find.text('قيد المراجعة'), findsNothing);
+      expect(_k('rejectionReason'), findsOneWidget);
+      expect(find.text('سبب الرفض: الصور غير واضحة'), findsOneWidget);
+      expect(find.textContaining('إعادة الإرسال للمراجعة'), findsOneWidget);
+    });
+
     testWidgets('min_nights وdeposit_amount مخفيان تماماً', (tester) async {
       await pumpEditScreen(tester, _fake());
       expect(find.textContaining('الوديعة'), findsNothing);

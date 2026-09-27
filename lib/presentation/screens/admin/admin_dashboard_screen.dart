@@ -8,6 +8,7 @@ import '../../../core/constants/admin_colors.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/booking_period.dart';
+import '../../../data/models/chalet_approval.dart';
 import '../../../data/services/admin_service.dart';
 import '../../widgets/common/paged_list.dart';
 import '../../../data/services/services.dart' show AuthService;
@@ -17,6 +18,7 @@ part 'admin_header.dart';
 part 'overview_tab.dart';
 part 'chalet_approvals_tab.dart';
 part 'chalet_review_screen.dart';
+part 'reject_reason_dialog.dart';
 part 'users_tab.dart';
 
 /// لوحة تحكم الأدمن الشاملة — makan

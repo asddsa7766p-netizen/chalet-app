@@ -7,6 +7,8 @@ import 'package:makan/data/models/chalet_model.dart';
 import 'package:makan/data/models/models.dart';
 import 'package:makan/data/services/admin_service.dart';
 import 'package:makan/data/services/pricing_service.dart';
+import 'package:makan/data/services/services.dart'
+    show rejectReasonRequiredMessage;
 import 'package:makan/presentation/screens/admin/admin_dashboard_screen.dart';
 import 'package:makan/presentation/screens/home/main_screen.dart';
 import 'package:makan/presentation/screens/profile/profile_provider.dart';
@@ -239,6 +241,8 @@ void main() {
     Future<({List<String> approved, List<String> rejected, List<bool?> popped})>
         pumpReview(WidgetTester tester,
             {Future<void> Function()? approveResult,
+            Future<void> Function()? rejectResult,
+            AdminChaletReview? review,
             double height = 2400}) async {
       tester.view.physicalSize = Size(1080, height);
       tester.view.devicePixelRatio = 3;
@@ -255,12 +259,15 @@ void main() {
                     MaterialPageRoute(
                         builder: (_) => AdminChaletReviewScreen(
                               chaletId: 'ch1',
-                              load: (_) async => _review(),
+                              load: (_) async => review ?? _review(),
                               approve: (id) async {
                                 approved.add(id);
                                 await approveResult?.call();
                               },
-                              reject: (id) async => rejected.add(id),
+                              reject: (id, reason) async {
+                                rejected.add('$id:$reason');
+                                await rejectResult?.call();
+                              },
                             ))));
               },
               child: const Text('OPEN'),
@@ -322,15 +329,88 @@ void main() {
       expect(find.text('تمت الموافقة على الشاليه ✅'), findsOneWidget);
     });
 
-    testWidgets('الرفض: حوار "رفض وحذف" ثم الدالة', (tester) async {
+    Finder confirmReject() => find.byKey(const Key('reject_reason_confirm'));
+    bool confirmEnabled(WidgetTester t) =>
+        t.widget<TextButton>(confirmReject()).onPressed != null;
+
+    testWidgets('الرفض: سبب إلزامي مع اقتراحات، ثم الدالة بالسبب',
+        (tester) async {
       final r = await pumpReview(tester);
       await tester.tap(find.byKey(const Key('review_reject')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('رفض وحذف'));
+      expect(find.text('سبب الرفض'), findsWidgets);
+      expect(find.textContaining('رفض وحذف'), findsNothing);
+      for (final s in rejectReasonSuggestions) {
+        expect(find.widgetWithText(ActionChip, s), findsOneWidget, reason: s);
+      }
+      expect(confirmEnabled(tester), isFalse, reason: 'فارغ');
+      await tester.enterText(
+          find.byKey(const Key('reject_reason_field')), '  ab ');
+      await tester.pump();
+      expect(confirmEnabled(tester), isFalse, reason: 'أقل من 3 أحرف');
+
+      await tester.enterText(find.byKey(const Key('reject_reason_field')), '');
+      await tester.tap(find.widgetWithText(ActionChip, 'الصور غير واضحة'));
+      await tester.tap(find.widgetWithText(ActionChip, 'معلومات ناقصة'));
+      await tester.tap(find.widgetWithText(ActionChip, 'الصور غير واضحة'));
+      await tester.pump();
+      expect(confirmEnabled(tester), isTrue);
+      expect(r.rejected, isEmpty, reason: 'لا رفض قبل التأكيد');
+
+      await tester.tap(confirmReject());
       await tester.pumpAndSettle();
-      expect(r.rejected, ['ch1']);
+      expect(r.rejected, ['ch1:الصور غير واضحة، معلومات ناقصة']);
       expect(r.approved, isEmpty);
       expect(r.popped, [true]);
+      expect(find.text('تم رفض الشاليه وإبلاغ المالك بالسبب'), findsOneWidget);
+    });
+
+    testWidgets('إلغاء حوار الرفض: لا رفض ويبقى بالشاشة', (tester) async {
+      final r = await pumpReview(tester);
+      await tester.tap(find.byKey(const Key('review_reject')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const Key('reject_reason_field')), 'الأسعار غير منطقية');
+      await tester.tap(find.text('إلغاء'));
+      await tester.pumpAndSettle();
+      expect(r.rejected, isEmpty);
+      expect(r.popped, isEmpty);
+      expect(find.byKey(const Key('review_reject')), findsOneWidget);
+    });
+
+    testWidgets('رفض السيرفر للسبب: رسالته كما هي ويبقى', (tester) async {
+      final r = await pumpReview(tester,
+          rejectResult: () async =>
+              throw const AdminActionException(rejectReasonRequiredMessage));
+      await tester.tap(find.byKey(const Key('review_reject')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const Key('reject_reason_field')), 'سبب ما');
+      await tester.pump();
+      await tester.tap(confirmReject());
+      await tester.pumpAndSettle();
+      expect(find.text(rejectReasonRequiredMessage), findsOneWidget);
+      expect(r.popped, isEmpty);
+    });
+
+    testWidgets('شاليه مرفوض: سبب الرفض ظاهر، والاعتماد فقط', (tester) async {
+      final base = _review();
+      await pumpReview(tester,
+          height: 9000,
+          review: AdminChaletReview(
+            chalet: base.chalet,
+            periods: base.periods,
+            ownerName: base.ownerName,
+            ownerPhone: base.ownerPhone,
+            rejectionReason: 'الموقع غير دقيق',
+            rejectedAt: DateTime.utc(2026, 9, 20, 10),
+          ));
+      expect(find.byKey(const Key('review_rejection_banner')), findsOneWidget);
+      expect(find.text('الموقع غير دقيق'), findsOneWidget);
+      expect(find.text('سبب الرفض · 20/9/2026'), findsOneWidget);
+      expect(find.text('مرفوض'), findsOneWidget);
+      expect(find.byKey(const Key('review_reject')), findsNothing);
+      expect(find.byKey(const Key('review_approve')), findsOneWidget);
     });
 
     testWidgets('فشل الاعتماد: رسالة الخادم ويبقى بالشاشة', (tester) async {
@@ -372,6 +452,63 @@ void main() {
     expect(find.byType(TextButton), findsNothing);
     await tester.tap(find.text('شاليه الياسمين'));
     expect(taps, [1]);
+  });
+
+  testWidgets('بطاقة المرفوضة: سبب الرفض وتاريخه، بلا أزرار', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: PendingChaletCard(
+          chalet: const {
+            'id': 'ch2',
+            'name': 'شاليه الورد',
+            'city': 'جنين',
+            'price_per_night': 300,
+            'rejection_reason': 'الأسعار غير منطقية',
+            'rejected_at': '2026-09-21T09:00:00Z',
+          },
+          onTap: () {},
+        ),
+      ),
+    ));
+    expect(find.text('رُفض في 21/9/2026'), findsOneWidget);
+    expect(find.text('السبب: الأسعار غير منطقية'), findsOneWidget);
+    expect(find.byType(ElevatedButton), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+  });
+
+  testWidgets('قائمة الشاليهات: القرار من المراجعة يزيل الشاليه ويُبلغ الأخرى',
+      (tester) async {
+    final decided = <int>[];
+    final opened = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChaletQueueList(
+          fetch: (page) async => page > 0
+              ? const []
+              : [
+                  {'id': 'a', 'name': 'شاليه أ', 'price_per_night': 100},
+                  {'id': 'b', 'name': 'شاليه ب', 'price_per_night': 200},
+                ],
+          emptyText: 'لا توجد شاليهات بانتظار الموافقة',
+          onDecided: () => decided.add(1),
+          openReview: (_, id) async {
+            opened.add(id);
+            return id == 'a'; // a: قرار، b: رجوع بلا قرار
+          },
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('شاليه ب'));
+    await tester.pumpAndSettle();
+    expect(find.text('شاليه ب'), findsOneWidget);
+    expect(decided, isEmpty);
+
+    await tester.tap(find.text('شاليه أ'));
+    await tester.pumpAndSettle();
+    expect(opened, ['b', 'a']);
+    expect(find.text('شاليه أ'), findsNothing);
+    expect(decided, [1]);
   });
 
   testWidgets('ChaletCard: showFavorite=false يخفي القلب كلياً',

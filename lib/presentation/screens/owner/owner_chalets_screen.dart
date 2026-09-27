@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../data/models/chalet_approval.dart';
 import '../../../data/services/services.dart';
 import '../../../data/services/notification_service.dart';
 import 'chalet_form/owner_add_chalet_screen.dart';
 import 'chalet_form/owner_edit_chalet_screen.dart';
 import 'pricing/chalet_pricing_screen.dart';
 import 'owner_bottom_nav.dart';
+import 'rejected_chalet_card.dart';
 
 /// شاشة "شاليهاتي".
 ///
@@ -36,6 +38,10 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
   // (Problem #2)، حتى تعرض شارة الإشعارات في OwnerBottomNav هنا العدد
   // الحقيقي بدل الاعتماد على القيمة الافتراضية صفر.
   int _unreadCount = 0;
+
+  // شاليهات مرفوضة فُتحت شاشة أسعارها بهذه الجلسة: الأسعار بجداول منفصلة لا
+  // تحدّث chalets.updated_at، فلا يكشفها editedSinceRejection وحده.
+  final Set<String> _pricingOpened = {};
 
   @override
   void initState() {
@@ -121,10 +127,28 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
         ),
       ),
     );
+    if (chalet.approvalStatus == ChaletApprovalStatus.rejected) {
+      _pricingOpened.add(id);
+    }
     // إعادة تحميل القائمة بعد الرجوع، احتياطًا لو تم تعديل السعر الافتراضي
     // من داخل شاشة إدارة الأسعار مستقبلًا.
     if (mounted) _load();
   }
+
+  /// الشاليه المرفوض يُعاد إرساله بعد تعديله: تعديل بيانات الشاليه نفسه
+  /// (updated_at بعد rejected_at)، أو فتح شاشة أسعاره بهذه الجلسة.
+  bool _canResubmit(Map<String, dynamic> chalet) =>
+      chalet.editedSinceRejection || _pricingOpened.contains(chalet['id']);
+
+  List<Map<String, dynamic>> get _rejected => [
+        for (final c in _chalets)
+          if (c.approvalStatus == ChaletApprovalStatus.rejected) c,
+      ];
+
+  List<Map<String, dynamic>> get _others => [
+        for (final c in _chalets)
+          if (c.approvalStatus != ChaletApprovalStatus.rejected) c,
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -207,11 +231,42 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
                             _buildErrorState()
                           else if (_chalets.isEmpty)
                             _buildEmptyState()
-                          else
+                          else ...[
+                            // المرفوضة أولاً وبعرض كامل: السبب واضح والأزرار
+                            // (تعديل، الأسعار، إعادة الإرسال) لا تتسع ببطاقة الشبكة.
+                            if (_rejected.isNotEmpty) ...[
+                              const Text(
+                                'بحاجة لتعديل',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              for (final c in _rejected) ...[
+                                RejectedChaletCard(
+                                  key: Key('rejected_chalet_${c['id']}'),
+                                  chalet: c,
+                                  canResubmit: _canResubmit(c),
+                                  onEdit: () => _goToEdit(c),
+                                  onManagePrices: () => _goToPricing(c),
+                                  resubmit: () => ChaletService.instance
+                                      .resubmitChalet(c['id'] as String),
+                                  onResubmitted: () {
+                                    _pricingOpened.remove(c['id']);
+                                    _load();
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              const SizedBox(height: 8),
+                            ],
                             GridView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _chalets.length,
+                              itemCount: _others.length,
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
@@ -225,12 +280,13 @@ class _OwnerChaletsScreenState extends State<OwnerChaletsScreen> {
                                 childAspectRatio: 0.72,
                               ),
                               itemBuilder: (_, i) => _ChaletCard(
-                                chalet: _chalets[i],
-                                onEditPressed: () => _goToEdit(_chalets[i]),
+                                chalet: _others[i],
+                                onEditPressed: () => _goToEdit(_others[i]),
                                 onManagePricesPressed: () =>
-                                    _goToPricing(_chalets[i]),
+                                    _goToPricing(_others[i]),
                               ),
                             ),
+                          ],
                         ],
                       ),
                     ),

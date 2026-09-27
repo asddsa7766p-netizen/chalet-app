@@ -13,6 +13,7 @@ import 'chalet_edit_validation.dart';
 import 'chalet_images_editor.dart';
 import '../pricing/chalet_pricing_screen.dart';
 import '../../../../core/utils/error_reporter.dart';
+import '../../../../data/models/chalet_approval.dart';
 
 part 'edit_chalet_sections.dart';
 part 'edit_chalet_location_media.dart';
@@ -97,6 +98,10 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
   Map<String, dynamic>? _row;
   ChaletEditValues? _orig;
   bool _approved = false;
+
+  // سبب الرفض الحالي؛ null = غير مرفوض. التعديل لا يمسحه (trigger)، بل
+  // "إعادة الإرسال للمراجعة" من شاليهاتي.
+  String? _rejectionReason;
   String _bookingType = 'يومي';
   Map<String, String> _origSnapshot = {};
 
@@ -183,6 +188,9 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
       _row = row;
       _orig = o;
       _approved = row['is_approved'] == true;
+      _rejectionReason = !_approved && row.rejectedAt != null
+          ? (row.rejectionReason ?? '')
+          : null;
       _bookingType = (row['booking_type'] as String?) ?? 'يومي';
       _name.text = o.name;
       _desc.text = o.description;

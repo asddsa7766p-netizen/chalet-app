@@ -1,0 +1,152 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:makan/data/models/chalet_approval.dart';
+import 'package:makan/data/services/admin_service.dart';
+import 'package:makan/data/services/services.dart';
+import 'package:makan/presentation/screens/owner/rejected_chalet_card.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'helpers/pricing_test_harness.dart' show loadArabicTestFont;
+
+Map<String, dynamic> _row({
+  bool approved = false,
+  String? reason,
+  String? rejectedAt,
+  String? updatedAt,
+}) =>
+    {
+      'id': 'ch1',
+      'name': 'شاليه الندى',
+      'is_approved': approved,
+      'rejection_reason': reason,
+      'rejected_at': rejectedAt,
+      'updated_at': updatedAt,
+    };
+
+void main() {
+  setUpAll(loadArabicTestFont);
+
+  group('حالة الاعتماد', () {
+    test('معتمد / بانتظار / مرفوض', () {
+      expect(_row(approved: true).approvalStatus,
+          ChaletApprovalStatus.approved);
+      expect(_row().approvalStatus, ChaletApprovalStatus.pending);
+      expect(
+          _row(reason: 'x', rejectedAt: '2026-09-20T10:00:00Z')
+              .approvalStatus,
+          ChaletApprovalStatus.rejected);
+      // المعتمد لا يُعد مرفوضاً حتى لو بقي تاريخ رفض قديم.
+      expect(
+          _row(approved: true, rejectedAt: '2026-09-20T10:00:00Z')
+              .approvalStatus,
+          ChaletApprovalStatus.approved);
+    });
+
+    test('سبب الرفض: الفراغ = null', () {
+      expect(_row(reason: '  ').rejectionReason, isNull);
+      expect(_row(reason: ' الصور غير واضحة ').rejectionReason,
+          'الصور غير واضحة');
+    });
+
+    test('عُدّل بعد الرفض؟ updated_at بعد rejected_at فقط', () {
+      const at = '2026-09-20T10:00:00.123456+00:00';
+      // الرفض نفسه يضبط الاثنين بنفس now().
+      expect(_row(rejectedAt: at, updatedAt: at).editedSinceRejection, isFalse);
+      expect(
+          _row(rejectedAt: at, updatedAt: '2026-09-21T08:00:00+00:00')
+              .editedSinceRejection,
+          isTrue);
+      expect(_row(updatedAt: '2026-09-21T08:00:00Z').editedSinceRejection,
+          isFalse,
+          reason: 'غير مرفوض');
+    });
+  });
+
+  group('رسائل السيرفر بـ translateSupabaseError', () {
+    for (final m in [
+      rejectReasonRequiredMessage,
+      nothingToResubmitMessage,
+      chaletNotFoundMessage,
+    ]) {
+      test(m, () {
+        expect(
+            translateSupabaseError(PostgrestException(message: m, code: 'P0001')),
+            m);
+        expect(translateSupabaseError(Exception('PostgrestException: $m')), m);
+      });
+    }
+  });
+
+  test('إحصائيات الأدمن: rejectedChalets (وصفر إن غاب المفتاح)', () {
+    final s = AdminOverviewStats.fromJson(
+        const {'pendingChalets': 2, 'rejectedChalets': 3});
+    expect(s.pendingChalets, 2);
+    expect(s.rejectedChalets, 3);
+    expect(AdminOverviewStats.fromJson(const {}).rejectedChalets, 0);
+  });
+
+  group('بطاقة الشاليه المرفوض (شاليهاتي)', () {
+    Future<({List<int> edits, List<int> sends, List<int> done})> pump(
+      WidgetTester tester, {
+      required bool canResubmit,
+      Future<void> Function()? resubmit,
+    }) async {
+      final edits = <int>[];
+      final sends = <int>[];
+      final done = <int>[];
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: RejectedChaletCard(
+            chalet: _row(
+                reason: 'الصور غير واضحة',
+                rejectedAt: '2026-09-20T10:00:00Z'),
+            canResubmit: canResubmit,
+            onEdit: () => edits.add(1),
+            onManagePrices: () {},
+            resubmit: () async {
+              sends.add(1);
+              await resubmit?.call();
+            },
+            onResubmitted: () => done.add(1),
+          ),
+        ),
+      ));
+      return (edits: edits, sends: sends, done: done);
+    }
+
+    testWidgets('شارة "مرفوض" حمراء والسبب ظاهر، وتعديل قبل إعادة الإرسال',
+        (tester) async {
+      final r = await pump(tester, canResubmit: false);
+      expect(find.byKey(const Key('rejected_badge')), findsOneWidget);
+      expect(find.text('مرفوض'), findsOneWidget);
+      expect(find.text('الصور غير واضحة'), findsOneWidget);
+      expect(find.text('سبب الرفض · 20/9/2026'), findsOneWidget);
+      expect(find.byKey(const Key('rejected_resubmit')), findsNothing,
+          reason: 'لا إعادة إرسال قبل التعديل');
+      await tester.tap(find.byKey(const Key('rejected_edit')));
+      expect(r.edits, [1]);
+    });
+
+    testWidgets('بعد التعديل: إعادة الإرسال تستدعي الدالة ثم تحدّث القائمة',
+        (tester) async {
+      final r = await pump(tester, canResubmit: true);
+      await tester.tap(find.byKey(const Key('rejected_resubmit')));
+      await tester.pumpAndSettle();
+      expect(r.sends, [1]);
+      expect(r.done, [1]);
+      expect(find.text('أُعيد إرسال الشاليه للمراجعة ✅'), findsOneWidget);
+    });
+
+    testWidgets('فشل إعادة الإرسال: رسالة السيرفر ولا تحديث', (tester) async {
+      final r = await pump(tester,
+          canResubmit: true,
+          resubmit: () async => throw Exception(nothingToResubmitMessage));
+      await tester.tap(find.byKey(const Key('rejected_resubmit')));
+      await tester.pumpAndSettle();
+      expect(r.sends, [1]);
+      expect(r.done, isEmpty);
+      expect(find.text(nothingToResubmitMessage), findsOneWidget);
+      expect(find.byKey(const Key('rejected_resubmit')), findsOneWidget);
+    });
+  });
+}

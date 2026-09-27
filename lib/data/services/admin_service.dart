@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/chalet_approval.dart';
 import '../models/chalet_model.dart';
 import 'pricing_service.dart' show ChaletStayTypeConfig;
+import 'services.dart' show translateSupabaseError;
 
 /// إحصائيات لوحة الأدمن كما تُرجعها admin_get_overview_stats (مجمَّعة على
 /// السيرفر بدل جلب كل صفوف المنصة وجمعها بالتطبيق).
@@ -15,6 +17,9 @@ class AdminOverviewStats {
   final int totalChalets;
   final int approvedChalets;
   final int pendingChalets;
+
+  /// مرفوضة بانتظار تعديل المالك (لا تُحسب ضمن pendingChalets).
+  final int rejectedChalets;
   final int totalBookings;
   final int externalBookings;
   final Map<String, int> bookingsByStatus;
@@ -28,6 +33,7 @@ class AdminOverviewStats {
     required this.totalChalets,
     required this.approvedChalets,
     required this.pendingChalets,
+    this.rejectedChalets = 0,
     required this.totalBookings,
     required this.externalBookings,
     required this.bookingsByStatus,
@@ -46,6 +52,7 @@ class AdminOverviewStats {
       totalChalets: i('totalChalets'),
       approvedChalets: i('approvedChalets'),
       pendingChalets: i('pendingChalets'),
+      rejectedChalets: i('rejectedChalets'),
       totalBookings: i('totalBookings'),
       externalBookings: i('externalBookings'),
       bookingsByStatus: byStatus is Map
@@ -86,14 +93,33 @@ class AdminService {
   }
 
   /// الصفحة [page] (تبدأ من 0) من الشاليهات بانتظار الموافقة، الأحدث أولاً.
+  /// المرفوضة (rejected_at) خارجها حتى يعيد المالك إرسالها.
   Future<List<Map<String, dynamic>>> getPendingChalets({int page = 0}) async {
     final start = page * pageSize;
     final data = await _supabase
         .from('chalets')
         .select('id, name, city, location, price_per_night, images, created_at')
         .eq('is_approved', false)
+        .isFilter('rejected_at', null)
         .isFilter('deleted_at', null)
         .order('created_at', ascending: false)
+        .range(start, start + pageSize - 1);
+
+    return (data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// الصفحة [page] من الشاليهات المرفوضة بانتظار تعديل المالك، الأحدث رفضاً
+  /// أولاً، مع سبب الرفض وتاريخه.
+  Future<List<Map<String, dynamic>>> getRejectedChalets({int page = 0}) async {
+    final start = page * pageSize;
+    final data = await _supabase
+        .from('chalets')
+        .select('id, name, city, location, price_per_night, images, '
+            'rejection_reason, rejected_at')
+        .eq('is_approved', false)
+        .not('rejected_at', 'is', null)
+        .isFilter('deleted_at', null)
+        .order('rejected_at', ascending: false)
         .range(start, start + pageSize - 1);
 
     return (data as List).cast<Map<String, dynamic>>();
@@ -149,15 +175,19 @@ class AdminService {
       ownerName: owner?['full_name'] as String?,
       ownerPhone: owner?['phone'] as String?,
       ownerEmail: owner?['email'] as String?,
+      rejectionReason: chaletRow.rejectionReason,
+      rejectedAt: chaletRow.rejectedAt,
     );
   }
 
+  /// يعتمد الشاليه ويمسح أي رفض سابق، ويُشعر المالك.
   Future<void> approveChalet(String chaletId) =>
       _rpc('admin_approve_chalet', {'p_chalet_id': chaletId});
 
-  /// رفض الشاليه يحذفه نهائياً (admin_reject_chalet).
-  Future<void> rejectChalet(String chaletId) =>
-      _rpc('admin_reject_chalet', {'p_chalet_id': chaletId});
+  /// يرفض الشاليه بسبب إلزامي (≥ 3 أحرف على السيرفر) **دون حذفه**: يبقى عند
+  /// المالك مع السبب ليعدّله ويعيد إرساله، ويُشعَر المالك.
+  Future<void> rejectChalet(String chaletId, String reason) => _rpc(
+      'admin_reject_chalet', {'p_chalet_id': chaletId, 'p_reason': reason});
 
   /// يبدّل حظر المستخدم ويرجع صف profiles المحدَّث.
   Future<Map<String, dynamic>> toggleUserActive(String userId) async =>
@@ -169,13 +199,14 @@ class AdminService {
       Map<String, dynamic>.from(
           await _rpc('admin_toggle_user_admin', {'p_user_id': userId}) as Map);
 
-  /// رسائل الدوال عربية وموجّهة للأدمن ("لا يمكنك تعطيل حسابك الخاص")،
-  /// فتُمرَّر كما هي بدل خطأ PostgREST الخام.
+  /// رسائل الدوال عربية وموجّهة للأدمن ("لا يمكنك تعطيل حسابك الخاص"،
+  /// "اكتب سبب الرفض…")، فتُمرَّر عبر translateSupabaseError كما هي بدل خطأ
+  /// PostgREST الخام.
   Future<dynamic> _rpc(String fn, Map<String, dynamic> params) async {
     try {
       return await _supabase.rpc(fn, params: params);
     } on PostgrestException catch (e) {
-      throw AdminActionException(e.message);
+      throw AdminActionException(translateSupabaseError(e));
     }
   }
 
@@ -195,13 +226,21 @@ class AdminChaletReview {
   final String? ownerPhone;
   final String? ownerEmail;
 
+  /// الرفض الحالي إن كان الشاليه مرفوضاً (بانتظار تعديل المالك).
+  final String? rejectionReason;
+  final DateTime? rejectedAt;
+
   const AdminChaletReview({
     required this.chalet,
     this.periods = const [],
     this.ownerName,
     this.ownerPhone,
     this.ownerEmail,
+    this.rejectionReason,
+    this.rejectedAt,
   });
+
+  bool get isRejected => rejectedAt != null;
 
   /// سعر الفترة: سعرها الأساسي، وإلا السعر الافتراضي للشاليه.
   double priceOf(ChaletStayTypeConfig period) =>
