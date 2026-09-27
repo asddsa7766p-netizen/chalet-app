@@ -14,6 +14,7 @@ import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/login_prompt.dart';
+import '../../widgets/common/osm_map_layers.dart';
 import '../profile/profile_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong2;

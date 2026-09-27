@@ -22,8 +22,8 @@ part 'widgets/dashboard_actions_section.dart';
 /// الإعداد (مشروط ببيانات حقيقية)، حجوزات قادمة حقيقية، إجراءات
 /// سريعة، أداء الشاليهات.
 ///
-/// ⚠️ ملاحظة: بعض المقاييس ما زالت غير متوفرة من الـ backend (مشاهدات
-/// الشاليه، معدل الإشغال، التقييمات) وتُعرض بقيمة "—" بدل اختلاق أرقام.
+/// مقاييس لا يحسبها الـ backend بعد (مشاهدات الشاليه، معدل الإشغال،
+/// التقييمات) لا تُعرض إطلاقاً بدل بطاقة "—" دائمة.
 class OwnerDashboardScreen extends ConsumerStatefulWidget {
   const OwnerDashboardScreen({super.key});
 
@@ -446,53 +446,57 @@ class _OwnerDashboardScreenState extends ConsumerState<OwnerDashboardScreen> {
     // الملغاة"، فيشمل الطلبات المعلّقة).
     final confirmed = s?.confirmedBookings ?? 0;
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.35,
+    // ثلاث بطاقات: اثنتان بالشبكة و"قيد الانتظار" بعرض كامل تحتهما (بطاقة
+    // "مشاهدات الشاليه" حُذفت: لا تتبّع مشاهدات بالخادم فكانت "—" دائماً).
+    return Column(
       children: [
-        // ✅ إصلاح: العنوان كان "الأرباح هذا الشهر" رغم أن _range (أعلى هذا
-        // الملف) ثابت على OwnerDashboardRange.today ولا توجد واجهة لتغييره،
-        // فكانت البطاقة تعرض بيانات "اليوم" بعنوان "الشهر" — بيانات مالية
-        // مضلِّلة. لا يوجد نطاق "الشهر الحالي" جاهز بـ DashboardService
-        // (lastMonth يعني الشهر الماضي الكامل، ليس الحالي)، فتم تصحيح
-        // النص ليطابق البيانات الفعلية المعروضة (اليوم) بدل تغيير النطاق.
-        _statCard(
-          icon: Icons.account_balance_wallet_outlined,
-          iconColor: AppColors.primary,
-          title: 'أرباح اليوم',
-          value: '₪${(s?.totalRevenue ?? 0).toStringAsFixed(0)}',
-          footer: null,
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.35,
+          children: [
+            // ✅ إصلاح: العنوان كان "الأرباح هذا الشهر" رغم أن _range (أعلى هذا
+            // الملف) ثابت على OwnerDashboardRange.today ولا توجد واجهة لتغييره،
+            // فكانت البطاقة تعرض بيانات "اليوم" بعنوان "الشهر" — بيانات مالية
+            // مضلِّلة. لا يوجد نطاق "الشهر الحالي" جاهز بـ DashboardService
+            // (lastMonth يعني الشهر الماضي الكامل، ليس الحالي)، فتم تصحيح
+            // النص ليطابق البيانات الفعلية المعروضة (اليوم) بدل تغيير النطاق.
+            _statCard(
+              icon: Icons.account_balance_wallet_outlined,
+              iconColor: AppColors.primary,
+              title: 'أرباح اليوم',
+              value: '₪${(s?.totalRevenue ?? 0).toStringAsFixed(0)}',
+              footer: null,
+            ),
+            // ✅ إصلاح: نفس المشكلة — الرقم محسوب من _stats بنطاق اليوم فقط
+            // (عبر _range=today)، فتمت إضافة "اليوم" للعنوان بدل ترك "حجوزات
+            // مؤكدة" بلا نطاق زمني (كان يُفهم منها أنها إجمالي كل الحجوزات).
+            _statCard(
+              icon: Icons.calendar_today_outlined,
+              iconColor: const Color(0xFFC9A24B),
+              title: 'حجوزات مؤكدة اليوم',
+              value: '$confirmed',
+              footer: 'حجز',
+            ),
+          ],
         ),
-        // ✅ إصلاح: نفس المشكلة — الرقم محسوب من _stats بنطاق اليوم فقط
-        // (عبر _range=today)، فتمت إضافة "اليوم" للعنوان بدل ترك "حجوزات
-        // مؤكدة" بلا نطاق زمني (كان يُفهم منها أنها إجمالي كل الحجوزات).
-        _statCard(
-          icon: Icons.calendar_today_outlined,
-          iconColor: const Color(0xFFC9A24B),
-          title: 'حجوزات مؤكدة اليوم',
-          value: '$confirmed',
-          footer: 'حجز',
-        ),
+        const SizedBox(height: 12),
         // ✅ إصلاح: قيمة حقيقية محسوبة من getIncomingBookings() (status ==
         // pending) بدل "—" ثابتة. قابلة للضغط لأنها تحتاج فعل من المالك.
-        _statCard(
-          icon: Icons.access_time_rounded,
-          iconColor: const Color(0xFFC9A24B),
-          title: 'طلبات قيد الانتظار',
-          value: _pendingFailed ? '—' : '$_pendingCount',
-          footer: 'طلب',
-          onTap: _pendingCount > 0 ? () => context.go('/owner-bookings') : null,
-        ),
-        _statCard(
-          icon: Icons.visibility_outlined,
-          iconColor: AppColors.primary,
-          title: 'مشاهدات الشاليه',
-          value: '—', // ⚠️ TODO: تحتاج تتبّع مشاهدات فعلي من الـ backend
-          footer: 'هذا الشهر',
+        SizedBox(
+          width: double.infinity,
+          child: _statCard(
+            icon: Icons.access_time_rounded,
+            iconColor: const Color(0xFFC9A24B),
+            title: 'طلبات قيد الانتظار',
+            value: _pendingFailed ? '—' : '$_pendingCount',
+            footer: 'طلب',
+            onTap:
+                _pendingCount > 0 ? () => context.go('/owner-bookings') : null,
+          ),
         ),
       ],
     );

@@ -8,6 +8,11 @@ import '../../../../data/services/services.dart'
 /// واجهة رفيعة بين معالج إضافة الشاليه والباك إند (لتمكين اختباره بلا
 /// Supabase)، بنفس فكرة [ChaletEditDataSource] لشاشة التعديل. التنفيذ
 /// الافتراضي [SupabaseAddChaletDataSource] يستدعي نفس الخدمات كما كانت.
+/// أقصى عرض لصورة شاليه عند اختيارها للرفع: صورة كاميرا 12MP كانت تُرفع
+/// بعدة ميغابايت وتُفك بدقتها الكاملة داخل بطاقة صغيرة. 1600px تكفي لعرض
+/// الصورة بملء الشاشة بالمعرض.
+const double kChaletImageMaxWidth = 1600;
+
 abstract class AddChaletDataSource {
   /// معرّف المستخدم الحالي، أو null إن لم يكن مسجلاً.
   String? get currentUserId;
@@ -40,7 +45,8 @@ class SupabaseAddChaletDataSource implements AddChaletDataSource {
   String? get currentUserId => AuthService.instance.currentUser?.id;
 
   @override
-  Future<List<XFile>> pickImages() => _picker.pickMultiImage(imageQuality: 85);
+  Future<List<XFile>> pickImages() => _picker.pickMultiImage(
+      imageQuality: 85, maxWidth: kChaletImageMaxWidth);
 
   @override
   Future<String> saveChalet({

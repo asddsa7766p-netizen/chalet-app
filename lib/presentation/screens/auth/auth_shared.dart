@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../data/services/services.dart'
+    show accountSuspendedMessage, isAccountSuspendedError;
 
 /// ألوان مشتركة لشاشات المصادقة (Login / Register / ForgotPassword)
 ///
@@ -64,6 +66,9 @@ class Validators {
 ///
 /// ⚠️ عدّل رسائل الفحص (contains) بما يطابق نصوص أخطاء Supabase الفعلية عندك.
 String friendlyAuthError(Object error) {
+  // حساب محظور (رفض الدخول user_banned): الرسالة نفسها موجّهة للمستخدم.
+  if (isAccountSuspendedError(error)) return accountSuspendedMessage;
+
   final msg = error.toString().toLowerCase();
 
   if (msg.contains('invalid login credentials') ||

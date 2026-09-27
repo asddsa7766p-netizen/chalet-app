@@ -466,6 +466,11 @@ class _BookingScreenState extends State<BookingScreen> {
     } catch (e) {
       debugPrint('Booking error: $e');
       final msg = e.toString();
+      // حساب محظور: رفض الخادم برسالته كما هي، بلا إعادة تحميل التوفر.
+      if (isAccountSuspendedError(e)) {
+        _showSnack(accountSuspendedMessage);
+        return;
+      }
       // ✅ إصلاح: تأكدت فعلياً بتشغيل التطبيق أن createBooking تمرّر الخطأ
       // عبر _translateSupabaseError أولاً (services.dart) قبل وصوله هنا —
       // فيصبح نصاً عربياً مترجَماً، لا يحتوي أبداً على '23505'/'23P01'/

@@ -5,6 +5,7 @@ import 'package:makan/presentation/screens/profile/profile_provider.dart';
 import '../../../core/constants/admin_colors.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/settings/locale_notifier.dart';
 import '../../../core/utils/error_reporter.dart';
 import '../../../core/utils/support_contact.dart';
 import '../../../data/models/models.dart';
@@ -33,6 +34,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // (مثلاً بعد ما يصير المستخدم "مالك" بعد إضافة شاليه)، حتى لو هاد
   // التبويب كان محفوظ بالخلفية بالتنقل السفلي.
   bool _loadingStats = true;
+  // فشل تحميل الإحصائيات: حالة خطأ بدل أصفار توحي بأن لا حجوزات.
+  bool _statsFailed = false;
   int _completedCount = 0;
   int _favoritesCount = 0;
   // ✅ إصلاح: شارة التنبيهات كانت نصاً ثابتاً '2' لكل المستخدمين. الآن العدد
@@ -54,7 +57,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // إحصائيات الحجوزات والمفضلة — ما إلها علاقة بدور المستخدم (owner/admin)،
   // فبتضل محملة محليًا زي ما كانت.
   Future<void> _loadStats() async {
-    setState(() => _loadingStats = true);
+    setState(() {
+      _loadingStats = true;
+      _statsFailed = false;
+    });
     try {
       final completed =
           await BookingService.instance.countMyBookings('completed');
@@ -77,17 +83,70 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _loadingStats = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _loadingStats = false);
+    } catch (e, st) {
+      reportError(e, st, context: 'profile.load_stats');
+      if (mounted) {
+        setState(() {
+          _loadingStats = false;
+          _statsFailed = true;
+        });
+      }
     }
+  }
+
+  /// إعادة المحاولة من حالة الخطأ: البروفايل والإحصائيات معاً.
+  void _retry() {
+    ref.invalidate(profileProvider);
+    _loadStats();
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_rounded,
+                size: 48, color: AppColors.textHint),
+            const SizedBox(height: 12),
+            const Text('تعذر تحميل بيانات حسابك',
+                key: Key('profile_error'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _retry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('إعادة المحاولة',
+                  style: TextStyle(fontFamily: 'Cairo')),
+            ),
+            // زر الخروج جزء من المحتوى المخفي هنا؛ بدونه يعلق المستخدم إن
+            // استمر الفشل (مثلاً صف profiles مفقود).
+            TextButton(
+              onPressed: _logout,
+              child: const Text('تسجيل الخروج',
+                  style:
+                      TextStyle(fontFamily: 'Cairo', color: AppColors.error)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ✅ جديد: استُخرجت من _loadStats() لإعادة استخدامها من ref.listen أدناه
   // (Problem #5) بدون تكرار منطق الفحص في مكانين.
   Future<bool> _fetchHasApprovedChalet() async {
-    final userId = AuthService.instance.currentUser?.id;
-    if (userId == null) return false;
     try {
+      // داخل try: يُستدعى أيضاً من ref.listen بلا await، فأي استثناء هنا
+      // كان سيبقى غير معالَج.
+      final userId = AuthService.instance.currentUser?.id;
+      if (userId == null) return false;
       final ownerChalets = await ChaletService.instance.getOwnerChalets(userId);
       return ownerChalets.any((c) => c['is_approved'] == true);
     } catch (_) {
@@ -182,6 +241,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ref.watch(favoritesProvider).valueOrNull?.length ?? _favoritesCount;
     final loading =
         _loadingStats || (profileAsync.isLoading && profile == null);
+    // البروفايل فشل بلا قيمة سابقة، أو فشلت الإحصائيات.
+    final failed = !loading &&
+        ((profileAsync.hasError && profile == null) || _statsFailed);
 
     return Scaffold(
       backgroundColor: AppColors.scaffold,
@@ -202,7 +264,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: loading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
-          : SingleChildScrollView(
+          : failed
+              ? _buildError()
+              : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 92),
               child: Column(
                 children: [
@@ -430,27 +494,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   _sectionTitle('التطبيق والتفضيلات'),
                   const SizedBox(height: 8),
 
-                  _menuRow(
-                    icon: Icons.language_rounded,
-                    iconBg: Colors.white.withValues(alpha: 0.8),
-                    iconColor: AppColors.primary,
-                    label: 'اللغة',
-                    trailingText: null,
-                    onTap: () {
-                      showModalBottomSheet(
-                        context: context,
-                        showDragHandle: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(20)),
-                        ),
-                        builder: (_) => const LanguageBottomSheet(),
-                      );
-                    },
-                  ),
+                  // مخفي حتى تتوفر ترجمة إنجليزية فعلية.
+                  if (LocaleNotifier.englishSupported) ...[
+                    _menuRow(
+                      icon: Icons.language_rounded,
+                      iconBg: Colors.white.withValues(alpha: 0.8),
+                      iconColor: AppColors.primary,
+                      label: 'اللغة',
+                      trailingText: null,
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          showDragHandle: true,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(20)),
+                          ),
+                          builder: (_) => const LanguageBottomSheet(),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   // تُخفى حتى تُعتمد بيانات الدعم (AppStrings.supportPhone/Email).
                   if (SupportContact.hasAny) ...[
-                    const SizedBox(height: 10),
                     _menuRow(
                       icon: Icons.support_agent_rounded,
                       iconBg: Colors.white.withValues(alpha: 0.8),
@@ -462,8 +529,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           MaterialPageRoute(
                               builder: (_) => const HelpSupportScreen())),
                     ),
+                    const SizedBox(height: 10),
                   ],
-                  const SizedBox(height: 10),
                   _menuRow(
                     icon: Icons.settings_rounded,
                     iconBg: Colors.white.withValues(alpha: 0.8),

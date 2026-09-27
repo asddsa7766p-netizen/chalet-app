@@ -245,7 +245,7 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Reels'),
+        title: const Text('فيديوهات'),
       ),
       body: _loading
           ? const ReelsSkeletonLoader()

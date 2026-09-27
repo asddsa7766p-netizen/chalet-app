@@ -48,6 +48,21 @@ const chaletReviewServerMessages = [
 const bookingPeriodColumns =
     'chalet_stay_types(stay_type, checkin_time, checkout_time)';
 
+/// حساب محظور (is_active = false): الخادم يرفض به الحجز وإضافة الشاليه
+/// والتقييم، وGoTrue يرفض الدخول وتجديد الجلسة (user_banned).
+const accountSuspendedMessage = 'تم إيقاف هذا الحساب. تواصل مع الدعم.';
+
+/// هل الخطأ رفضٌ لحساب محظور؟ يطابق خطأ GoTrue (`user_banned`) ورسالة
+/// الخادم العربية، حتى بعد تغليفها بـ Exception من طبقة الخدمات.
+bool isAccountSuspendedError(Object? error) {
+  if (error is AuthException &&
+      (error.code == 'user_banned' ||
+          error.message.toLowerCase().contains('user is banned'))) {
+    return true;
+  }
+  return error.toString().contains(accountSuspendedMessage);
+}
+
 /// تحديث لم يعدّل أي صف: رفض صامت من RLS أو أن الحجز لم يعد موجوداً.
 const bookingNotUpdatedMessage =
     'تعذر تحديث الحجز: غير مصرح لك به أو لم يعد موجوداً.';
@@ -59,6 +74,11 @@ String translateSupabaseError(dynamic error) => _translateSupabaseError(error);
 String _translateSupabaseError(dynamic error) {
   final msg = error.toString();
   final normalized = msg.toLowerCase();
+
+  // حساب محظور: يسبق كل الفروع (رفض الخادم قد يحمل أيضاً "permission denied").
+  if (isAccountSuspendedError(error)) {
+    return accountSuspendedMessage;
+  }
 
   // trigger enforce_single_day_booking (ERRCODE 22023): رسالة السيرفر نفسها
   // موجّهة للمستخدم، فتُعرض كما هي. تسبق كل الفروع الأخرى.

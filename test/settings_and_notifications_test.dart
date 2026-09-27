@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:makan/core/settings/locale_notifier.dart';
+import 'package:makan/core/theme/theme_notifier.dart';
 import 'package:makan/data/models/notification_model.dart';
 import 'package:makan/presentation/screens/settings/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,7 +35,8 @@ void main() {
     });
   });
 
-  testWidgets('الإعدادات: اللغة تتحدث فوراً، ولا عملة ولا مفتاح إشعارات وهمي',
+  testWidgets(
+      'الإعدادات: لا خيار لغة ولا وضع مظلم (غير مدعومين)، ولا عملة ولا مفتاح إشعارات وهمي',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const ProviderScope(
@@ -41,17 +44,25 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('العربية'), findsOneWidget);
+    expect(find.text('اللغة'), findsNothing);
+    expect(find.text('English'), findsNothing);
+    expect(find.text('الوضع المظلم'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
     expect(find.text('العملة'), findsNothing);
     expect(find.textContaining('شيكل'), findsNothing);
+  });
 
-    await tester.tap(find.text('اللغة'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('English'));
-    await tester.pumpAndSettle();
-
-    // الورقة أُغلقت والقيمة المعروضة تغيّرت بلا إعادة فتح الشاشة.
-    expect(find.text('English'), findsOneWidget);
-    expect(find.text('العربية'), findsNothing);
+  test('تفضيل English/الوضع المظلم المحفوظ سابقاً يُتجاهل: عربي وفاتح دائماً',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      LocaleNotifier.kLanguageKey: 'en',
+      ThemeNotifier.kDarkModeKey: true,
+    });
+    final locale = LocaleNotifier();
+    final theme = ThemeNotifier();
+    await locale.loadFromPrefs();
+    await theme.loadFromPrefs();
+    expect(locale.locale.languageCode, 'ar');
+    expect(theme.themeMode, ThemeMode.light);
   });
 }

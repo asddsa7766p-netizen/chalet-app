@@ -79,12 +79,7 @@ extension _ChaletDetailSections on _ChaletDetailScreenState {
                   ),
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'makan',
-                    maxZoom: 19,
-                  ),
+                  osmTileLayer(),
                   MarkerLayer(
                     markers: [
                       Marker(
@@ -99,6 +94,7 @@ extension _ChaletDetailSections on _ChaletDetailScreenState {
                       ),
                     ],
                   ),
+                  const OsmAttribution(),
                 ],
               ),
             ),

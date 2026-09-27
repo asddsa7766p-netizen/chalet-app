@@ -180,7 +180,7 @@ const _navItems = [
   BottomNavigationBarItem(
     icon: Icon(Icons.video_collection_outlined),
     activeIcon: Icon(Icons.video_collection_rounded),
-    label: 'Reels',
+    label: 'فيديوهات',
   ),
   BottomNavigationBarItem(
     icon: Icon(Icons.person_outline_rounded),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/app_state_providers.dart';
+import '../../../core/settings/locale_notifier.dart';
+import '../../../core/theme/theme_notifier.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/support_contact.dart';
@@ -19,6 +21,10 @@ class SettingsScreen extends ConsumerWidget {
   final bool languageAndThemeOnly;
 
   const SettingsScreen({super.key, this.languageAndThemeOnly = false});
+
+  /// هل لإعدادات الإدارة (اللغة والثيم) أي خيار ظاهر؟ وإلا تُخفى الأيقونة.
+  static bool get hasLanguageOrTheme =>
+      LocaleNotifier.englishSupported || ThemeNotifier.darkModeSupported;
 
   void _openLanguageSheet(BuildContext context) {
     showModalBottomSheet(
@@ -44,21 +50,25 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _SettingsTile(
-            icon: Icons.language_rounded,
-            label: AppStrings.language,
-            value: languageCode == 'ar' ? 'العربية' : 'English',
-            onTap: () => _openLanguageSheet(context),
-          ),
-          _SettingsTile(
-            icon: Icons.dark_mode_outlined,
-            label: 'الوضع المظلم',
-            trailing: Switch(
-              value: isDarkMode,
-              onChanged: (v) => ref.read(themeNotifierProvider).setDarkMode(v),
-              activeThumbColor: AppColors.primary,
+          // مخفيان حتى يُدعما فعلاً (ترجمة إنجليزية، وألوان تتبع الثيم).
+          if (LocaleNotifier.englishSupported)
+            _SettingsTile(
+              icon: Icons.language_rounded,
+              label: AppStrings.language,
+              value: languageCode == 'ar' ? 'العربية' : 'English',
+              onTap: () => _openLanguageSheet(context),
             ),
-          ),
+          if (ThemeNotifier.darkModeSupported)
+            _SettingsTile(
+              icon: Icons.dark_mode_outlined,
+              label: 'الوضع المظلم',
+              trailing: Switch(
+                value: isDarkMode,
+                onChanged: (v) =>
+                    ref.read(themeNotifierProvider).setDarkMode(v),
+                activeThumbColor: AppColors.primary,
+              ),
+            ),
           // حساب الإدارة: اللغة والثيم فقط.
           if (!languageAndThemeOnly) ...[
             _SettingsTile(

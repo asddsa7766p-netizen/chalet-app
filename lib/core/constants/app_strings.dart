@@ -20,7 +20,7 @@ class AppStrings {
   static const String onboarding2Title = 'احجز بسهولة\nوأمان';
   static const String onboarding2Sub = 'خطوات بسيطة لحجز شاليهك المثالي';
   static const String onboarding3Title = 'استمتع بتجربة\nلا تُنسى';
-  static const String onboarding3Sub = 'آلاف العائلات وثقت باختياراتنا';
+  static const String onboarding3Sub = 'شاليهات مختارة لأوقات ممتعة مع عائلتك';
   static const String skip = 'تخطي';
   static const String next = 'التالي';
   static const String startNow = 'ابدأ الآن';

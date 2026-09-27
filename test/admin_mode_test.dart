@@ -12,6 +12,7 @@ import 'package:makan/data/services/services.dart'
 import 'package:makan/presentation/screens/admin/admin_dashboard_screen.dart';
 import 'package:makan/presentation/screens/home/main_screen.dart';
 import 'package:makan/presentation/screens/profile/profile_provider.dart';
+import 'package:makan/presentation/screens/settings/settings_screen.dart';
 import 'package:makan/presentation/widgets/common/common_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -195,11 +196,9 @@ void main() {
       return signOuts;
     }
 
-    testWidgets('لا زر "تصفّح التطبيق"، وفيها الإعدادات والخروج',
-        (tester) async {
+    testWidgets('لا زر "تصفّح التطبيق"، وفيها الخروج', (tester) async {
       await pumpHeader(tester);
       expect(find.text('تصفّح التطبيق'), findsNothing);
-      expect(find.byKey(const Key('admin_settings_button')), findsOneWidget);
       expect(find.byKey(const Key('admin_sign_out_button')), findsOneWidget);
     });
 
@@ -225,15 +224,11 @@ void main() {
       expect(find.text('HOME_GUEST'), findsNothing);
     });
 
-    testWidgets('إعدادات الأدمن: اللغة والثيم فقط', (tester) async {
+    testWidgets('إعدادات الأدمن (لغة وثيم فقط) مخفية ما داما غير مدعومين',
+        (tester) async {
       await pumpHeader(tester);
-      await tester.tap(find.byKey(const Key('admin_settings_button')));
-      await tester.pumpAndSettle();
-      expect(find.text('الوضع المظلم'), findsOneWidget);
-      expect(find.byIcon(Icons.language_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.shield_outlined), findsNothing);
-      expect(find.byIcon(Icons.article_outlined), findsNothing);
-      expect(find.byIcon(Icons.info_outline_rounded), findsNothing);
+      expect(SettingsScreen.hasLanguageOrTheme, isFalse);
+      expect(find.byKey(const Key('admin_settings_button')), findsNothing);
     });
   });
 

@@ -71,7 +71,31 @@ class AuthService {
         password: password,
       );
     } catch (e) {
+      // حساب محظور: لا تبقَ أي جلسة محلية (لو وُجدت من قبل).
+      if (isAccountSuspendedError(e)) await _signOutLocally();
       throw Exception(_translateSupabaseError(e));
+    } finally {
+      _rolesChanged();
+    }
+  }
+
+  /// يزيد كلما رفض الخادم تجديد الجلسة لأن الحساب محظور (يبلّغ عنه
+  /// [SuspensionAwareHttpClient]). MakanApp يستمع: يخرج محلياً، ويعود
+  /// للرئيسية كضيف، ويعرض [accountSuspendedMessage]. قيمة لا حدث، حتى لا
+  /// يضيع رفض حصل عند استعادة الجلسة قبل أن يبدأ التطبيق بالاستماع.
+  final ValueNotifier<int> suspendedSessions = ValueNotifier(0);
+
+  void reportSuspendedSession() => suspendedSessions.value++;
+
+  /// خروج محلي فقط: الخادم ألغى جلسات الحساب المحظور أصلاً، وطلب الخروج منه
+  /// سيفشل. فشل المسح المحلي لا يمنع الاستمرار.
+  Future<void> signOutLocally() => _signOutLocally();
+
+  Future<void> _signOutLocally() async {
+    try {
+      await supabase.auth.signOut(scope: SignOutScope.local);
+    } catch (e, st) {
+      reportError(e, st, context: 'auth.sign_out_locally');
     } finally {
       _rolesChanged();
     }

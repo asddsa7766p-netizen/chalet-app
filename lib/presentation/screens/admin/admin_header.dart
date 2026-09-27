@@ -79,15 +79,17 @@ class AdminDashboardHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                key: const Key('admin_settings_button'),
-                tooltip: 'الإعدادات',
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) =>
-                        const SettingsScreen(languageAndThemeOnly: true))),
-                icon: const Icon(Icons.settings_rounded,
-                    color: AdminColors.onNavy),
-              ),
+              // إعدادات الإدارة لغة وثيم فقط؛ تُخفى ما دام الاثنان غير مدعومين.
+              if (SettingsScreen.hasLanguageOrTheme)
+                IconButton(
+                  key: const Key('admin_settings_button'),
+                  tooltip: 'الإعدادات',
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) =>
+                          const SettingsScreen(languageAndThemeOnly: true))),
+                  icon: const Icon(Icons.settings_rounded,
+                      color: AdminColors.onNavy),
+                ),
               IconButton(
                 key: const Key('admin_sign_out_button'),
                 tooltip: 'تسجيل الخروج',

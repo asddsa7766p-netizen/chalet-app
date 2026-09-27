@@ -136,40 +136,26 @@ extension _DashboardActionsSection on _OwnerDashboardScreenState {
             ],
           ),
           const SizedBox(height: 4),
+          // _stats بنطاق اليوم (_range)، مثل "أرباح اليوم" (كان "هذا الشهر").
           const Align(
             alignment: Alignment.centerRight,
-            child: Text('هذا الشهر',
+            child: Text('اليوم',
                 style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 11,
                     color: AppColors.textSecondary)),
           ),
           const SizedBox(height: 16),
+          // "معدل الإشغال" و"التقييمات" حُذفا: لا حساب لهما بالخادم فكانا
+          // "—" دائماً.
           Row(
             children: [
-              Expanded(
-                child: _performanceMetric(
-                  label: 'معدل الإشغال',
-                  // ⚠️ TODO: غير متوفر حاليًا — يحتاج حساب فعلي
-                  // (أيام محجوزة ÷ أيام الفترة المتاحة).
-                  value: '—',
-                ),
-              ),
               Expanded(
                 child: _performanceMetric(
                   label: 'متوسط قيمة الحجز',
                   value: totalBookingsCount > 0
                       ? '₪${avgBookingValue.toStringAsFixed(0)}'
                       : '—',
-                ),
-              ),
-              Expanded(
-                child: _performanceMetric(
-                  label: 'التقييمات',
-                  // ⚠️ TODO: غير متوفر — يحتاج جدول/دالة تقييمات فعلية.
-                  value: '—',
-                  icon: Icons.star_rounded,
-                  iconColor: const Color(0xFFC9A24B),
                 ),
               ),
             ],
@@ -182,26 +168,15 @@ extension _DashboardActionsSection on _OwnerDashboardScreenState {
   Widget _performanceMetric({
     required String label,
     required String value,
-    IconData? icon,
-    Color? iconColor,
   }) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 16, color: iconColor),
-              const SizedBox(width: 3),
-            ],
-            Text(value,
-                style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.charcoal)),
-          ],
-        ),
+        Text(value,
+            style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: AppColors.charcoal)),
         const SizedBox(height: 4),
         Text(label,
             textAlign: TextAlign.center,

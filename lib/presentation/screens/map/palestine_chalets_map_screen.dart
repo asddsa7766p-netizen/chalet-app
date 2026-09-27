@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart' as latlong2;
 
 import '../../../data/models/chalet_model.dart';
 import '../../../data/services/services.dart';
+import '../../widgets/common/osm_map_layers.dart';
 
 class PalestineChaletsMapScreen extends StatefulWidget {
   const PalestineChaletsMapScreen({super.key});
@@ -194,9 +195,22 @@ class _PalestineChaletsMapScreenState extends State<PalestineChaletsMapScreen> {
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'حدث خطأ أثناء تحميل البيانات: $_error',
-                      style: const TextStyle(fontFamily: 'Cairo'),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontFamily: 'Cairo'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('إعادة المحاولة',
+                              style: TextStyle(fontFamily: 'Cairo')),
+                        ),
+                      ],
                     ),
                   ),
                 )
@@ -209,13 +223,9 @@ class _PalestineChaletsMapScreenState extends State<PalestineChaletsMapScreen> {
                     ),
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'makan',
-                      maxZoom: 19,
-                    ),
+                    osmTileLayer(),
                     MarkerLayer(markers: markers),
+                    const OsmAttribution(),
                   ],
                 ),
     );

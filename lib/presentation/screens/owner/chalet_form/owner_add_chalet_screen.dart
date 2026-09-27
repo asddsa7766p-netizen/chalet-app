@@ -9,6 +9,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/utils/number_utils.dart';
 import '../../../../data/services/location_service.dart';
+import '../../../../data/services/services.dart'
+    show accountSuspendedMessage, isAccountSuspendedError;
 import '../../../../data/models/chalet_model.dart';
 
 import '../../../widgets/common/common_widgets.dart';
@@ -253,6 +255,8 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
       }
     }
 
+    // قراءة الصور قد تطول: الشاشة ربما أُغلقت خلالها.
+    if (!mounted) return;
     if (validFiles.isEmpty) {
       _showSnack('تعذرت قراءة الصور المحددة', isError: true);
       return;
@@ -405,9 +409,13 @@ class _OwnerAddChaletScreenState extends ConsumerState<OwnerAddChaletScreen> {
         if (!mounted) return;
         context.go('/home');
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        _showSnack('حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً', isError: true);
+        _showSnack(
+            isAccountSuspendedError(e)
+                ? accountSuspendedMessage
+                : 'حدث خطأ أثناء الحفظ، يرجى المحاولة لاحقاً',
+            isError: true);
       }
     } finally {
       if (mounted) setState(() => _saving = false);

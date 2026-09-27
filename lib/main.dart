@@ -13,7 +13,9 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'dart:async';
 import 'data/providers/favorites_provider.dart';
-import 'data/services/services.dart' show AuthService;
+import 'data/services/services.dart'
+    show AuthService, accountSuspendedMessage;
+import 'data/services/suspension_aware_http_client.dart';
 import 'presentation/screens/profile/profile_provider.dart';
 
 const _sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
@@ -97,6 +99,9 @@ Future<void> main() async {
     authOptions: const FlutterAuthClientOptions(
       localStorage: _SecureSupabaseStorage(),
     ),
+    httpClient: SuspensionAwareHttpClient(
+      onSuspended: AuthService.instance.reportSuspendedSession,
+    ),
   );
 
   if (_sentryDsn.isNotEmpty) {
@@ -147,10 +152,19 @@ class MakanApp extends ConsumerStatefulWidget {
 class _MakanAppState extends ConsumerState<MakanApp> {
   bool _loadedPrefs = false;
   StreamSubscription<AuthState>? _authSub;
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+
+  /// آخر قيمة عولجت من [AuthService.suspendedSessions].
+  int _handledSuspensions = 0;
 
   @override
   void initState() {
     super.initState();
+
+    // حساب حُظر أثناء جلسته: رُفض تجديد الجلسة (قد يحدث عند استعادتها قبل
+    // تشغيل الواجهة، فتُفحص القيمة الحالية أيضاً).
+    AuthService.instance.suspendedSessions.addListener(_onSuspended);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onSuspended());
 
     // ✅ إصلاح: favoritesProvider/profileProvider تُبنى مرة واحدة (غالباً كضيف:
     // قائمة مفضلة فارغة وبروفايل null) ولا تُحدَّث عند تسجيل الدخول — فبعد
@@ -179,8 +193,26 @@ class _MakanAppState extends ConsumerState<MakanApp> {
     });
   }
 
+  /// خروج محلي، ثم الرئيسية كضيف مع [accountSuspendedMessage].
+  Future<void> _onSuspended() async {
+    final count = AuthService.instance.suspendedSessions.value;
+    if (count == _handledSuspensions) return;
+    _handledSuspensions = count;
+    await AuthService.instance.signOutLocally();
+    if (!mounted) return;
+    AppRouter.router.go('/home');
+    _messengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text(accountSuspendedMessage,
+            style: TextStyle(fontFamily: 'Cairo')),
+        duration: Duration(seconds: 6),
+      ));
+  }
+
   @override
   void dispose() {
+    AuthService.instance.suspendedSessions.removeListener(_onSuspended);
     _authSub?.cancel();
     super.dispose();
   }
@@ -198,6 +230,7 @@ class _MakanAppState extends ConsumerState<MakanApp> {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeNotifier.themeMode,
       routerConfig: AppRouter.router,
+      scaffoldMessengerKey: _messengerKey,
       locale: localeNotifier.locale,
       supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: const [

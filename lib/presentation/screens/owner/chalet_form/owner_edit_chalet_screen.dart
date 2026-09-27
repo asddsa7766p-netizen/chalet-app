@@ -7,6 +7,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/utils/number_utils.dart';
 import '../../../../data/services/location_service.dart';
+import 'add_chalet_data_source.dart' show kChaletImageMaxWidth;
 import 'chalet_edit_data_source.dart';
 import 'chalet_edit_model.dart';
 import 'chalet_edit_validation.dart';
@@ -301,7 +302,8 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
     List<XFile> picked;
     try {
       picked = await (widget.pickImages ??
-          () => ImagePicker().pickMultiImage(imageQuality: 85))();
+          () => ImagePicker().pickMultiImage(
+              imageQuality: 85, maxWidth: kChaletImageMaxWidth))();
     } catch (_) {
       _showSnack('تعذر فتح معرض الصور، يرجى المحاولة لاحقاً', isError: true);
       return;
@@ -498,7 +500,8 @@ class _OwnerEditChaletScreenState extends State<OwnerEditChaletScreen> {
       if (changes.isEmpty) {
         // تغيّر شكلي لا يغيّر قيمة محفوظة (مثل مسح "المنطقة" لتصير اسم المدينة
         // نفسه). لا شيء يُرسل.
-        setState(() => _applyRow(_row!));
+        // بعد رفع صور محتمل: الشاشة ربما أُغلقت خلاله.
+        if (mounted) setState(() => _applyRow(_row!));
         _showSnack('لا توجد تغييرات لحفظها');
         return true;
       }

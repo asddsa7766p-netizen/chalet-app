@@ -80,11 +80,16 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         _submitting = false;
       });
       _load();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() => _submitting = false);
-        final msg = _ is Exception ? _.toString() : 'error';
-        if (msg.contains('already_reviewed')) {
+        final msg = e is Exception ? e.toString() : 'error';
+        if (isAccountSuspendedError(e)) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(accountSuspendedMessage),
+            backgroundColor: AppColors.error,
+          ));
+        } else if (msg.contains('already_reviewed')) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('لقد قمت بتقييم إقامتك السابقة في هذا الشاليه'),
             backgroundColor: AppColors.primary,
