@@ -55,6 +55,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^3.0.0
   video_player_platform_interface: ^6.7.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -64,3 +65,12 @@ flutter:
     - assets/.env
     - assets/images/onboarding_bg.webp
     - assets/images/logo.png
+
+# أيقونة التطبيق: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icons/app_icon.png
+  adaptive_icon_background: "#575631"
+  adaptive_icon_foreground: assets/icons/app_icon_foreground.png
+  remove_alpha_ios: true
