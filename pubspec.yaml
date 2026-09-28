@@ -73,4 +73,7 @@ flutter_launcher_icons:
   image_path: assets/icons/app_icon.png
   adaptive_icon_background: "#575631"
   adaptive_icon_foreground: assets/icons/app_icon_foreground.png
+  # الرمز بالصورة له هوامش أصلاً؛ الافتراضي 16% كان يصغّره (~46% من الأيقونة
+  # الظاهرة مقابل ~56% بالأيقونة العادية).
+  adaptive_icon_foreground_inset: 8
   remove_alpha_ios: true
