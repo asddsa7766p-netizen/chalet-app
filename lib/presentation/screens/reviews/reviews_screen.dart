@@ -1,369 +1,347 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/error_reporter.dart';
 import '../../../data/models/models.dart';
 import '../../../data/services/services.dart';
-import '../../widgets/common/common_widgets.dart';
+import '../../widgets/common/paged_list.dart';
+import '../../widgets/reviews/review_widgets.dart';
+import '../../widgets/reviews/write_review_sheet.dart';
 
-// ============================================
-// FAVORITES SCREEN
-// ============================================
+/// مصادر بيانات شاشة التقييمات (قابلة للحقن بالاختبارات).
+class ReviewsScreenSource {
+  final Future<ReviewSummary> Function(String chaletId) summary;
+  final Future<List<ReviewModel>> Function(
+      String chaletId, ReviewSort sort, int page) page;
+  final Future<BookingModel?> Function(String chaletId) awaitingReview;
+
+  const ReviewsScreenSource({
+    required this.summary,
+    required this.page,
+    required this.awaitingReview,
+  });
+
+  static ReviewsScreenSource get live => ReviewsScreenSource(
+        summary: ReviewsService.instance.getChaletReviewSummary,
+        page: (id, sort, page) => ReviewsService.instance
+            .getChaletReviewsPage(id, sort: sort, page: page),
+        awaitingReview: (id) =>
+            ReviewsService.instance.latestBookingAwaitingReview(chaletId: id),
+      );
+}
+
+/// كل تقييمات شاليه: الملخص، ترتيب (الأحدث/الأعلى/الأدنى)، وتحميل تدريجي
+/// بصفحات من [ReviewsService.reviewsPageSize] عند الاقتراب من نهاية القائمة.
 class ReviewsScreen extends StatefulWidget {
   final String chaletId;
   final String chaletName;
-  const ReviewsScreen(
-      {super.key, required this.chaletId, required this.chaletName});
+  final ReviewsScreenSource? source;
+
+  const ReviewsScreen({
+    super.key,
+    required this.chaletId,
+    required this.chaletName,
+    this.source,
+  });
 
   @override
   State<ReviewsScreen> createState() => _ReviewsScreenState();
 }
 
 class _ReviewsScreenState extends State<ReviewsScreen> {
-  List<ReviewModel> _reviews = [];
-  bool _loading = true;
-  bool _loadError = false;
-  int _myRating = 0;
-  final _commentCtrl = TextEditingController();
-  bool _submitting = false;
+  late final _src = widget.source ?? ReviewsScreenSource.live;
+  final _scroll = ScrollController();
+
+  ReviewSummary? _summary;
+  bool _summaryFailed = false;
+
+  ReviewSort _sort = ReviewSort.newest;
+  late final _pager = PagedList<ReviewModel>(
+    (page) => _src.page(widget.chaletId, _sort, page),
+    pageSize: ReviewsService.reviewsPageSize,
+  );
+  bool _listLoading = true;
+  bool _listFailed = false;
+
+  /// إقامة مكتملة للمستخدم بهذا الشاليه لم يقيّمها بعد (زر "قيّم إقامتك").
+  BookingModel? _awaiting;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _scroll.addListener(_onScroll);
+    _loadAll();
   }
 
   @override
   void dispose() {
-    _commentCtrl.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _loadAll() async {
+    await Future.wait([_loadSummary(), _loadList(), _loadAwaiting()]);
+  }
+
+  Future<void> _loadSummary() async {
     setState(() {
-      _loading = true;
-      _loadError = false;
+      _summary = null;
+      _summaryFailed = false;
     });
     try {
-      final reviews =
-          await ReviewsService.instance.getChaletReviews(widget.chaletId);
+      final s = await _src.summary(widget.chaletId);
+      if (mounted) setState(() => _summary = s);
+    } catch (e, st) {
+      reportError(e, st, context: 'reviews.summary');
+      if (mounted) setState(() => _summaryFailed = true);
+    }
+  }
+
+  Future<void> _loadList() async {
+    setState(() {
+      _listLoading = true;
+      _listFailed = false;
+    });
+    try {
+      if (!await _pager.reset()) return;
+      if (mounted) setState(() => _listLoading = false);
+    } catch (e, st) {
+      reportError(e, st, context: 'reviews.page');
       if (mounted) {
         setState(() {
-          _reviews = reviews;
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _loadError = true;
+          _listLoading = false;
+          _listFailed = true;
         });
       }
     }
   }
 
-  Future<void> _submit() async {
-    if (_myRating == 0 || _submitting) return;
-    setState(() => _submitting = true);
+  Future<void> _loadAwaiting() async {
     try {
-      await ReviewsService.instance.addReview(
-        chaletId: widget.chaletId,
-        rating: _myRating,
-        comment: _commentCtrl.text.trim().isEmpty
-            ? null
-            : _commentCtrl.text.trim(),
-      );
-      if (!mounted) return;
-      _commentCtrl.clear();
-      setState(() {
-        _myRating = 0;
-        _submitting = false;
-      });
-      _load();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _submitting = false);
-        final msg = e is Exception ? e.toString() : 'error';
-        if (isAccountSuspendedError(e)) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(accountSuspendedMessage),
-            backgroundColor: AppColors.error,
-          ));
-        } else if (msg.contains('already_reviewed')) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('لقد قمت بتقييم إقامتك السابقة في هذا الشاليه'),
-            backgroundColor: AppColors.primary,
-          ));
-        } else if (msg.contains('not_eligible_review')) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('لا يمكنك إضافة تقييم قبل إكمال حجز'),
-            backgroundColor: AppColors.primary,
-          ));
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('حدث خطأ أثناء إضافة التقييم'),
-            backgroundColor: AppColors.error,
-          ));
-        }
-      }
+      final b = await _src.awaitingReview(widget.chaletId);
+      if (mounted) setState(() => _awaiting = b);
+    } catch (e, st) {
+      // ثانوي: بدونه يختفي زر "قيّم إقامتك" فقط.
+      reportError(e, st, context: 'reviews.awaiting');
+    }
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients || _listLoading || _listFailed) return;
+    if (_scroll.position.extentAfter < 400) _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (!_pager.hasMore || _pager.loadingMore) return;
+    setState(() {});
+    try {
+      await _pager.loadMore();
+    } catch (e, st) {
+      reportError(e, st, context: 'reviews.load_more');
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _setSort(ReviewSort sort) {
+    if (sort == _sort) return;
+    _sort = sort;
+    _loadList();
+  }
+
+  Future<void> _writeReview() async {
+    final booking = _awaiting;
+    if (booking == null) return;
+    final sent = await showWriteReviewSheet(context, booking: booking);
+    if (sent && mounted) {
+      setState(() => _awaiting = null);
+      _loadAll();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final avg = _reviews.isEmpty
-        ? 0.0
-        : _reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-            _reviews.length;
+    final title =
+        widget.chaletName.isEmpty ? 'التقييمات' : 'تقييمات ${widget.chaletName}';
+    final summary = _summary;
+    final hasReviews = summary != null && !summary.isEmpty;
 
     return Scaffold(
-      appBar: AppBar(title: Text('تقييمات ${widget.chaletName}')),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
-          : Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  color: AppColors.white,
-                  child: Row(
-                    children: [
-                      Column(children: [
-                        Text(avg.toStringAsFixed(1),
-                            style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 48,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.charcoal)),
-                        Row(
-                            children: List.generate(
-                                5,
-                                (i) => Icon(
-                                    i < avg.round()
-                                        ? Icons.star_rounded
-                                        : Icons.star_outline_rounded,
-                                    color: AppColors.accent,
-                                    size: 18))),
-                        Text('${_reviews.length} تقييم',
-                            style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 12,
-                                color: AppColors.textSecondary)),
-                      ]),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        child: Column(
-                          children: List.generate(5, (i) {
-                            final star = 5 - i;
-                            final count =
-                                _reviews.where((r) => r.rating == star).length;
-                            final pct = _reviews.isEmpty
-                                ? 0.0
-                                : count / _reviews.length;
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: Row(children: [
-                                Text('$star',
-                                    style: const TextStyle(
-                                        fontFamily: 'Cairo', fontSize: 11)),
-                                const Icon(Icons.star_rounded,
-                                    size: 11, color: AppColors.accent),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                    child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: LinearProgressIndicator(
-                                          value: pct,
-                                          backgroundColor: AppColors.sand,
-                                          valueColor:
-                                              const AlwaysStoppedAnimation(
-                                                  AppColors.accent),
-                                          minHeight: 6,
-                                        ))),
-                                const SizedBox(width: 6),
-                                SizedBox(
-                                    width: 20,
-                                    child: Text('$count',
-                                        style: const TextStyle(
-                                            fontFamily: 'Cairo',
-                                            fontSize: 11,
-                                            color: AppColors.textSecondary))),
-                              ]),
-                            );
-                          }),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _buildAddReview(),
-                const Divider(height: 1),
-                Expanded(
-                  child: _loadError
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('تعذر تحميل التقييمات',
-                                  style: TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 10),
-                              OutlinedButton.icon(
-                                onPressed: _load,
-                                icon: const Icon(Icons.refresh_rounded),
-                                label: const Text('إعادة المحاولة',
-                                    style: TextStyle(fontFamily: 'Cairo')),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _reviews.isEmpty
-                          ? const Center(
-                              child: Text('لا توجد تقييمات بعد',
-                                  style: TextStyle(
-                                      fontFamily: 'Cairo',
-                                      color: AppColors.textHint)),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _reviews.length,
-                              itemBuilder: (_, i) =>
-                                  _ReviewTile(review: _reviews[i]),
-                            ),
-                ),
-              ],
+      backgroundColor: AppColors.scaffold,
+      appBar: AppBar(title: Text(title)),
+      body: RefreshIndicator(
+        onRefresh: _loadAll,
+        color: AppColors.primary,
+        child: CustomScrollView(
+          controller: _scroll,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              sliver: SliverToBoxAdapter(child: _summaryCard()),
             ),
-    );
-  }
-
-  Widget _buildAddReview() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: AppColors.cream,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(AppStrings.addReview,
-              style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 10),
-          Row(
-            children: List.generate(
-                5,
-                (i) => GestureDetector(
-                      onTap: () => setState(() => _myRating = i + 1),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: Icon(
-                            i < _myRating
-                                ? Icons.star_rounded
-                                : Icons.star_outline_rounded,
-                            color: AppColors.accent,
-                            size: 32),
-                      ),
-                    )),
-          ),
-          const SizedBox(height: 10),
-          CustomTextField(
-              controller: _commentCtrl,
-              label: '',
-              hint: AppStrings.yourReview,
-              maxLines: 2),
-          const SizedBox(height: 10),
-          AppButton(
-            label: AppStrings.submitReview,
-            onPressed: _myRating > 0 ? _submit : null,
-            loading: _submitting,
-          ),
-        ],
+            if (_awaiting != null)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                sliver: SliverToBoxAdapter(child: _writeReviewCta()),
+              ),
+            if (hasReviews) ...[
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                sliver: SliverToBoxAdapter(child: _sortChips()),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                sliver: _list(),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
-}
 
-class _ReviewTile extends StatelessWidget {
-  final ReviewModel review;
-  const _ReviewTile({required this.review});
+  Widget _summaryCard() {
+    final summary = _summary;
+    final Widget child;
+    if (_summaryFailed) {
+      child = _error('تعذر تحميل التقييمات', _loadAll);
+    } else if (summary == null) {
+      child = const ReviewCardSkeleton();
+    } else if (summary.isEmpty) {
+      child = const ReviewsEmptyState();
+    } else {
+      child = Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: ReviewSummaryView(summary: summary),
+      );
+    }
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: KeyedSubtree(
+        key: ValueKey(_summaryFailed
+            ? 'failed'
+            : summary == null
+                ? 'loading'
+                : 'loaded'),
+        child: child,
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: AppColors.primaryPale,
-            backgroundImage: review.userAvatar != null
-                ? NetworkImage(review.userAvatar!)
-                : null,
-            child: review.userAvatar == null
-                ? Text(
-                    // ✅ إصلاح: characters.first كان يرمي StateError لو الاسم
-                    // نصاً فاضياً '' (نفس الحماية الموجودة أصلاً بصفحة الشاليه).
-                    (review.userName != null &&
-                            review.userName!.trim().isNotEmpty)
-                        ? review.userName!.trim().characters.first
-                        : 'م',
-                    style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700))
-                : null,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.sand),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(review.userName ?? 'مستخدم',
-                          style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700)),
-                      Row(
-                          children: List.generate(
-                              5,
-                              (i) => Icon(
-                                  i < review.rating
-                                      ? Icons.star_rounded
-                                      : Icons.star_outline_rounded,
-                                  color: AppColors.accent,
-                                  size: 12))),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  if (review.comment != null)
-                    Text(review.comment!,
-                        style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            height: 1.6)),
-                  const SizedBox(height: 4),
-                  Text(
-                      '${review.createdAt.day}/${review.createdAt.month}/${review.createdAt.year}',
-                      style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 10,
-                          color: AppColors.textHint)),
-                ],
-              ),
+  Widget _writeReviewCta() {
+    return FadeSlideIn(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: reviewGold.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: reviewGold.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.star_rounded, color: reviewGold),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('أقمت هنا مؤخراً، شاركنا رأيك',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.charcoal)),
             ),
+            TextButton(
+              key: const Key('reviews_write_cta'),
+              onPressed: _writeReview,
+              child: const Text('قيّم إقامتك',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sortChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final s in ReviewSort.values)
+          GestureDetector(
+            key: Key('review_sort_${s.name}'),
+            onTap: () => _setSort(s),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: s == _sort ? AppColors.primary : AppColors.card,
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(
+                    color: s == _sort ? AppColors.primary : AppColors.border),
+              ),
+              child: Text(s.label,
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: s == _sort ? Colors.white : AppColors.textSecondary)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _list() {
+    if (_listFailed) {
+      return SliverToBoxAdapter(
+          child: _error('تعذر تحميل التقييمات', _loadList));
+    }
+    if (_listLoading) {
+      return SliverList.separated(
+        itemCount: 4,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (_, __) => const ReviewCardSkeleton(),
+      );
+    }
+    final items = _pager.items;
+    // صفحة جديدة قيد التحميل: هيكلان في الأسفل.
+    final extra = _pager.loadingMore ? 2 : 0;
+    return SliverList.separated(
+      itemCount: items.length + extra,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (_, i) => i < items.length
+          ? FadeSlideIn(
+              key: ValueKey(items[i].id), child: ReviewCard(review: items[i]))
+          : const ReviewCardSkeleton(),
+    );
+  }
+
+  Widget _error(String text, VoidCallback retry) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Text(text,
+              style: const TextStyle(
+                  fontFamily: 'Cairo', color: AppColors.textSecondary)),
+          TextButton.icon(
+            onPressed: retry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('إعادة المحاولة',
+                style: TextStyle(fontFamily: 'Cairo')),
           ),
         ],
       ),

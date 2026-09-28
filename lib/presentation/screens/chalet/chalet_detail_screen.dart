@@ -15,6 +15,7 @@ import '../../../data/services/services.dart';
 import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/login_prompt.dart';
 import '../../widgets/common/osm_map_layers.dart';
+import '../../widgets/reviews/review_widgets.dart';
 import '../profile/profile_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
@@ -26,7 +27,6 @@ import '../../../core/utils/error_reporter.dart';
 part 'widgets/chalet_detail_header.dart';
 part 'widgets/chalet_detail_sections.dart';
 part 'widgets/chalet_reviews_section.dart';
-part 'widgets/review_item.dart';
 part 'widgets/full_screen_gallery.dart';
 
 class ChaletDetailScreen extends ConsumerStatefulWidget {
@@ -44,7 +44,11 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
   void _setState(VoidCallback fn) => setState(fn);
 
   ChaletModel? _chalet;
+
+  /// أول تقييمين (الأحدث) وملخص كل التقييمات؛ null أثناء التحميل.
   List<ReviewModel> _reviews = [];
+  ReviewSummary? _reviewSummary;
+  bool _reviewsFailed = false;
 
   bool _loading = true;
   // ✅ إصلاح: نفرّق بين فشل تحميل الشاليه نفسه (خطأ حقيقي يحتاج إعادة
@@ -115,25 +119,39 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
       chaletFailed = true;
     }
 
-    List<ReviewModel> reviews = [];
-    try {
-      reviews = await ReviewsService.instance.getChaletReviews(widget.chaletId);
-    } catch (e, st) {
-      // فشل التقييمات لا يمنع عرض باقي بيانات الشاليه — تبقى القائمة فاضية
-      // ويظهر "لا يوجد تقييمات بعد" بدل كسر الشاشة كاملة.
-      reportError(e, st, context: 'chalet_detail.reviews');
-    }
-
     if (!mounted) return;
     setState(() {
       _chalet = chalet ?? _chalet;
-      _reviews = reviews;
       _loading = false;
       // ✅ إصلاح: خطأ فعلي بس إذا فشل تحميل الشاليه ومافي أي بيانات
       // بديلة (لا widget.chalet ولا نتيجة سابقة) — عشان نعرض شاشة خطأ
       // بزر إعادة محاولة بدل مؤشر تحميل بيدور للأبد.
       _chaletLoadError = chaletFailed && _chalet == null;
     });
+    // مستقل: فشل التقييمات لا يمنع عرض الشاليه، وله إعادة محاولة خاصة به.
+    _loadReviews();
+  }
+
+  Future<void> _loadReviews() async {
+    setState(() {
+      _reviewSummary = null;
+      _reviewsFailed = false;
+    });
+    try {
+      final service = ReviewsService.instance;
+      final results = await Future.wait([
+        service.getChaletReviewSummary(widget.chaletId),
+        service.getChaletReviewsPage(widget.chaletId, pageSize: 2),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _reviewSummary = results[0] as ReviewSummary;
+        _reviews = results[1] as List<ReviewModel>;
+      });
+    } catch (e, st) {
+      reportError(e, st, context: 'chalet_detail.reviews');
+      if (mounted) setState(() => _reviewsFailed = true);
+    }
   }
 
   Future<void> _toggleFavorite() async {

@@ -8,12 +8,34 @@ class ReviewsService {
   static ReviewsService get instance => _instance ??= ReviewsService._();
   ReviewsService._();
 
-  Future<List<ReviewModel>> getChaletReviews(String chaletId) async {
+  static const reviewsPageSize = 20;
+
+  /// get_chalet_reviews_with_author ترجع TABLE، فيطبّق PostgREST عليها
+  /// select/order/range على السيرفر (ترتيب الدالة الداخلي يُستبدل).
+  PostgrestFilterBuilder<dynamic> _reviewsRpc(String chaletId) =>
+      supabase.rpc('get_chalet_reviews_with_author',
+          params: {'p_chalet_id': chaletId});
+
+  /// صفحة من تقييمات الشاليه بالترتيب [sort] (id آخر مفتاح ليبقى الترقيم
+  /// ثابتاً بين الصفحات عند تساوي التقييم والتاريخ).
+  Future<List<ReviewModel>> getChaletReviewsPage(
+    String chaletId, {
+    ReviewSort sort = ReviewSort.newest,
+    int page = 0,
+    int pageSize = reviewsPageSize,
+  }) async {
     try {
+      final q = _reviewsRpc(chaletId);
+      final ordered = switch (sort) {
+        ReviewSort.newest => q.order('created_at'),
+        ReviewSort.highest =>
+          q.order('rating').order('created_at'),
+        ReviewSort.lowest =>
+          q.order('rating', ascending: true).order('created_at'),
+      };
+      final start = page * pageSize;
       final data =
-          await supabase.rpc('get_chalet_reviews_with_author', params: {
-        'p_chalet_id': chaletId,
-      });
+          await ordered.order('id').range(start, start + pageSize - 1);
       return (data as List).map((e) {
         final row = Map<String, dynamic>.from(e as Map<String, dynamic>);
         row['profiles'] = {
@@ -22,6 +44,62 @@ class ReviewsService {
         };
         return ReviewModel.fromJson(row);
       }).toList();
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  /// العدد والمتوسط والتوزيع من كل تقييمات الشاليه (عمود rating فقط).
+  Future<ReviewSummary> getChaletReviewSummary(String chaletId) async {
+    try {
+      final data = await _reviewsRpc(chaletId).select('rating');
+      return ReviewSummary.fromRatings(
+          (data as List).map((r) => (r['rating'] as num).toInt()));
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  /// أيّ من [bookingIds] قيّمه المستخدم الحالي.
+  Future<Set<String>> reviewedBookingIds(List<String> bookingIds) async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null || bookingIds.isEmpty) return {};
+    try {
+      final data = await supabase
+          .from('reviews')
+          .select('booking_id')
+          .eq('user_id', userId)
+          .inFilter('booking_id', bookingIds);
+      return (data as List)
+          .map((r) => r['booking_id'] as String?)
+          .whereType<String>()
+          .toSet();
+    } catch (e) {
+      throw Exception(_translateSupabaseError(e));
+    }
+  }
+
+  /// أحدث إقامة مكتملة للمستخدم لم يقيّمها بعد (اختيارياً بشاليه معيّن)، أو
+  /// null. إشعار "كيف كانت إقامتك؟" (type = review من
+  /// process_booking_lifecycle) لا يحمل رقم الحجز، فيفتح التقييم لهذه.
+  Future<BookingModel?> latestBookingAwaitingReview({String? chaletId}) async {
+    final userId = AuthService.instance.currentUser?.id;
+    if (userId == null) return null;
+    try {
+      var q = supabase
+          .from('bookings')
+          .select('*, chalets(name, city, images, $bookingPeriodColumns)')
+          .eq('user_id', userId)
+          .eq('status', 'completed');
+      if (chaletId != null) q = q.eq('chalet_id', chaletId);
+      final bookings = BookingService._toBookings(
+          await q.order('check_in').limit(reviewsPageSize));
+      final reviewed =
+          await reviewedBookingIds([for (final b in bookings) b.id]);
+      for (final b in bookings) {
+        if (!reviewed.contains(b.id)) return b;
+      }
+      return null;
     } catch (e) {
       throw Exception(_translateSupabaseError(e));
     }
@@ -100,6 +178,11 @@ class ReviewsService {
         'comment': comment,
       });
     } catch (e) {
+      // unique_review_per_booking (23505): الترجمة العامة كانت ستعرض "هذه
+      // الفترة محجوزة".
+      if (e is PostgrestException && e.code == '23505') {
+        throw Exception('already_reviewed');
+      }
       throw Exception(_translateSupabaseError(e));
     }
   }

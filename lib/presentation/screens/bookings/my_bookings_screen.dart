@@ -8,6 +8,9 @@ import '../../../data/services/services.dart';
 import '../../../data/models/booking_period.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../widgets/common/paged_list.dart';
+import '../../widgets/reviews/review_widgets.dart' show reviewGold;
+import '../../widgets/reviews/write_review_sheet.dart';
+import '../../../core/utils/error_reporter.dart';
 
 // ============================================
 // FAVORITES SCREEN
@@ -49,6 +52,14 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   bool _loadError = false;
   bool _cancelling = false;
 
+  /// تبويب "سابقة" (completed) بـ [_statuses].
+  static const _completedTab = 2;
+
+  /// حجوزات مكتملة عُرف أنها قُيِّمت / فُحصت. الزر يظهر فقط لما فُحص ولم
+  /// يُقيَّم، فلا يومض زر لحجز مقيَّم أثناء الفحص (ولا يظهر إن فشل الفحص).
+  final _reviewed = <String>{};
+  final _reviewChecked = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +82,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       final fresh = await Future.wait([for (final p in _pagers) p.reset()]);
       if (mounted && !fresh.contains(false)) {
         setState(() => _loading = false);
+        _checkReviewed();
       }
     } catch (_) {
       if (mounted) {
@@ -86,6 +98,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     setState(() {});
     try {
       await pager.loadMore();
+      if (identical(pager, _pagers[_completedTab])) _checkReviewed();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -96,6 +109,30 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       }
     }
     if (mounted) setState(() {});
+  }
+
+  /// أيّ الحجوزات المكتملة المعروضة قيّمها المستخدم (لزر "قيّم إقامتك").
+  Future<void> _checkReviewed() async {
+    final ids = [
+      for (final b in _pagers[_completedTab].items)
+        if (!_reviewChecked.contains(b.id)) b.id,
+    ];
+    if (ids.isEmpty) return;
+    try {
+      final reviewed = await ReviewsService.instance.reviewedBookingIds(ids);
+      if (!mounted) return;
+      setState(() {
+        _reviewed.addAll(reviewed);
+        _reviewChecked.addAll(ids);
+      });
+    } catch (e, st) {
+      reportError(e, st, context: 'my_bookings.reviewed_ids');
+    }
+  }
+
+  Future<void> _review(BookingModel booking) async {
+    final sent = await showWriteReviewSheet(context, booking: booking);
+    if (sent && mounted) setState(() => _reviewed.add(booking.id));
   }
 
   Future<void> _cancel(String bookingId, int tabIdx) async {
@@ -138,6 +175,13 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
       }
       if (mounted) _load();
     }
+  }
+
+  _ReviewState _reviewStateOf(BookingModel b) {
+    if (b.status != BookingStatus.completed || !_reviewChecked.contains(b.id)) {
+      return _ReviewState.none;
+    }
+    return _reviewed.contains(b.id) ? _ReviewState.done : _ReviewState.pending;
   }
 
   @override
@@ -249,6 +293,8 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                             pager: pager, onLoadMore: () => _loadMore(pager))
                         : _BookingCard(
                             booking: bookings[j],
+                            reviewState: _reviewStateOf(bookings[j]),
+                            onReview: () => _review(bookings[j]),
                             onCancel: bookings[j].status ==
                                         BookingStatus.pending ||
                                     bookings[j].status ==
@@ -264,10 +310,21 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   }
 }
 
+/// حالة التقييم لحجز مكتمل: لا شيء (غير مكتمل أو لم يُفحص)، بانتظار
+/// التقييم (زر)، أو قُيِّم.
+enum _ReviewState { none, pending, done }
+
 class _BookingCard extends StatelessWidget {
   final BookingModel booking;
   final VoidCallback? onCancel;
-  const _BookingCard({required this.booking, this.onCancel});
+  final _ReviewState reviewState;
+  final VoidCallback? onReview;
+  const _BookingCard({
+    required this.booking,
+    this.onCancel,
+    this.reviewState = _ReviewState.none,
+    this.onReview,
+  });
 
   Color get _statusColor {
     switch (booking.status) {
@@ -500,6 +557,55 @@ class _BookingCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  ),
+                ],
+                if (reviewState == _ReviewState.pending) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 40,
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      key: Key('review_booking_${booking.id}'),
+                      onPressed: onReview,
+                      icon: const Icon(Icons.star_rounded,
+                          size: 18, color: reviewGold),
+                      label: const Text(
+                        'قيّم إقامتك',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        backgroundColor: reviewGold.withValues(alpha: 0.08),
+                        side: BorderSide(
+                            color: reviewGold.withValues(alpha: 0.6)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (reviewState == _ReviewState.done) ...[
+                  const SizedBox(height: 10),
+                  const Row(
+                    children: [
+                      Icon(Icons.check_circle_rounded,
+                          size: 16, color: AppColors.primary),
+                      SizedBox(width: 6),
+                      Text(
+                        'قيّمت هذه الإقامة، شكراً لك',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],

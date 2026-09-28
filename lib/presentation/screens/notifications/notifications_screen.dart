@@ -4,6 +4,8 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../data/models/notification_model.dart';
 import '../../../data/services/notification_service.dart';
+import '../../widgets/reviews/review_widgets.dart' show reviewGold;
+import '../../widgets/reviews/write_review_sheet.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -143,6 +145,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           .map((n) => _NotificationCard(
                                 notification: n,
                                 onTap: () async {
+                                  // "كيف كانت إقامتك؟" تفتح التقييم حتى لو
+                                  // قُرئت (الإشعار لا يحمل رقم الحجز).
+                                  if (n.type == 'review') {
+                                    if (!n.isRead) {
+                                      await _runAndReload(() =>
+                                          NotificationService.instance
+                                              .markAsRead(n.id));
+                                    }
+                                    if (context.mounted) {
+                                      await openReviewForLatestStay(context);
+                                    }
+                                    return;
+                                  }
                                   if (n.isRead) return;
                                   await _runAndReload(() =>
                                       NotificationService.instance
@@ -330,6 +345,11 @@ class _NotificationCard extends StatelessWidget {
         iconColor = AppColors.primary;
         icon = Icons.check_circle_rounded;
         break;
+      case 'review':
+        iconBg = reviewGold.withValues(alpha: 0.14);
+        iconColor = reviewGold;
+        icon = Icons.star_rounded;
+        break;
       case 'reminder':
         iconBg = AppColors.primary.withValues(alpha: 0.10);
         iconColor = AppColors.primary;
@@ -344,10 +364,8 @@ class _NotificationCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: GestureDetector(
-        onTap: () async {
-          if (notification.isRead) return;
-          await onTap();
-        },
+        // المقروء لا يُعاد تعليمه؛ الشاشة تقرّر (إشعار التقييم يفتح الورقة).
+        onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
