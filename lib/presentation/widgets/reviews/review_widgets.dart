@@ -306,14 +306,14 @@ class ReviewCard extends StatelessWidget {
               ),
             ],
           ),
-          if (review.stayType != null || review.isVerifiedStay) ...[
+          if (review.periodBadgeType != null || review.isVerifiedStay) ...[
             const SizedBox(height: 10),
             Wrap(
               spacing: 6,
               runSpacing: 6,
               children: [
-                if (review.stayType != null)
-                  _Badge(text: stayTypeLabel(review.stayType!)),
+                if (review.periodBadgeType != null)
+                  _Badge(text: stayTypeLabel(review.periodBadgeType!)),
                 if (review.isVerifiedStay)
                   const _Badge(text: 'إقامة مؤكدة', verified: true),
               ],

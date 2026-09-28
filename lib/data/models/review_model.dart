@@ -17,9 +17,8 @@ class ReviewModel {
   final String? userName;
   final String? userAvatar;
 
-  /// فترة الحجز المقيَّم (stay_type). دالة get_chalet_reviews_with_author لا
-  /// تُرجعها حالياً، وRLS الحجوزات لا يسمح للزوار بقراءتها، فتبقى null وتُخفى
-  /// شارتها؛ تظهر تلقائياً إن أضافت الدالة عمود stay_type.
+  /// فترة الحجز المقيَّم (stay_type من bookings عبر
+  /// get_chalet_reviews_with_author). null لتقييم بلا حجز.
   final String? stayType;
 
   const ReviewModel({
@@ -36,6 +35,11 @@ class ReviewModel {
   });
 
   bool get isVerifiedStay => bookingId != null;
+
+  /// فترة تستحق شارة: الحجوزات القديمة (قبل الفترات) قيمتها 'default'
+  /// ولا تعني فترة فعلية، فلا شارة لها ولا لـ null.
+  String? get periodBadgeType =>
+      stayType == null || stayType == 'default' ? null : stayType;
 
   factory ReviewModel.fromJson(Map<String, dynamic> json) {
     return ReviewModel(

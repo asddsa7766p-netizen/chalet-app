@@ -135,6 +135,40 @@ void main() {
       expect(find.text('قراءة المزيد'), findsNothing, reason: 'نص قصير');
     });
 
+    group('شارة الفترة من stay_type (آخر عمود بالدالة)', () {
+      // صف بنفس أعمدة get_chalet_reviews_with_author، بعد تحويل الخدمة
+      // author_* إلى profiles.
+      ReviewModel fromRpc(String? stayType) => ReviewModel.fromJson({
+            'id': 'r9',
+            'chalet_id': 'c1',
+            'user_id': 'u9',
+            'booking_id': 'b9',
+            'rating': 4,
+            'comment': null,
+            'created_at': '2030-03-17T12:00:00Z',
+            'profiles': {'full_name': 'ليان', 'avatar_url': null},
+            'stay_type': stayType,
+          });
+
+      testWidgets('فترة حقيقية تظهر شارتها', (tester) async {
+        await _pump(tester, ReviewCard(review: fromRpc('morning'), now: _now));
+        expect(find.text('إقامة صباحية'), findsOneWidget);
+        expect(find.text('إقامة مؤكدة'), findsOneWidget);
+      });
+
+      for (final hidden in [null, 'default']) {
+        testWidgets('stay_type = $hidden: لا شارة فترة', (tester) async {
+          final review = fromRpc(hidden);
+          expect(review.periodBadgeType, isNull);
+          await _pump(tester, ReviewCard(review: review, now: _now));
+          expect(find.text('يوم كامل'), findsNothing,
+              reason: "'default' تُعرض \"يوم كامل\" لو لم تُخفَ");
+          expect(find.text('إقامة صباحية'), findsNothing);
+          expect(find.text('إقامة مؤكدة'), findsOneWidget);
+        });
+      }
+    });
+
     testWidgets('بلا حجز: لا شارة "إقامة مؤكدة"، وبلا اسم: "مستخدم"',
         (tester) async {
       await _pump(
