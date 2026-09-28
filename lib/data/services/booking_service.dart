@@ -240,7 +240,8 @@ class BookingService {
     try {
       final data = await supabase
           .from('bookings')
-          .select('*, chalets(name, city, images, $bookingPeriodColumns)')
+          .select(
+              '*, chalets(name, city, images, owner_id, $bookingPeriodColumns)')
           .eq('user_id', userId)
           .inFilter('status', statuses)
           .order('created_at', ascending: false)

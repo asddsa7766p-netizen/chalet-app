@@ -75,6 +75,9 @@ class ChaletModel {
   /// هل لديه إحداثيات خريطة؟
   bool get hasLocation => latitude != null && longitude != null;
 
+  /// هل [userId] مالك الشاليه؟ المالك لا يحجزه من التطبيق ولا يقيّمه.
+  bool isOwnedBy(String? userId) => userId != null && ownerId == userId;
+
   factory ChaletModel.fromJson(Map<String, dynamic> json) {
     // images مخزنة كـ text[] في Supabase — تأتي كـ List<dynamic>
     List<String> parseImages(dynamic raw) {

@@ -79,6 +79,16 @@ class ReviewsService {
     }
   }
 
+  /// هل يحق لـ [userId] تقييم [booking]؟ مثل سياسة الإدراج بالخادم: حجز
+  /// تطبيق (لا يدوي) مكتمل له، ولشاليه لا يملكه. المالك مجهول (لم يُضمَّن)
+  /// لا يمنع؛ الخادم يرفض على أي حال.
+  static bool canReview(BookingModel booking, String? userId) =>
+      userId != null &&
+      booking.status == BookingStatus.completed &&
+      booking.userId == userId &&
+      booking.source == 'app' &&
+      booking.chaletOwnerId != userId;
+
   /// أحدث إقامة مكتملة للمستخدم لم يقيّمها بعد (اختيارياً بشاليه معيّن)، أو
   /// null. إشعار "كيف كانت إقامتك؟" (type = review من
   /// process_booking_lifecycle) لا يحمل رقم الحجز، فيفتح التقييم لهذه.
@@ -88,12 +98,18 @@ class ReviewsService {
     try {
       var q = supabase
           .from('bookings')
-          .select('*, chalets(name, city, images, $bookingPeriodColumns)')
+          .select('*, chalets!inner(name, city, images, owner_id, '
+              '$bookingPeriodColumns)')
           .eq('user_id', userId)
-          .eq('status', 'completed');
+          .eq('status', 'completed')
+          // مثل سياسة الإدراج: حجوزات التطبيق فقط، ولا شاليهات يملكها.
+          .or('source.is.null,source.eq.app')
+          .neq('chalets.owner_id', userId);
       if (chaletId != null) q = q.eq('chalet_id', chaletId);
       final bookings = BookingService._toBookings(
-          await q.order('check_in').limit(reviewsPageSize));
+              await q.order('check_in').limit(reviewsPageSize))
+          .where((b) => canReview(b, userId))
+          .toList();
       final reviewed =
           await reviewedBookingIds([for (final b in bookings) b.id]);
       for (final b in bookings) {

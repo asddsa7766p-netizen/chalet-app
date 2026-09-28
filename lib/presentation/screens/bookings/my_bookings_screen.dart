@@ -113,9 +113,12 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
 
   /// أيّ الحجوزات المكتملة المعروضة قيّمها المستخدم (لزر "قيّم إقامتك").
   Future<void> _checkReviewed() async {
+    final userId = AuthService.instance.currentUser?.id;
     final ids = [
       for (final b in _pagers[_completedTab].items)
-        if (!_reviewChecked.contains(b.id)) b.id,
+        if (!_reviewChecked.contains(b.id) &&
+            ReviewsService.canReview(b, userId))
+          b.id,
     ];
     if (ids.isEmpty) return;
     try {
@@ -178,7 +181,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   }
 
   _ReviewState _reviewStateOf(BookingModel b) {
-    if (b.status != BookingStatus.completed || !_reviewChecked.contains(b.id)) {
+    // لا زر لحجز يدوي أو لشاليه يملكه المستخدم (الخادم يرفض تقييمهما).
+    if (!ReviewsService.canReview(b, AuthService.instance.currentUser?.id) ||
+        !_reviewChecked.contains(b.id)) {
       return _ReviewState.none;
     }
     return _reviewed.contains(b.id) ? _ReviewState.done : _ReviewState.pending;

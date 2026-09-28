@@ -16,6 +16,8 @@ import '../../../data/providers/favorites_provider.dart';
 import '../../widgets/common/login_prompt.dart';
 import '../../widgets/common/osm_map_layers.dart';
 import '../../widgets/reviews/review_widgets.dart';
+import '../owner/bookings/manual_booking_sheet.dart' show openManualBookingSheet;
+import 'widgets/own_chalet_booking_note.dart';
 import '../profile/profile_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
@@ -616,8 +618,19 @@ class _ChaletDetailScreenState extends ConsumerState<ChaletDetailScreen> {
                       color: AppColors.primary)),
             ],
           ),
+          // المالك لا يحجز شاليهه من التطبيق (السيرفر يرفض): ملاحظة ورابط
+          // للحجز اليدوي بدل "احجز الآن".
+          if (chalet.isOwnedBy(AuthService.instance.currentUser?.id)) ...[
+            const SizedBox(width: 16),
+            Expanded(
+              child: OwnChaletBookingNote(
+                onManualBooking: () =>
+                    openManualBookingSheet(context, chaletId: chalet.id),
+              ),
+            ),
+          ]
           // الأدمن لا يحجز (السيرفر يرفض أيضاً): يبقى السعر فقط بلا "احجز الآن".
-          if (!ref.watch(isAdminProvider)) ...[
+          else if (!ref.watch(isAdminProvider)) ...[
           const SizedBox(width: 16),
           Expanded(
             child: ElevatedButton(

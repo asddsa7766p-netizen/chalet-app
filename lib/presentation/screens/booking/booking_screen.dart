@@ -471,6 +471,13 @@ class _BookingScreenState extends State<BookingScreen> {
         _showSnack(accountSuspendedMessage);
         return;
       }
+      // رفض موجّه للمستخدم من trigger الحجوزات (مثل "لا يمكنك حجز شاليهك من
+      // التطبيق..."): يُعرض كما هي بدل الرسالة العامة.
+      final serverMessage = bookingServerMessageIn(e);
+      if (serverMessage != null) {
+        _showSnack(serverMessage);
+        return;
+      }
       // ✅ إصلاح: تأكدت فعلياً بتشغيل التطبيق أن createBooking تمرّر الخطأ
       // عبر _translateSupabaseError أولاً (services.dart) قبل وصوله هنا —
       // فيصبح نصاً عربياً مترجَماً، لا يحتوي أبداً على '23505'/'23P01'/

@@ -22,6 +22,28 @@ const chaletNotBookableMessage = 'هذا الشاليه لم يعد متاحاً
 /// block_admin_customer_actions على bookings وchalets، ERRCODE P0001).
 const adminCannotBookMessage = 'حساب الإدارة لا يمكنه الحجز أو إضافة شاليهات';
 
+/// رفض السيرفر لحجز التطبيق من مالك الشاليه نفسه (enforce_bookable_chalet،
+/// ERRCODE P0001): يستخدم الحجز اليدوي.
+const ownChaletBookingMessage =
+    'لا يمكنك حجز شاليهك من التطبيق، استخدم الحجز اليدوي';
+
+/// رسائل رفض الحجز الموجّهة للمستخدم من triggers الحجوزات، تُعرض كما هي.
+const bookingServerMessages = [
+  ownChaletBookingMessage,
+  chaletNotBookableMessage,
+  adminCannotBookMessage,
+  singleDayOnlyMessage,
+];
+
+/// رسالة الخادم الموجّهة للمستخدم داخل [error] (مترجماً أو خاماً)، أو null.
+String? bookingServerMessageIn(Object? error) {
+  final msg = error.toString();
+  for (final m in bookingServerMessages) {
+    if (msg.contains(m)) return m;
+  }
+  return null;
+}
+
 /// تعارض فترة محجوزة (exclusion/overlap بالقاعدة).
 const periodTakenMessage = 'هذه الفترة محجوزة، جرّب فترة أو يوماً آخر';
 
@@ -86,10 +108,13 @@ String _translateSupabaseError(dynamic error) {
     return singleDayOnlyMessage;
   }
 
-  // trigger enforce_bookable_chalet: شاليه محذوف أو غير معتمد. رسالة موجّهة
-  // للمستخدم فتُعرض كما هي، قبل أي فرع قد يطابق نص الخطأ.
+  // trigger enforce_bookable_chalet: شاليه محذوف أو غير معتمد، أو المالك
+  // يحجز شاليهه. رسائل موجّهة للمستخدم فتُعرض كما هي، قبل أي فرع قد يطابق.
   if (msg.contains(chaletNotBookableMessage)) {
     return chaletNotBookableMessage;
+  }
+  if (msg.contains(ownChaletBookingMessage)) {
+    return ownChaletBookingMessage;
   }
 
   // trigger block_admin_customer_actions: حساب الإدارة لا يحجز ولا يضيف

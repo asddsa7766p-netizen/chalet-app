@@ -56,6 +56,10 @@ class BookingModel {
   final String? chaletImage;
   final String? chaletCity;
 
+  /// مالك الشاليه (chalets.owner_id) إن ضُمِّن بالاستعلام؛ لمنع تقييم المالك
+  /// لشاليهه.
+  final String? chaletOwnerId;
+
   /// ✅ بيانات الضيف (full_name / phone / avatar_url) — تُجلب من جدول
   /// profiles عبر JOIN في استعلامات المالك (RLS يسمح بذلك للحجوزات
   /// المرتبطة بشاليهات المالك). كانت غائبة تمامًا، والآن تُعرض مباشرة
@@ -100,6 +104,7 @@ class BookingModel {
     this.chaletName,
     this.chaletImage,
     this.chaletCity,
+    this.chaletOwnerId,
     this.guestName,
     this.guestPhone,
     this.guestAvatar,
@@ -142,6 +147,7 @@ class BookingModel {
       chaletName: json['chalets']?['name'] as String?,
       chaletImage: _extractChaletImage(json['chalets']),
       chaletCity: json['chalets']?['city'] as String?,
+      chaletOwnerId: json['chalets']?['owner_id'] as String?,
       guestName: json['profiles']?['full_name'] as String?,
       guestPhone: json['profiles']?['phone'] as String?,
       guestAvatar: json['profiles']?['avatar_url'] as String?,
