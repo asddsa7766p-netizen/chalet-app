@@ -27,12 +27,30 @@ const adminCannotBookMessage = 'حساب الإدارة لا يمكنه الحج
 const ownChaletBookingMessage =
     'لا يمكنك حجز شاليهك من التطبيق، استخدم الحجز اليدوي';
 
+/// رفض السيرفر لحجز التطبيق من trigger validate_app_booking (ERRCODE P0001).
+const guestsNotAllowedMessage = 'عدد الضيوف غير مسموح لهذا الشاليه';
+const periodNotOfferedMessage = 'هذه الفترة غير متاحة في هذا الشاليه';
+const periodPriceUnavailableMessage = 'سعر هذه الفترة غير متوفر حالياً';
+const bookingTooFarAheadMessage = 'لا يمكن الحجز لأكثر من سنة مقدماً';
+const periodAlreadyStartedMessage =
+    'هذه الفترة بدأت أو انتهت، اختر يوماً أو فترة أخرى';
+const bookingNotesTooLongMessage = 'الملاحظات طويلة جداً (الحد 1000 حرف)';
+const pendingBookingsLimitMessage =
+    'لديك 3 طلبات حجز بانتظار رد المالك. انتظر الرد أو ألغِ أحدها قبل طلب جديد';
+
 /// رسائل رفض الحجز الموجّهة للمستخدم من triggers الحجوزات، تُعرض كما هي.
 const bookingServerMessages = [
   ownChaletBookingMessage,
   chaletNotBookableMessage,
   adminCannotBookMessage,
   singleDayOnlyMessage,
+  guestsNotAllowedMessage,
+  periodNotOfferedMessage,
+  periodPriceUnavailableMessage,
+  bookingTooFarAheadMessage,
+  periodAlreadyStartedMessage,
+  bookingNotesTooLongMessage,
+  pendingBookingsLimitMessage,
 ];
 
 /// رسالة الخادم الموجّهة للمستخدم داخل [error] (مترجماً أو خاماً)، أو null.
